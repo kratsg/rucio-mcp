@@ -8,6 +8,15 @@ copyright = """
 Copyright &copy; 2026 The authors
 """
 
+nav = [
+  { "Home" = "index.md" },
+  { "Getting started" = "getting-started.md" },
+  { "Configuration" = "configuration.md" },
+  { "Tools" = "tools.md" },
+  { "ATLAS nomenclature" = "atlas-nomenclature.md" },
+  { "Contributing" = "contributing.md" },
+]
+
 [project.theme]
 language = "en"
 features = [
@@ -42,3 +51,36 @@ toggle.name = "Switch to light mode"
 [[project.extra.social]]
 icon = "fontawesome/brands/github"
 link = "https://github.com/kratsg/rucio-mcp"
+
+# All default markdown extensions are reproduced here to add snippets support.
+# Emoji generator/index resolved from zensical.extensions.emoji (not material).
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+
+[project.markdown_extensions.pymdownx]
+arithmatex = {generic = true}
+betterem = {}
+caret = {}
+details = {}
+highlight = {anchor_linenums = true, line_spans = "__span", pygments_lang_class = true}
+inlinehilite = {}
+keys = {}
+magiclink = {}
+mark = {}
+smartsymbols = {}
+tabbed = {alternate_style = true, combine_header_slug = true}
+tasklist = {custom_checkbox = true}
+tilde = {}
+snippets = {base_path = ["."]}
+
+[project.markdown_extensions.pymdownx.emoji]
+emoji_generator = "zensical.extensions.emoji.to_svg"
+emoji_index = "zensical.extensions.emoji.twemoji"
+
+[project.markdown_extensions.pymdownx.superfences]
+custom_fences = [{name = "mermaid", class = "mermaid"}]
