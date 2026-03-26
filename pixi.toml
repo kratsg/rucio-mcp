@@ -47,7 +47,7 @@ pytest-asyncio = ">=0.24"
 test = { cmd = "pytest -m 'not slow'", description = "Run quick tests (skip slow)" }
 test-cov = { cmd = "pytest -m 'not slow' --cov=rucio_mcp --cov-report=term --cov-report=html", description = "Run quick tests with coverage" }
 test-docstrings = { cmd = "pytest --doctest-modules src/rucio_mcp", description = "Run doctests in source modules" }
-test-docs = { cmd = "pytest README.rst docs", description = "Run doctests in docs and README.rst" }
+test-docs = { cmd = "pytest README.md docs", description = "Run doctests in docs and README.md" }
 test-slow = { cmd = "pytest --runslow", description = "Run tests including slow tests" }
 test-all = { cmd = "pytest --cov=rucio_mcp", description = "Run all tests with coverage" }
 
