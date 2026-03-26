@@ -62,6 +62,7 @@ check-docstrings = { cmd = "pydocstyle src/rucio_mcp/", description = "Check doc
 
 [feature.dev.dependencies]
 pre-commit = "*"
+identify = ">=1.4.20"  # ruff-check
 pylint = ">=3.2"
 tbump = ">=6.7.0"
 mypy = "*"

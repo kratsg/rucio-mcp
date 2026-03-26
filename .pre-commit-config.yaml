@@ -3,7 +3,7 @@ ci:
   autofix_commit_msg: "style: pre-commit fixes"
   autoupdate_schedule: "monthly"
 
-exclude: ^.cruft.json|.copier-answers.yml$
+exclude: ^.cruft.json|.copier-answers.yml|pixi.lock$
 
 repos:
   - repo: https://github.com/adamchainz/blacken-docs
@@ -46,7 +46,7 @@ repos:
     rev: "v0.15.7"
     hooks:
       - id: ruff-check
-        args: ["--fix"]
+        args: ["--fix", "--show-fixes"]
       - id: ruff-format
 
   - repo: https://github.com/pre-commit/mirrors-mypy
