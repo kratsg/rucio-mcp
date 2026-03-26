@@ -1,0 +1,7 @@
+---
+icon: lucide/rocket
+---
+
+# Get started
+
+For full documentation visit [zensical.org](https://zensical.org/docs/).

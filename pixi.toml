@@ -1,0 +1,93 @@
+[workspace]
+authors = ["Giordon Stark <kratsg@gmail.com>"]
+name = "rucio-mcp"
+channels = ["conda-forge"]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
+preview = ["pixi-build"]
+
+[dependencies]
+rucio-mcp = { path = "./" }
+
+[package]
+name = "rucio-mcp"
+version = "latest"
+
+[package.build]
+backend = { name = "pixi-build-python", version = "*" }
+config = { noarch = true }
+
+[package.host-dependencies]
+uv = "*"
+hatchling = ">=1.25"
+hatch-vcs = ">=0.4"
+
+[package.run-dependencies]
+rich = "*"
+
+[feature.py310.dependencies]
+python = "<3.11,>=3.10"
+
+[feature.py311.dependencies]
+python = "<3.12,>=3.11"
+
+[feature.py312.dependencies]
+python = "<3.13,>=3.12"
+
+[feature.py313.dependencies]
+python = "<3.14,>=3.13"
+
+[feature.test.dependencies]
+pytest = ">=9"
+pytest-cov = ">=3"
+
+[feature.test.tasks]
+test = { cmd = "pytest -m 'not slow and not pydot'", description = "Run quick tests (skip slow and pydot)" }
+test-cov = { cmd = "pytest -m 'not slow and not pydot' --cov=rucio-mcp --cov-report=term --cov-report=html", description = "Run quick tests with coverage" }
+test-docstrings = { cmd = "pytest --doctest-modules src/rucio_mcp", description = "Run doctests in source modules" }
+test-docs = { cmd = "pytest README.rst docs", description = "Run doctests in docs and README.rst" }
+test-slow = { cmd = "pytest --runslow", description = "Run tests including slow tests" }
+test-all = { cmd = "pytest --runslow --runpydot --cov=rucio-mcp", description = "Run all tests with coverage (slow + pydot)" }
+
+[feature.docs.dependencies]
+zensical = "*"
+lychee = "*"
+pydocstyle = "*"
+
+[feature.docs.tasks]
+docs-build = { cmd = "zensical build", description = "Build documentation (static)", inputs = ["src/", "docs/"], outputs = ["docs/_build/html"] }
+docs-linkcheck = { cmd = "lychee docs/", description = "Check documentation for broken links" }
+docs-serve = { cmd = "zensical serve", depends-on = ["docs-build"], description = "Build and serve documentation" }
+docs-clean = { cmd = "rm -rf docs/_build", description = "Clean documentation build artifacts", inputs = ["docs/_build"] }
+check-docstrings = { cmd = "pydocstyle src/rucio_mcp/", description = "Check docstring style" }
+
+[feature.dev.dependencies]
+pre-commit = "*"
+pylint = ">=3.2"
+tbump = ">=6.7.0"
+mypy = "*"
+ruff = "*"
+python-build = "*"
+twine = "*"
+
+[feature.dev.tasks]
+pre-commit = { cmd = "pre-commit run --all-files", description = "Run pre-commit hooks on all files" }
+pylint = { cmd = "pylint rucio-mcp", description = "Run PyLint on rucio-mcp package" }
+pre-commit-install = { cmd = "pre-commit install", description = "Install pre-commit git hooks" }
+pre-commit-update = { cmd = "pre-commit autoupdate", description = "Update pre-commit hook versions" }
+build-clean = { cmd = "rm -rf build dist", description = "Clean build artifacts" }
+build = { cmd = "python -m build", depends-on = ["build-clean"], description = "Build SDist and wheel distributions", outputs = ["dist"] }
+build-check = { cmd = "twine check --strict ./dist/*", depends-on = ["build"], description = "Run twine to check" }
+
+[environments]
+docs = ["docs"]
+dev = ["dev"]
+py310 = ["test", "py310"]
+py311 = ["test", "py311"]
+py312 = ["test", "py312"]
+py313 = ["test", "py313"]
+
+[tasks]
+# Composite tasks that span multiple features
+lint = { depends-on = ["pre-commit", "pylint"], description = "Run all linting (pre-commit + pylint)" }
+check = { depends-on = ["lint", "test"], description = "Quick check: lint + basic tests" }
+check-all = { depends-on = ["lint", "test-all"], description = "Comprehensive check: lint + all tests" }

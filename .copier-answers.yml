@@ -1,0 +1,13 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: 2026.03.02-7-ge05c33a
+_src_path: gh:scientific-python/cookie
+backend: hatch
+docs: zensical
+email: kratsg@gmail.com
+full_name: Giordon Stark
+license: Apache
+org: kratsg
+project_name: rucio-mcp
+project_short_description: MCP Server for rucio
+url: https://github.com/kratsg/rucio-mcp
+vcs: false
