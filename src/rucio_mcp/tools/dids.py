@@ -6,7 +6,6 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
-from rucio_mcp.nomenclature import ATLAS_NOMENCLATURE
 from rucio_mcp.tools._helpers import format_dict, format_list, parse_did
 
 
@@ -21,8 +20,7 @@ def register(mcp: FastMCP) -> None:
         *,
         ctx: Context[Any, Any],
     ) -> str:
-        (
-            """Search for ATLAS datasets and containers matching a wildcard pattern.
+        """Search for ATLAS datasets and containers matching a wildcard pattern.
 
         Returns a newline-separated list of matching DIDs in ``scope:name``
         format. For physics analysis, containers (dataset containers) are the
@@ -40,8 +38,6 @@ def register(mcp: FastMCP) -> None:
             recursive: Whether to list DIDs recursively into containers.
 
         """
-            + ATLAS_NOMENCLATURE
-        )
         try:
             scope, name = parse_did(did_pattern)
         except ValueError as exc:

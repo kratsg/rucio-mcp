@@ -75,7 +75,7 @@ twine = "*"
 
 [feature.dev.tasks]
 pre-commit = { cmd = "pre-commit run --all-files", description = "Run pre-commit hooks on all files" }
-pylint = { cmd = "pylint rucio-mcp", description = "Run PyLint on rucio-mcp package" }
+pylint = { cmd = "pylint rucio_mcp", description = "Run PyLint on rucio-mcp package" }
 pre-commit-install = { cmd = "pre-commit install", description = "Install pre-commit git hooks" }
 pre-commit-update = { cmd = "pre-commit autoupdate", description = "Update pre-commit hook versions" }
 build-clean = { cmd = "rm -rf build dist", description = "Clean build artifacts" }
