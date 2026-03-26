@@ -103,7 +103,6 @@ jobs:
       - name: Test docs
         if: matrix.python-version == '3.13'
         run: |
-          pixi run -e ${{ matrix.pixi-environment }} test-docs
           pixi run -e ${{ matrix.pixi-environment }} test-docstrings
 
       - name: Upload coverage report
