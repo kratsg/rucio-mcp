@@ -64,7 +64,7 @@ env-vars.PYTHONWARNDEFAULTENCODING = "1"
 
 [tool.pytest]
 minversion = "9.0"
-addopts = ["-ra", "--showlocals"]
+addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config", "--doctest-glob=docs/*.rst"]
 strict = true
 filterwarnings = [
   "error",
@@ -72,6 +72,9 @@ filterwarnings = [
 log_level = "INFO"
 testpaths = [
   "tests",
+]
+markers = [
+    "slow: marks tests as slow (skipped by default, use --runslow to run)",
 ]
 
 
