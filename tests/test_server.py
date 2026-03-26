@@ -81,7 +81,9 @@ class TestPreflightCheck:
             _preflight_check()
         assert "X509_CERT_DIR" in capsys.readouterr().err
 
-    def test_warns_when_x509_cert_dir_nonexistent(self, valid_rucio_home, capsys) -> None:
+    def test_warns_when_x509_cert_dir_nonexistent(
+        self, valid_rucio_home, capsys
+    ) -> None:
         env = {
             "RUCIO_HOME": str(valid_rucio_home),
             "RUCIO_AUTH_TYPE": "x509_proxy",
