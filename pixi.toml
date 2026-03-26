@@ -23,6 +23,8 @@ hatch-vcs = ">=0.4"
 
 [package.run-dependencies]
 rich = "*"
+rucio-clients = ">=35.0.0"
+mcp = ">=1.0"
 
 [feature.py310.dependencies]
 python = "<3.11,>=3.10"
@@ -39,6 +41,7 @@ python = "<3.14,>=3.13"
 [feature.test.dependencies]
 pytest = ">=9"
 pytest-cov = ">=3"
+pytest-asyncio = ">=0.24"
 
 [feature.test.tasks]
 test = { cmd = "pytest -m 'not slow and not pydot'", description = "Run quick tests (skip slow and pydot)" }
@@ -54,14 +57,15 @@ lychee = "*"
 pydocstyle = "*"
 
 [feature.docs.tasks]
-docs-build = { cmd = "zensical build", description = "Build documentation (static)", inputs = ["src/", "docs/"], outputs = ["docs/_build/html"] }
+docs-build = { cmd = "zensical build", description = "Build documentation (static)", inputs = ["src/", "docs/", "zensical.toml"], outputs = ["site"] }
 docs-linkcheck = { cmd = "lychee docs/", description = "Check documentation for broken links" }
 docs-serve = { cmd = "zensical serve", depends-on = ["docs-build"], description = "Build and serve documentation" }
-docs-clean = { cmd = "rm -rf docs/_build", description = "Clean documentation build artifacts", inputs = ["docs/_build"] }
+docs-clean = { cmd = "rm -rf site", description = "Clean documentation build artifacts", inputs = ["site"] }
 check-docstrings = { cmd = "pydocstyle src/rucio_mcp/", description = "Check docstring style" }
 
 [feature.dev.dependencies]
 pre-commit = "*"
+identify = ">=1.4.20"  # ruff-check
 pylint = ">=3.2"
 tbump = ">=6.7.0"
 mypy = "*"

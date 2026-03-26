@@ -29,7 +29,12 @@ classifiers = [
   "Typing :: Typed",
 ]
 dynamic = ["version"]
-dependencies = []
+dependencies = [
+  "mcp>=1.0",
+]
+
+[project.scripts]
+rucio-mcp = "rucio_mcp.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/kratsg/rucio-mcp"
@@ -42,6 +47,7 @@ Changelog = "https://github.com/kratsg/rucio-mcp/releases"
 test = [
   "pytest >=9",
   "pytest-cov >=7",
+  "pytest-asyncio >=0.24",
 ]
 dev = [
   { include-group = "test" },
@@ -64,7 +70,7 @@ env-vars.PYTHONWARNDEFAULTENCODING = "1"
 
 [tool.pytest]
 minversion = "9.0"
-addopts = ["-ra", "--showlocals"]
+addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config", "--doctest-glob=docs/*.rst"]
 strict = true
 filterwarnings = [
   "error",
@@ -73,6 +79,10 @@ log_level = "INFO"
 testpaths = [
   "tests",
 ]
+markers = [
+    "slow: marks tests as slow (skipped by default, use --runslow to run)",
+]
+asyncio_mode = "auto"
 
 
 [tool.coverage]
@@ -96,6 +106,10 @@ disallow_incomplete_defs = false
 module = "rucio_mcp.*"
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
+
+[[tool.mypy.overrides]]
+module = ["rucio.*"]
+ignore_missing_imports = true
 
 
 [tool.ruff]
