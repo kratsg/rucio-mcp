@@ -54,10 +54,10 @@ lychee = "*"
 pydocstyle = "*"
 
 [feature.docs.tasks]
-docs-build = { cmd = "zensical build", description = "Build documentation (static)", inputs = ["src/", "docs/"], outputs = ["docs/_build/html"] }
+docs-build = { cmd = "zensical build", description = "Build documentation (static)", inputs = ["src/", "docs/", "zensical.toml"], outputs = ["site"] }
 docs-linkcheck = { cmd = "lychee docs/", description = "Check documentation for broken links" }
 docs-serve = { cmd = "zensical serve", depends-on = ["docs-build"], description = "Build and serve documentation" }
-docs-clean = { cmd = "rm -rf docs/_build", description = "Clean documentation build artifacts", inputs = ["docs/_build"] }
+docs-clean = { cmd = "rm -rf site", description = "Clean documentation build artifacts", inputs = ["site"] }
 check-docstrings = { cmd = "pydocstyle src/rucio_mcp/", description = "Check docstring style" }
 
 [feature.dev.dependencies]
