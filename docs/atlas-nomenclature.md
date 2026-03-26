@@ -4,7 +4,8 @@ icon: lucide/book-open
 
 # ATLAS dataset nomenclature
 
-Reference: [ATL-COM-GEN-2007-003](https://cds.cern.ch/record/1070318) "ATLAS Dataset Nomenclature" (2024 edition).
+Reference: [ATL-COM-GEN-2007-003](https://cds.cern.ch/record/1070318) "ATLAS
+Dataset Nomenclature" (2024 edition).
 
 ## Data Identifiers (DIDs)
 
@@ -18,10 +19,12 @@ field (e.g. `mc20_13TeV`, `data18_13TeV`).
 events ∈ files ∈ datasets ∈ dataset containers ∈ campaigns
 ```
 
-!!! note The "dataset" physicists refer to in everyday conversation is usually a
-**dataset container** in Rucio — a collection of datasets from a single
-production campaign. When searching with `rucio_list_dids`, use
-`did_type=container` (the default) to find these.
+!!! note
+
+    The "dataset" physicists refer to in everyday conversation is usually a
+    **dataset container** in Rucio — a collection of datasets from a single
+    production campaign. When searching with `rucio_list_dids`, use
+    `did_type=container` (the default) to find these.
 
 ## Scopes
 

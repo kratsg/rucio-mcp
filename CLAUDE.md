@@ -20,23 +20,32 @@ userpass) is handled by the rucio client reading environment variables and
 
 ```
 src/rucio_mcp/
-├── cli.py          # argparse entry point: `rucio-mcp serve`
-├── server.py       # FastMCP setup, lifespan (Client init), tool registration
-├── nomenclature.py # ATLAS dataset naming constants embedded in tool descriptions
+├── cli.py          # argparse entry point: `rucio-mcp serve [--read-only]`
+├── server.py       # FastMCP setup, _preflight_check, _make_mcp factory, lifespan
+├── nomenclature.py # ATLAS dataset naming constants embedded in server instructions
 └── tools/
-    ├── _helpers.py  # parse_did(), format_dict(), format_list()
+    ├── _helpers.py  # parse_did(), format_dict(), format_list(), check_write_allowed()
     ├── ping.py      # rucio_ping, rucio_whoami
     ├── dids.py      # rucio_list_dids, rucio_stat, rucio_list_content,
     │                # rucio_list_files, rucio_get_metadata, rucio_list_parent_dids
     ├── replicas.py  # rucio_list_file_replicas, rucio_list_dataset_replicas
     ├── scopes.py    # rucio_list_scopes
     ├── rses.py      # rucio_list_rses, rucio_list_rse_attributes, rucio_list_rse_usage
+    ├── rules.py     # rucio_list_rules, rucio_rule_info, rucio_list_rule_history,
+    │                # rucio_add_rule, rucio_delete_rule, rucio_update_rule,
+    │                # rucio_reduce_rule, rucio_move_rule, rucio_approve_rule,
+    │                # rucio_deny_rule
+    ├── account.py   # rucio_list_account_usage, rucio_list_account_limits
     └── proxy.py     # rucio_voms_proxy_info (shells out to voms-proxy-info)
 tests/
-├── conftest.py               # mock_rucio_client, mock_ctx fixtures
+├── conftest.py               # mock_rucio_client, mock_ctx, mock_ctx_readonly fixtures
+├── test_cli.py
+├── test_server.py
 ├── test_tools_ping.py
 ├── test_tools_dids.py
 ├── test_tools_replicas.py
+├── test_tools_rules.py
+├── test_tools_account.py
 ├── test_tools_proxy.py
 └── integration/test_live.py  # requires live rucio access, run with --runslow
 ```
@@ -72,8 +81,10 @@ Key conventions:
   before it
 - Errors are returned as text strings (`"Error: ..."`) — never raised as
   exceptions
-- `BLE001` (broad exception catch) is suppressed per-directory in
-  `pyproject.toml`
+- `except Exception as exc:` lines carry `# noqa: BLE001` inline;
+  `broad-exception-caught` is disabled globally in pylint (`pyproject.toml`)
+- Write tools call `check_write_allowed(ctx.request_context.lifespan_context)`
+  from `_helpers.py` and return its error string if non-None
 
 Then wire it in `server.py`:
 
@@ -135,6 +146,17 @@ sub-clients. Key methods by category (source in `rucio/lib/rucio/client/`):
 
 - `client.list_did_rules(scope, name)` → iterator of dicts
 - `client.get_replication_rule(rule_id)` → dict
+- `client.list_replication_rule_full_history(scope, name)` → iterator of dicts
+- `client.add_replication_rule(dids, copies, rse_expression, ...)` → list of
+  rule IDs
+- `client.delete_replication_rule(rule_id, purge_replicas)` → bool
+- `client.update_replication_rule(rule_id, options)` → bool
+- `client.reduce_replication_rule(rule_id, copies, activity)` → str (new rule
+  ID)
+- `client.move_replication_rule(rule_id, rse_expression, activity)` → str (new
+  rule ID)
+- `client.approve_replication_rule(rule_id)` → bool
+- `client.deny_replication_rule(rule_id)` → bool
 
 **RSEs** (`rseclient.py`):
 
