@@ -23,6 +23,8 @@ hatch-vcs = ">=0.4"
 
 [package.run-dependencies]
 rich = "*"
+rucio-clients = ">=35.0.0"
+mcp = ">=1.0"
 
 [feature.py310.dependencies]
 python = "<3.11,>=3.10"
@@ -39,6 +41,7 @@ python = "<3.14,>=3.13"
 [feature.test.dependencies]
 pytest = ">=9"
 pytest-cov = ">=3"
+pytest-asyncio = ">=0.24"
 
 [feature.test.tasks]
 test = { cmd = "pytest -m 'not slow and not pydot'", description = "Run quick tests (skip slow and pydot)" }

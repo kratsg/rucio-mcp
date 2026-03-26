@@ -1,9 +1,26 @@
 from __future__ import annotations
 
+from typing import Any
+from unittest.mock import MagicMock
+
 import pytest
 
 
-def pytest_addoption(parser):
+@pytest.fixture
+def mock_rucio_client() -> MagicMock:
+    """Return a MagicMock that mimics rucio.client.Client."""
+    return MagicMock()
+
+
+@pytest.fixture
+def mock_ctx(mock_rucio_client: MagicMock) -> MagicMock:
+    """Return a mock FastMCP Context with a rucio_client in lifespan context."""
+    ctx: MagicMock = MagicMock()
+    ctx.request_context.lifespan_context = {"rucio_client": mock_rucio_client}
+    return ctx
+
+
+def pytest_addoption(parser: Any) -> None:
     """Add command line options for test categories."""
     parser.addoption(
         "--runslow", action="store_true", default=False, help="run slow tests"

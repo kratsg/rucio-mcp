@@ -53,11 +53,11 @@ repos:
     rev: "v1.19.1"
     hooks:
       - id: mypy
-        files: src|tests|noxfile.py
+        files: src|tests
         args: []
         additional_dependencies:
-          - nox
           - pytest
+          - mcp
 
   - repo: https://github.com/codespell-project/codespell
     rev: "v2.4.2"
