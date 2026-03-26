@@ -23,6 +23,7 @@ src/rucio_mcp/
 ├── cli.py          # argparse entry point: `rucio-mcp serve [--read-only]`
 ├── server.py       # FastMCP setup, _preflight_check, _make_mcp factory, lifespan
 ├── nomenclature.py # ATLAS dataset naming constants embedded in server instructions
+├── resources.py    # MCP resources (static docs); register(mcp) wired in server.py
 └── tools/
     ├── _helpers.py  # parse_did(), format_dict(), format_list(), check_write_allowed()
     ├── ping.py      # rucio_ping, rucio_whoami
@@ -41,6 +42,7 @@ tests/
 ├── conftest.py               # mock_rucio_client, mock_ctx, mock_ctx_readonly fixtures
 ├── test_cli.py
 ├── test_server.py
+├── test_resources.py
 ├── test_tools_ping.py
 ├── test_tools_dids.py
 ├── test_tools_replicas.py
@@ -145,6 +147,8 @@ sub-clients. Key methods by category (source in `rucio/lib/rucio/client/`):
 **Rules** (`ruleclient.py`):
 
 - `client.list_did_rules(scope, name)` → iterator of dicts
+- `client.list_replication_rules(filters)` → iterator of dicts (global, filter
+  by scope/account)
 - `client.get_replication_rule(rule_id)` → dict
 - `client.list_replication_rule_full_history(scope, name)` → iterator of dicts
 - `client.add_replication_rule(dids, copies, rse_expression, ...)` → list of

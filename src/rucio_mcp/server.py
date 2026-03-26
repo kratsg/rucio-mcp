@@ -15,6 +15,7 @@ from mcp.server.fastmcp import FastMCP
 from rucio.client import Client
 
 from rucio_mcp.nomenclature import ATLAS_NOMENCLATURE
+from rucio_mcp.resources import register as register_resources
 from rucio_mcp.tools import account, dids, ping, proxy, replicas, rses, rules, scopes
 
 _INSTRUCTIONS = (
@@ -131,6 +132,8 @@ def _make_mcp(read_only: bool = False) -> FastMCP:
     # keeping server.py as the single wiring point.
     for _module in [ping, dids, replicas, scopes, rses, rules, account, proxy]:
         _module.register(mcp)
+
+    register_resources(mcp)
 
     return mcp
 

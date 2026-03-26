@@ -88,16 +88,25 @@ letters (`periodA`, `periodB`, …) for subsets.
 AMI tags record the processing history of a dataset as a chain of single-letter
 codes followed by a version number:
 
+**Tier-0 (online/express processing):**
+
+| Letter | Step                           |
+| ------ | ------------------------------ |
+| `f`    | Reconstruction (bulk)          |
+| `c`    | Reconstruction (commissioning) |
+| `x`    | Reconstruction (express)       |
+| `m`    | Merging                        |
+
+**ProdSys (offline processing):**
+
 | Letter | Step                          |
 | ------ | ----------------------------- |
 | `e`    | Event generation (evgen)      |
 | `s`    | Detector simulation (simul)   |
 | `d`    | Digitisation                  |
-| `r`    | Reconstruction (ProdSys)      |
-| `f`    | Reconstruction (Tier-0)       |
+| `r`    | Reconstruction                |
 | `p`    | Group production / derivation |
-| `m`    | Merging (Tier-0)              |
-| `t`    | Merging (ProdSys)             |
+| `t`    | Merging                       |
 | `n`    | Event picking                 |
 
 ## Common data types
@@ -113,6 +122,30 @@ codes followed by a version number:
 | `EVNT`          | Generator-level events                           |
 | `HITS`          | Simulated detector hits                          |
 | `RDO`           | Raw detector output                              |
+
+## Other dataset types
+
+Beyond MC and collision data, you may encounter:
+
+| Type           | Format                                                            |
+| -------------- | ----------------------------------------------------------------- |
+| Calibration    | `dataNNN_calib.xxxxxxxx.calibration_<Det>-<info>.daq.RAW`         |
+| User datasets  | `user.<cern_username>.<project>.<fields>.<dataType>.<versionTag>` |
+| Group datasets | `group.<atlas_group>.<project>.<fields>.<dataType>.<versionTag>`  |
+| Conditions     | `project.internalCondNumber.datasetUsage.COND`                    |
+
+## Field length limits
+
+| Field              | Limit       |
+| ------------------ | ----------- |
+| `scope`            | ≤ 25 chars  |
+| `name` (dataset)   | ≤ 255 chars |
+| `name` (container) | ≤ 150 chars |
+| `project`          | ≤ 15 chars  |
+| `datasetNumber`    | 6–8 digits  |
+| `physicsShort`     | ≤ 50 chars  |
+| `dataType`         | ≤ 15 chars  |
+| AMITag (one tag)   | ≤ 32 chars  |
 
 ## Finding MC job options
 
