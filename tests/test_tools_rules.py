@@ -414,6 +414,90 @@ class TestRucioApproveRule:
         assert "read-only" in result.lower()
 
 
+class TestRucioListReplicationRules:
+    async def test_returns_rules(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_replication_rules.return_value = iter(
+            [
+                {
+                    "id": "abc123",
+                    "state": "OK",
+                    "rse_expression": "CERN-PROD_DATADISK",
+                    "account": "gstark",
+                    "scope": "mc20_13TeV",
+                    "name": "some.dataset",
+                }
+            ]
+        )
+        fn = registered_tools["rucio_list_replication_rules"]
+        result = await fn(ctx=mock_ctx)
+        assert "abc123" in result
+        assert "CERN-PROD_DATADISK" in result
+
+    async def test_passes_scope_filter(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_replication_rules.return_value = iter([])
+        fn = registered_tools["rucio_list_replication_rules"]
+        await fn(scope="mc20_13TeV", ctx=mock_ctx)
+        call_kwargs = mock_rucio_client.list_replication_rules.call_args[1]
+        assert call_kwargs["filters"]["scope"] == "mc20_13TeV"
+
+    async def test_passes_account_filter(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_replication_rules.return_value = iter([])
+        fn = registered_tools["rucio_list_replication_rules"]
+        await fn(account="gstark", ctx=mock_ctx)
+        call_kwargs = mock_rucio_client.list_replication_rules.call_args[1]
+        assert call_kwargs["filters"]["account"] == "gstark"
+
+    async def test_empty_filters_when_no_params(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_replication_rules.return_value = iter([])
+        fn = registered_tools["rucio_list_replication_rules"]
+        await fn(ctx=mock_ctx)
+        mock_rucio_client.list_replication_rules.assert_called_once_with(filters={})
+
+    async def test_no_rules(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_replication_rules.return_value = iter([])
+        fn = registered_tools["rucio_list_replication_rules"]
+        result = await fn(ctx=mock_ctx)
+        assert "No replication rules" in result
+
+    async def test_client_error(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_replication_rules.side_effect = RuntimeError(
+            "server error"
+        )
+        fn = registered_tools["rucio_list_replication_rules"]
+        result = await fn(ctx=mock_ctx)
+        assert "Error" in result
+
+
 class TestRucioDenyRule:
     async def test_denies_rule(
         self,

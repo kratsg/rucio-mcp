@@ -100,6 +100,42 @@ def register(mcp: FastMCP) -> None:
         return format_list(results)
 
     @mcp.tool()
+    async def rucio_list_replication_rules(
+        scope: str = "",
+        account: str = "",
+        *,
+        ctx: Context[Any, Any],
+    ) -> str:
+        """List replication rules across all DIDs, optionally filtered.
+
+        Unlike ``rucio_list_rules`` (which lists rules for a specific DID),
+        this tool queries rules globally and can filter by scope or account.
+        Useful for finding all rules owned by an account, or all rules for a
+        given scope.
+
+        Args:
+            scope: Restrict to rules for DIDs in this scope
+                (e.g. ``mc20_13TeV``). Omit to match all scopes.
+            account: Restrict to rules owned by this account
+                (e.g. ``gstark``). Omit to match all accounts.
+        """
+        filters: dict[str, Any] = {}
+        if scope:
+            filters["scope"] = scope
+        if account:
+            filters["account"] = account
+
+        client = ctx.request_context.lifespan_context["rucio_client"]
+        try:
+            results = list(client.list_replication_rules(filters=filters))
+        except Exception as exc:  # noqa: BLE001
+            return f"Error: {exc}"
+
+        if not results:
+            return "No replication rules found."
+        return format_list(results)
+
+    @mcp.tool()
     async def rucio_add_rule(
         dids: str,
         copies: int,

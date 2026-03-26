@@ -31,7 +31,7 @@ src/rucio_mcp/
     ├── replicas.py  # rucio_list_file_replicas, rucio_list_dataset_replicas
     ├── scopes.py    # rucio_list_scopes
     ├── rses.py      # rucio_list_rses, rucio_list_rse_attributes, rucio_list_rse_usage
-    ├── rules.py     # rucio_list_rules, rucio_rule_info, rucio_list_rule_history,
+    ├── rules.py     # rucio_list_rules, rucio_list_replication_rules, rucio_rule_info, rucio_list_rule_history,
     │                # rucio_add_rule, rucio_delete_rule, rucio_update_rule,
     │                # rucio_reduce_rule, rucio_move_rule, rucio_approve_rule,
     │                # rucio_deny_rule
@@ -260,7 +260,7 @@ where the directory is the first three digits + `xxx` and then the full DSID.
    ```json
    {
      "mcpServers": {
-       "rucio-mcp": {
+       "atlas": {
          "command": "rucio-mcp",
          "args": ["serve"],
          "env": {

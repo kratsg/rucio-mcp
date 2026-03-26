@@ -105,7 +105,7 @@ Add to your `.mcp.json` (project) or `~/.claude.json` (global):
 ```json
 {
   "mcpServers": {
-    "rucio": {
+    "atlas": {
       "command": "rucio-mcp",
       "args": ["serve"],
       "env": {
@@ -119,6 +119,9 @@ Add to your `.mcp.json` (project) or `~/.claude.json` (global):
 }
 ```
 
+The name `atlas` lets you tell Claude "use the atlas rucio server" — useful when
+you have multiple Rucio instances configured.
+
 ### 4. Configure Claude Desktop
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
@@ -127,7 +130,7 @@ or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 ```json
 {
   "mcpServers": {
-    "rucio": {
+    "atlas": {
       "command": "rucio-mcp",
       "args": ["serve"],
       "env": {
@@ -159,7 +162,7 @@ Or in your MCP config:
 ```json
 {
   "mcpServers": {
-    "rucio": {
+    "atlas": {
       "command": "rucio-mcp",
       "args": ["serve", "--read-only"],
       "env": { "...": "..." }
@@ -205,18 +208,19 @@ accidentally create rules or modify existing ones.
 
 ### Replication rules
 
-| Tool                      | Write? | Description                                     |
-| ------------------------- | ------ | ----------------------------------------------- |
-| `rucio_list_rules`        | —      | List all rules for a DID                        |
-| `rucio_rule_info`         | —      | Detailed info for a specific rule               |
-| `rucio_list_rule_history` | —      | Full state history of rules for a DID           |
-| `rucio_add_rule`          | ✓      | Create a new replication rule                   |
-| `rucio_delete_rule`       | ✓      | Delete a rule (optionally purge replicas)       |
-| `rucio_update_rule`       | ✓      | Update lifetime, locked flag, comment, activity |
-| `rucio_reduce_rule`       | ✓      | Reduce the number of copies in a rule           |
-| `rucio_move_rule`         | ✓      | Move a rule to a different RSE expression       |
-| `rucio_approve_rule`      | ✓      | Approve a rule awaiting approval                |
-| `rucio_deny_rule`         | ✓      | Deny a rule awaiting approval                   |
+| Tool                           | Write? | Description                                     |
+| ------------------------------ | ------ | ----------------------------------------------- |
+| `rucio_list_rules`             | —      | List all rules for a DID                        |
+| `rucio_list_replication_rules` | —      | List rules globally, filtered by scope/account  |
+| `rucio_rule_info`              | —      | Detailed info for a specific rule               |
+| `rucio_list_rule_history`      | —      | Full state history of rules for a DID           |
+| `rucio_add_rule`               | ✓      | Create a new replication rule                   |
+| `rucio_delete_rule`            | ✓      | Delete a rule (optionally purge replicas)       |
+| `rucio_update_rule`            | ✓      | Update lifetime, locked flag, comment, activity |
+| `rucio_reduce_rule`            | ✓      | Reduce the number of copies in a rule           |
+| `rucio_move_rule`              | ✓      | Move a rule to a different RSE expression       |
+| `rucio_approve_rule`           | ✓      | Approve a rule awaiting approval                |
+| `rucio_deny_rule`              | ✓      | Deny a rule awaiting approval                   |
 
 ### RSEs and storage
 
