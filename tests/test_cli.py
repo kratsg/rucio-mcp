@@ -12,6 +12,7 @@ class TestCLIServe:
         with (
             patch("rucio_mcp.server.Client"),
             patch("rucio_mcp.server.FastMCP") as mock_mcp_cls,
+            patch("rucio_mcp.server._preflight_check"),
             patch("sys.argv", ["rucio-mcp", "serve"]),
         ):
             mock_mcp = MagicMock()
