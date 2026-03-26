@@ -4,7 +4,7 @@ icon: lucide/book-open
 
 # ATLAS dataset nomenclature
 
-Reference: ATL-COM-GEN-2007-003 "ATLAS Dataset Nomenclature" (2024 edition).
+Reference: [ATL-COM-GEN-2007-003](https://cds.cern.ch/record/1070318) "ATLAS Dataset Nomenclature" (2024 edition).
 
 ## Data Identifiers (DIDs)
 
