@@ -9,13 +9,13 @@ icon: lucide/settings
 All authentication configuration is passed via environment variables, which are
 read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 
-| Variable          | Required | Description                                                      |
-| ----------------- | -------- | ---------------------------------------------------------------- |
-| `RUCIO_HOME`      | Yes      | Path to rucio-clients directory containing `etc/rucio.cfg`       |
+| Variable          | Required | Description                                                     |
+| ----------------- | -------- | --------------------------------------------------------------- |
+| `RUCIO_HOME`      | Yes      | Path to rucio-clients directory containing `etc/rucio.cfg`      |
 | `RUCIO_AUTH_TYPE` | Yes      | Authentication method: `x509_proxy`, `userpass`, `oidc`, `x509` |
-| `RUCIO_ACCOUNT`   | Yes      | Your Rucio account name                                          |
-| `X509_USER_PROXY` | x509     | Path to your VOMS proxy certificate                              |
-| `X509_CERT_DIR`   | x509     | Directory of CA certificates for SSL verification                |
+| `RUCIO_ACCOUNT`   | Yes      | Your Rucio account name                                         |
+| `X509_USER_PROXY` | x509     | Path to your VOMS proxy certificate                             |
+| `X509_CERT_DIR`   | x509     | Directory of CA certificates for SSL verification               |
 
 ## Authentication methods
 
@@ -81,6 +81,7 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 error message if required configuration is missing.
 
 **Missing `RUCIO_HOME`:**
+
 ```
 [rucio-mcp] Cannot start: configuration is incomplete.
 
@@ -91,6 +92,7 @@ error message if required configuration is missing.
 ```
 
 **Missing `RUCIO_AUTH_TYPE`:**
+
 ```
 [rucio-mcp] Cannot start: configuration is incomplete.
 
@@ -101,6 +103,7 @@ error message if required configuration is missing.
 ```
 
 **Missing `X509_CERT_DIR` (warning, does not prevent startup):**
+
 ```
 [rucio-mcp] WARNING: X509_CERT_DIR is not set. SSL certificate verification
     will fail when tools try to contact the Rucio server.

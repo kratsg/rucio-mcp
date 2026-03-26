@@ -39,8 +39,8 @@ pixi run docs-serve    # build and serve docs locally
 ## Tool registration pattern
 
 Each tool module lives in `src/rucio_mcp/tools/` and exports a single
-`register(mcp: FastMCP) -> None` function. Tools are defined as closures
-inside `register()` using the `@mcp.tool()` decorator.
+`register(mcp: FastMCP) -> None` function. Tools are defined as closures inside
+`register()` using the `@mcp.tool()` decorator.
 
 ```python
 # tools/mymodule.py
@@ -97,8 +97,9 @@ executing:
 ```python
 from rucio_mcp.tools._helpers import check_write_allowed
 
+
 @mcp.tool()
-async def rucio_my_write_tool(..., ctx: Context[Any, Any]) -> str:
+async def rucio_my_write_tool(*args, ctx: Context[Any, Any]) -> str:
     """..."""
     if err := check_write_allowed(ctx.request_context.lifespan_context):
         return err
@@ -118,12 +119,15 @@ All tools have unit tests using mocked fixtures from `tests/conftest.py`:
 import pytest
 from rucio_mcp.tools.mymodule import register
 
+
 @pytest.fixture
 def registered_tools(mock_ctx):
     from mcp.server.fastmcp import FastMCP
+
     mcp = FastMCP("test")
     register(mcp)
     return {t.name: t.fn for t in mcp._tool_manager.list_tools()}
+
 
 class TestRucioMyTool:
     async def test_basic(self, registered_tools, mock_ctx, mock_rucio_client):
@@ -136,22 +140,22 @@ class TestRucioMyTool:
 
 1. SSH to the facility and initialise your proxy:
 
-    ```bash
-    export RUCIO_ACCOUNT=<your_atlas_account>
-    voms-proxy-init -voms atlas
-    ```
+   ```bash
+   export RUCIO_ACCOUNT=<your_atlas_account>
+   voms-proxy-init -voms atlas
+   ```
 
 2. Start the server with the standard ATLAS environment:
 
-    ```bash
-    env RUCIO_AUTH_TYPE=x509_proxy \
-        X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates \
-        RUCIO_HOME=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0 \
-        rucio-mcp serve
-    ```
+   ```bash
+   env RUCIO_AUTH_TYPE=x509_proxy \
+       X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates \
+       RUCIO_HOME=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0 \
+       rucio-mcp serve
+   ```
 
 3. Run integration tests:
 
-    ```bash
-    pytest tests/integration/ --runslow -v
-    ```
+   ```bash
+   pytest tests/integration/ --runslow -v
+   ```
