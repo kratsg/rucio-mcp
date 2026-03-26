@@ -15,14 +15,20 @@ def main() -> None:
     )
     subparsers = parser.add_subparsers(dest="command", metavar="COMMAND")
 
-    subparsers.add_parser(
+    serve_parser = subparsers.add_parser(
         "serve",
         help="Start the MCP server (stdio transport)",
+    )
+    serve_parser.add_argument(
+        "--read-only",
+        action="store_true",
+        default=False,
+        help="Disable all write operations (add/delete/update rules, etc.)",
     )
 
     args = parser.parse_args()
 
     if args.command == "serve":
-        serve()
+        serve(read_only=args.read_only)
     else:
         parser.print_help()

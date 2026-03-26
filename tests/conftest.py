@@ -16,7 +16,21 @@ def mock_rucio_client() -> MagicMock:
 def mock_ctx(mock_rucio_client: MagicMock) -> MagicMock:
     """Return a mock FastMCP Context with a rucio_client in lifespan context."""
     ctx: MagicMock = MagicMock()
-    ctx.request_context.lifespan_context = {"rucio_client": mock_rucio_client}
+    ctx.request_context.lifespan_context = {
+        "rucio_client": mock_rucio_client,
+        "read_only": False,
+    }
+    return ctx
+
+
+@pytest.fixture
+def mock_ctx_readonly(mock_rucio_client: MagicMock) -> MagicMock:
+    """Return a mock FastMCP Context with read_only=True."""
+    ctx: MagicMock = MagicMock()
+    ctx.request_context.lifespan_context = {
+        "rucio_client": mock_rucio_client,
+        "read_only": True,
+    }
     return ctx
 
 

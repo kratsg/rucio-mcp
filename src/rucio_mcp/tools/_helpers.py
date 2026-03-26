@@ -30,6 +30,19 @@ def format_dict(data: dict[str, Any]) -> str:
     return "\n".join(f"{k}: {v}" for k, v in data.items() if v is not None)
 
 
+_READ_ONLY_ERROR = (
+    "Error: server is running in read-only mode (--read-only flag). "
+    "This operation modifies Rucio state and is not permitted."
+)
+
+
+def check_write_allowed(lifespan_context: dict[str, Any]) -> str | None:
+    """Return an error string if write operations are disabled, else None."""
+    if lifespan_context.get("read_only"):
+        return _READ_ONLY_ERROR
+    return None
+
+
 def format_list(items: list[Any]) -> str:
     """Format a list of items, one per line.
 
