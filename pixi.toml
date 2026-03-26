@@ -44,12 +44,12 @@ pytest-cov = ">=3"
 pytest-asyncio = ">=0.24"
 
 [feature.test.tasks]
-test = { cmd = "pytest -m 'not slow and not pydot'", description = "Run quick tests (skip slow and pydot)" }
-test-cov = { cmd = "pytest -m 'not slow and not pydot' --cov=rucio-mcp --cov-report=term --cov-report=html", description = "Run quick tests with coverage" }
+test = { cmd = "pytest -m 'not slow'", description = "Run quick tests (skip slow)" }
+test-cov = { cmd = "pytest -m 'not slow' --cov=rucio_mcp --cov-report=term --cov-report=html", description = "Run quick tests with coverage" }
 test-docstrings = { cmd = "pytest --doctest-modules src/rucio_mcp", description = "Run doctests in source modules" }
 test-docs = { cmd = "pytest README.rst docs", description = "Run doctests in docs and README.rst" }
 test-slow = { cmd = "pytest --runslow", description = "Run tests including slow tests" }
-test-all = { cmd = "pytest --runslow --runpydot --cov=rucio-mcp", description = "Run all tests with coverage (slow + pydot)" }
+test-all = { cmd = "pytest --cov=rucio_mcp", description = "Run all tests with coverage" }
 
 [feature.docs.dependencies]
 zensical = "*"
