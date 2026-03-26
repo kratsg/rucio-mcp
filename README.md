@@ -11,9 +11,15 @@
 
 [![Coverage][coverage-badge]][coverage-link]
 
+<!-- --8<-- [start:intro] -->
+
 An MCP server that exposes [Rucio](https://rucio.cern.ch) distributed data
 management operations as tools for LLMs. Designed for ATLAS physicists working
 with grid data on analysis facilities, but usable with any Rucio instance.
+
+<!-- --8<-- [end:intro] -->
+
+<!-- --8<-- [start:what-it-does] -->
 
 ## What it does
 
@@ -32,6 +38,10 @@ data directly:
 All tool descriptions include ATLAS dataset naming conventions so the LLM
 understands scope formats, AMI tags, and DID structure without extra prompting.
 
+<!-- --8<-- [end:what-it-does] -->
+
+<!-- --8<-- [start:installation] -->
+
 ## Installation
 
 ```bash
@@ -44,11 +54,18 @@ Or with pixi (recommended for ATLAS facilities):
 pixi add rucio-mcp
 ```
 
+<!-- --8<-- [end:installation] -->
+
+<!-- --8<-- [start:requirements] -->
+
 ## Requirements
 
 - Python 3.10+
 - A configured Rucio environment (`rucio.cfg` and valid authentication)
 - For x509 proxy auth: a valid VOMS proxy (`voms-proxy-init -voms atlas`)
+<!-- --8<-- [end:requirements] -->
+
+<!-- --8<-- [start:quick-start] -->
 
 ## Quick start
 
@@ -123,6 +140,10 @@ or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
 }
 ```
 
+<!-- --8<-- [end:quick-start] -->
+
+<!-- --8<-- [start:read-only] -->
+
 ## Read-only mode
 
 Start the server with `--read-only` to block all write operations. Tools that
@@ -149,6 +170,10 @@ Or in your MCP config:
 
 Useful when you want the LLM to help explore data without the ability to
 accidentally create rules or modify existing ones.
+
+<!-- --8<-- [end:read-only] -->
+
+<!-- --8<-- [start:tools] -->
 
 ## Available tools
 
@@ -209,6 +234,10 @@ accidentally create rules or modify existing ones.
 | `rucio_list_account_usage`  | Storage used per RSE for an account |
 | `rucio_list_account_limits` | Storage quota limits for an account |
 
+<!-- --8<-- [end:tools] -->
+
+<!-- --8<-- [start:example-prompts] -->
+
 ## Example prompts
 
 Once configured, you can ask Claude things like:
@@ -220,6 +249,7 @@ Once configured, you can ask Claude things like:
 - _"Is my proxy still valid? How long do I have left?"_
 - _"Show me the replication rules for this container and their current states"_
 - _"What's my storage quota at CERN-PROD_DATADISK?"_
+<!-- --8<-- [end:example-prompts] -->
 
 <!-- prettier-ignore-start -->
 [actions-badge]:            https://github.com/kratsg/rucio-mcp/actions/workflows/ci.yml/badge.svg

@@ -2,6 +2,15 @@
 icon: lucide/rocket
 ---
 
-# Get started
+# rucio-mcp
 
-For full documentation visit [zensical.org](https://zensical.org/docs/).
+--8<-- "README.md:intro"
+
+--8<-- "README.md:what-it-does"
+
+--8<-- "README.md:example-prompts"
+
+---
+
+Ready to get started? See [Getting started](getting-started.md) for installation
+and MCP client configuration.

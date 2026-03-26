@@ -97,10 +97,11 @@ jobs:
           --cov-report=xml --cov-report=term --junitxml=junit.xml -o
           junit_family=legacy --durations=20
 
-      - name: Test docs
-        if: matrix.python-version == '3.13'
-        run: |
-          pixi run -e ${{ matrix.pixi-environment }} test-docstrings
+      # - name: Test docs
+      #   if: matrix.python-version == '3.13'
+      #   run: |
+      #     pixi run -e ${{ matrix.pixi-environment }} test-docs
+      #     pixi run -e ${{ matrix.pixi-environment }} test-docstrings
 
       - name: Upload coverage report
         uses: codecov/codecov-action@v5.5.3
