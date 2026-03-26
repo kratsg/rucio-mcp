@@ -205,7 +205,6 @@ where the directory is the first three digits + `xxx` and then the full DSID.
 
    ```bash
    export RUCIO_ACCOUNT=<your_atlas_account>
-   export RUCIO_AUTH_TYPE=x509_proxy
    voms-proxy-init -voms atlas
    ```
 
@@ -217,12 +216,22 @@ where the directory is the first three digits + `xxx` and then the full DSID.
    pip install -e .
    ```
 
-3. Verify authentication works:
+3. Start the server with the required ATLAS environment variables:
 
    ```bash
-   rucio-mcp serve  # starts MCP server on stdio
-   # In another terminal, check the server responds, or configure in Claude Code:
+   env RUCIO_AUTH_TYPE=x509_proxy \
+       X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates \
+       RUCIO_HOME=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/<version> \
+       rucio-mcp serve
    ```
+
+   - `RUCIO_AUTH_TYPE=x509_proxy` — standard for ATLAS x509 auth
+   - `X509_CERT_DIR` — grid CA bundle from CVMFS; this path is stable across
+     ATLAS sites
+   - `RUCIO_HOME` — points to a versioned rucio-clients installation; set to
+     whichever version is available (e.g. `35.6.0`). The rucio client reads
+     `$RUCIO_HOME/etc/rucio.cfg` which contains `rucio_host`, `auth_host`, and
+     proxy path settings.
 
 4. Example Claude Code MCP config (`~/.claude.json` or project `.mcp.json`):
 
@@ -234,7 +243,9 @@ where the directory is the first three digits + `xxx` and then the full DSID.
          "args": ["serve"],
          "env": {
            "RUCIO_AUTH_TYPE": "x509_proxy",
-           "RUCIO_ACCOUNT": "gstark"
+           "RUCIO_ACCOUNT": "gstark",
+           "X509_CERT_DIR": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates",
+           "RUCIO_HOME": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0"
          }
        }
      }

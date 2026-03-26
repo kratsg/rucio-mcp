@@ -12,7 +12,7 @@ from mcp.server.fastmcp import FastMCP
 from rucio.client import Client
 
 from rucio_mcp.nomenclature import ATLAS_NOMENCLATURE
-from rucio_mcp.tools import dids, ping, proxy, replicas, rses, scopes
+from rucio_mcp.tools import account, dids, ping, proxy, replicas, rses, rules, scopes
 
 
 @asynccontextmanager
@@ -47,7 +47,7 @@ mcp = FastMCP(
 # Each module defines register(mcp: FastMCP) which attaches its tools to the
 # server. This pattern gives each module full control over its tools while
 # keeping server.py as the single wiring point.
-for _module in [ping, dids, replicas, scopes, rses, proxy]:
+for _module in [ping, dids, replicas, scopes, rses, rules, account, proxy]:
     _module.register(mcp)
 
 
