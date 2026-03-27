@@ -42,9 +42,7 @@ class TestRucioListRses:
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
-        mock_rucio_client.list_rses.return_value = iter(
-            [{"rse": "CERN-PROD_DATADISK"}]
-        )
+        mock_rucio_client.list_rses.return_value = iter([{"rse": "CERN-PROD_DATADISK"}])
         fn = registered_tools["rucio_list_rses"]
         result = await fn(ctx=mock_ctx)
         assert "- `CERN-PROD_DATADISK`" in result
