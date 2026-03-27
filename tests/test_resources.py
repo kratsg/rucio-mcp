@@ -24,7 +24,7 @@ class TestAtlasNomenclatureResource:
     async def test_resource_returns_nomenclature_content(
         self, registered_mcp: FastMCP
     ) -> None:
-        content = await registered_mcp.read_resource("rucio://atlas-nomenclature")
+        content = list(await registered_mcp.read_resource("rucio://atlas-nomenclature"))
         text = content[0].content
         assert "scope:name" in text
         assert "DAOD_PHYS" in text

@@ -119,7 +119,13 @@ you have multiple Rucio instances configured.
     "atlas": {
       "type": "stdio",
       "command": "pixi",
-      "args": ["run", "--manifest-path", "/path/to/rucio-mcp", "rucio-mcp", "serve"],
+      "args": [
+        "run",
+        "--manifest-path",
+        "/path/to/rucio-mcp",
+        "rucio-mcp",
+        "serve"
+      ],
       "env": {
         "RUCIO_AUTH_TYPE": "x509_proxy",
         "RUCIO_ACCOUNT": "youraccount",
@@ -130,8 +136,8 @@ you have multiple Rucio instances configured.
 }
 ```
 
-**Without pixi** (if you have CVMFS + ATLAS, use the path below; otherwise
-point `X509_CERT_DIR` at your local CA bundle):
+**Without pixi** (if you have CVMFS + ATLAS, use the path below; otherwise point
+`X509_CERT_DIR` at your local CA bundle):
 
 ```json
 {
@@ -164,7 +170,13 @@ or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
     "atlas": {
       "type": "stdio",
       "command": "pixi",
-      "args": ["run", "--manifest-path", "/path/to/rucio-mcp", "rucio-mcp", "serve"],
+      "args": [
+        "run",
+        "--manifest-path",
+        "/path/to/rucio-mcp",
+        "rucio-mcp",
+        "serve"
+      ],
       "env": {
         "RUCIO_AUTH_TYPE": "x509_proxy",
         "RUCIO_ACCOUNT": "youraccount",
@@ -175,8 +187,8 @@ or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
 }
 ```
 
-**Without pixi** (if you have CVMFS + ATLAS, use the path below; otherwise
-point `X509_CERT_DIR` at your local CA bundle):
+**Without pixi** (if you have CVMFS + ATLAS, use the path below; otherwise point
+`X509_CERT_DIR` at your local CA bundle):
 
 ```json
 {

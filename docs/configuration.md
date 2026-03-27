@@ -9,12 +9,12 @@ icon: lucide/settings
 All authentication configuration is passed via environment variables, which are
 read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 
-| Variable          | Required | Description                                                     |
-| ----------------- | -------- | --------------------------------------------------------------- |
-| `RUCIO_HOME`      | Yes      | Path to rucio-clients directory containing `etc/rucio.cfg`      |
-| `RUCIO_AUTH_TYPE` | Yes      | Authentication method: `x509_proxy`, `userpass`, `oidc`, `x509` |
-| `RUCIO_ACCOUNT`   | Yes      | Your Rucio account name                                         |
-| `X509_USER_PROXY` | x509     | Path to your VOMS proxy certificate                             |
+| Variable          | Required | Description                                                                                              |
+| ----------------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| `RUCIO_HOME`      | Yes      | Path to rucio-clients directory containing `etc/rucio.cfg`                                               |
+| `RUCIO_AUTH_TYPE` | Yes      | Authentication method: `x509_proxy`, `userpass`, `oidc`, `x509`                                          |
+| `RUCIO_ACCOUNT`   | Yes      | Your Rucio account name                                                                                  |
+| `X509_USER_PROXY` | x509     | Path to your VOMS proxy certificate                                                                      |
 | `X509_CERT_DIR`   | x509     | Directory of CA certificates for SSL verification. Set automatically by `ca-policy-lcg` when using pixi. |
 
 ## Authentication methods
