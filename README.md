@@ -80,7 +80,13 @@ export RUCIO_AUTH_TYPE=x509_proxy
 export RUCIO_HOME=/path/to/rucio-clients   # directory containing etc/rucio.cfg
 ```
 
-**On CVMFS-based facilities (e.g. UChicago Analysis Facility):**
+**When installed via pixi (recommended):**
+
+`ca-policy-lcg` is included as a dependency and sets `X509_CERT_DIR`
+automatically to the certificates bundled in the conda environment. No manual
+configuration needed.
+
+**On CVMFS-based facilities without pixi (e.g. UChicago Analysis Facility):**
 
 ```bash
 voms-proxy-init -voms atlas
@@ -100,12 +106,38 @@ The server speaks MCP over stdio. Configure your MCP client to launch it.
 
 ### 3. Configure Claude Code
 
-Add to your `.mcp.json` (project) or `~/.claude.json` (global):
+Add to your `.mcp.json` (project) or `~/.claude.json` (global).
+
+The name `atlas` lets you tell Claude "use the atlas rucio server" — useful when
+you have multiple Rucio instances configured.
+
+**With pixi** (`X509_CERT_DIR` set automatically by `ca-policy-lcg`):
 
 ```json
 {
   "mcpServers": {
     "atlas": {
+      "type": "stdio",
+      "command": "pixi",
+      "args": ["run", "--manifest-path", "/path/to/rucio-mcp", "rucio-mcp", "serve"],
+      "env": {
+        "RUCIO_AUTH_TYPE": "x509_proxy",
+        "RUCIO_ACCOUNT": "youraccount",
+        "RUCIO_HOME": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0"
+      }
+    }
+  }
+}
+```
+
+**Without pixi** (if you have CVMFS + ATLAS, use the path below; otherwise
+point `X509_CERT_DIR` at your local CA bundle):
+
+```json
+{
+  "mcpServers": {
+    "atlas": {
+      "type": "stdio",
       "command": "rucio-mcp",
       "args": ["serve"],
       "env": {
@@ -119,23 +151,44 @@ Add to your `.mcp.json` (project) or `~/.claude.json` (global):
 }
 ```
 
-The name `atlas` lets you tell Claude "use the atlas rucio server" — useful when
-you have multiple Rucio instances configured.
-
 ### 4. Configure Claude Desktop
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
-or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
+
+**With pixi:**
 
 ```json
 {
   "mcpServers": {
     "atlas": {
+      "type": "stdio",
+      "command": "pixi",
+      "args": ["run", "--manifest-path", "/path/to/rucio-mcp", "rucio-mcp", "serve"],
+      "env": {
+        "RUCIO_AUTH_TYPE": "x509_proxy",
+        "RUCIO_ACCOUNT": "youraccount",
+        "RUCIO_HOME": "/path/to/rucio-clients"
+      }
+    }
+  }
+}
+```
+
+**Without pixi** (if you have CVMFS + ATLAS, use the path below; otherwise
+point `X509_CERT_DIR` at your local CA bundle):
+
+```json
+{
+  "mcpServers": {
+    "atlas": {
+      "type": "stdio",
       "command": "rucio-mcp",
       "args": ["serve"],
       "env": {
         "RUCIO_AUTH_TYPE": "x509_proxy",
         "RUCIO_ACCOUNT": "youraccount",
+        "X509_CERT_DIR": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates",
         "RUCIO_HOME": "/path/to/rucio-clients"
       }
     }

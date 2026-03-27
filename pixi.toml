@@ -25,6 +25,7 @@ hatch-vcs = ">=0.4"
 rich = "*"
 rucio-clients = ">=35.0.0"
 mcp = ">=1.0"
+ca-policy-lcg = "*"
 
 [feature.py310.dependencies]
 python = "<3.11,>=3.10"

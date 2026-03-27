@@ -244,6 +244,16 @@ where the directory is the first three digits + `xxx` and then the full DSID.
 
 3. Start the server with the required ATLAS environment variables:
 
+   **With pixi** (`ca-policy-lcg` sets `X509_CERT_DIR` automatically):
+
+   ```bash
+   env RUCIO_AUTH_TYPE=x509_proxy \
+       RUCIO_HOME=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/<version> \
+       rucio-mcp serve
+   ```
+
+   **Without pixi** (set `X509_CERT_DIR` to CVMFS CA bundle manually):
+
    ```bash
    env RUCIO_AUTH_TYPE=x509_proxy \
        X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates \
@@ -251,20 +261,38 @@ where the directory is the first three digits + `xxx` and then the full DSID.
        rucio-mcp serve
    ```
 
-   - `RUCIO_AUTH_TYPE=x509_proxy` — standard for ATLAS x509 auth
-   - `X509_CERT_DIR` — grid CA bundle from CVMFS; this path is stable across
-     ATLAS sites
-   - `RUCIO_HOME` — points to a versioned rucio-clients installation; set to
-     whichever version is available (e.g. `35.6.0`). The rucio client reads
-     `$RUCIO_HOME/etc/rucio.cfg` which contains `rucio_host`, `auth_host`, and
-     proxy path settings.
+   - `RUCIO_HOME` — points to a versioned rucio-clients installation (e.g. `35.6.0`).
+     The rucio client reads `$RUCIO_HOME/etc/rucio.cfg` for `rucio_host`, `auth_host`,
+     and proxy path settings.
 
 4. Example Claude Code MCP config (`~/.claude.json` or project `.mcp.json`):
+
+   **With pixi** (`X509_CERT_DIR` set automatically by `ca-policy-lcg`):
 
    ```json
    {
      "mcpServers": {
        "atlas": {
+         "type": "stdio",
+         "command": "pixi",
+         "args": ["run", "--manifest-path", "/path/to/rucio-mcp", "rucio-mcp", "serve"],
+         "env": {
+           "RUCIO_AUTH_TYPE": "x509_proxy",
+           "RUCIO_ACCOUNT": "gstark",
+           "RUCIO_HOME": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0"
+         }
+       }
+     }
+   }
+   ```
+
+   **Without pixi** (set `X509_CERT_DIR` explicitly):
+
+   ```json
+   {
+     "mcpServers": {
+       "atlas": {
+         "type": "stdio",
          "command": "rucio-mcp",
          "args": ["serve"],
          "env": {

@@ -15,7 +15,7 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 | `RUCIO_AUTH_TYPE` | Yes      | Authentication method: `x509_proxy`, `userpass`, `oidc`, `x509` |
 | `RUCIO_ACCOUNT`   | Yes      | Your Rucio account name                                         |
 | `X509_USER_PROXY` | x509     | Path to your VOMS proxy certificate                             |
-| `X509_CERT_DIR`   | x509     | Directory of CA certificates for SSL verification               |
+| `X509_CERT_DIR`   | x509     | Directory of CA certificates for SSL verification. Set automatically by `ca-policy-lcg` when using pixi. |
 
 ## Authentication methods
 
@@ -23,15 +23,19 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 
     The most common method at ATLAS sites. Requires a valid VOMS proxy.
 
+    **With pixi (recommended):** `ca-policy-lcg` is a bundled dependency and
+    sets `X509_CERT_DIR` automatically to the certificates inside the conda
+    environment (`$CONDA_PREFIX/etc/grid-security/certificates/`). You only
+    need:
+
     ```bash
     voms-proxy-init -voms atlas
     export RUCIO_ACCOUNT=<your_atlas_account>
     export RUCIO_AUTH_TYPE=x509_proxy
     export RUCIO_HOME=/path/to/rucio-clients
-    export X509_CERT_DIR=/path/to/ca-certificates
     ```
 
-    On CVMFS-based facilities (UChicago AF, CERN lxplus, etc.):
+    **Without pixi — on CVMFS-based facilities (UChicago AF, CERN lxplus, etc.):**
 
     ```bash
     voms-proxy-init -voms atlas
@@ -40,6 +44,16 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
     export X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates
     export RUCIO_HOME=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0
     ```
+
+    **Without pixi — elsewhere:** set `X509_CERT_DIR` to a local CA bundle.
+    If you have CVMFS with ATLAS installed, the path is already available:
+
+    ```bash
+    export X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates
+    ```
+
+    Otherwise, install `ca-policy-lcg` from conda-forge or from your system
+    package manager (`fetch-crl` / `ca-policy-egi-core`).
 
 === "userpass"
 
