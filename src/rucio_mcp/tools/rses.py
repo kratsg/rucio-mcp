@@ -6,7 +6,16 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
-from rucio_mcp.tools._helpers import format_dict, format_list
+from rucio_mcp.tools._helpers import (
+    build_hints,
+    classify_error,
+    format_dict,
+    format_list,
+    paginate_iter,
+)
+
+_RSE_USAGE_KEYS = ["source", "used", "free", "total", "files"]
+_RSE_USAGE_BYTE_KEYS = frozenset({"used", "free", "total"})
 
 
 def register(mcp: FastMCP) -> None:
@@ -15,6 +24,8 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def rucio_list_rses(
         rse_expression: str = "",
+        limit: int = 100,
+        offset: int = 0,
         *,
         ctx: Context[Any, Any],
     ) -> str:
@@ -30,17 +41,28 @@ def register(mcp: FastMCP) -> None:
                   ``CERN-PROD_DATADISK`` — a specific RSE by name
                   ``country=US&type=DISK`` — US disk sites
                   ``tier=1`` — Tier-1 sites only
+            limit: Maximum number of RSEs to return (default 100).
+            offset: Number of RSEs to skip for pagination.
         """
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
             rse_filter = rse_expression or None
-            results = list(client.list_rses(rse_expression=rse_filter))
+            it = iter(client.list_rses(rse_expression=rse_filter))
+            results, footer = paginate_iter(it, limit=limit, offset=offset)
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
         if not results:
             return "No RSEs found."
-        return "\n".join(f"- `{r['rse']}`" for r in results if isinstance(r, dict))
+
+        lines = "\n".join(f"- `{r['rse']}`" for r in results if isinstance(r, dict))
+        hints = build_hints(
+            [
+                "Use `rucio_list_rse_attributes <rse>` to see RSE properties (type, tier, country)",
+                "Use `rucio_list_rse_usage <rse>` to check storage capacity",
+            ]
+        )
+        return lines + footer + hints
 
     @mcp.tool()
     async def rucio_list_rse_attributes(
@@ -61,7 +83,7 @@ def register(mcp: FastMCP) -> None:
             result = client.list_rse_attributes(rse)
             return format_dict(result)
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
     @mcp.tool()
     async def rucio_list_rse_usage(
@@ -77,6 +99,10 @@ def register(mcp: FastMCP) -> None:
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
             results = list(client.get_rse_usage(rse))
-            return format_list(results)
+            return format_list(
+                results,
+                include_keys=_RSE_USAGE_KEYS,
+                byte_keys=_RSE_USAGE_BYTE_KEYS,
+            )
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)

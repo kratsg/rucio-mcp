@@ -137,7 +137,7 @@ class TestRucioStat:
             ctx=mock_ctx,
         )
         assert "CONTAINER" in result
-        assert "123456789" in result
+        assert "117.74 MB" in result
 
     async def test_invalid_did(
         self,

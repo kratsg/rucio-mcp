@@ -34,9 +34,9 @@ class TestFormatList:
         assert "| rse | bytes | files |" in result
         # Separator row
         assert "| --- | --- | --- |" in result
-        # Data rows
-        assert "| CERN-PROD | 1000 | 5 |" in result
-        assert "| BNL-OSG2 | 2000 | 10 |" in result
+        # Data rows — bytes field is humanized by default _DEFAULT_BYTE_KEYS
+        assert "| CERN-PROD | 1000 B | 5 |" in result
+        assert "| BNL-OSG2 | 1.95 KB | 10 |" in result
 
     def test_dicts_with_different_keys_render_as_bullet_list(self) -> None:
         items = [

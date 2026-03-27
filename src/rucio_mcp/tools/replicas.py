@@ -6,7 +6,16 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
-from rucio_mcp.tools._helpers import format_list, parse_did
+from rucio_mcp.tools._helpers import (
+    build_hints,
+    classify_error,
+    format_list,
+    paginate_iter,
+    parse_did,
+)
+
+_DATASET_REPLICA_KEYS = ["rse", "available_bytes", "available_length", "state"]
+_DATASET_REPLICA_BYTE_KEYS = frozenset({"available_bytes"})
 
 
 def _format_file_replicas(replicas: list[dict[str, Any]]) -> str:
@@ -43,6 +52,8 @@ def register(mcp: FastMCP) -> None:
         rse_expression: str = "",
         sort: str = "",
         all_states: bool = False,
+        limit: int = 20,
+        offset: int = 0,
         *,
         ctx: Context[Any, Any],
     ) -> str:
@@ -61,8 +72,11 @@ def register(mcp: FastMCP) -> None:
             rse_expression: RSE expression to filter replicas by storage site.
                 Examples: ``CERN-PROD_DATADISK``,
                 ``type=DISK&tier=1&country=US``.
-            sort: Replica sorting strategy. Options: ``geoip``, ``random``.
+            sort: Replica sorting strategy. One of: ``geoip``, ``random``,
+                or empty string (no sorting).
             all_states: If True, include unavailable replicas as well.
+            limit: Maximum number of files to return PFNs for (default 20).
+            offset: Number of files to skip for pagination.
         """
         did_list = dids.split()
         parsed = []
@@ -83,18 +97,25 @@ def register(mcp: FastMCP) -> None:
 
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
-            results = list(client.list_replicas(parsed, **kwargs))
+            it = client.list_replicas(parsed, **kwargs)
+            results, footer = paginate_iter(it, limit=limit, offset=offset)
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
         if not results:
             return "No replicas found."
-        return _format_file_replicas(results)
+
+        hints = build_hints(
+            ["Use `rucio_list_dataset_replicas <did>` for a summary view per RSE"]
+        )
+        return _format_file_replicas(results) + footer + hints
 
     @mcp.tool()
     async def rucio_list_dataset_replicas(
         did: str,
         deep: bool = False,
+        limit: int = 50,
+        offset: int = 0,
         *,
         ctx: Context[Any, Any],
     ) -> str:
@@ -108,6 +129,8 @@ def register(mcp: FastMCP) -> None:
             did: The dataset or container in ``scope:name`` format.
             deep: If True, check individual file availability rather than
                 relying on the dataset-level counters (slower but accurate).
+            limit: Maximum number of RSEs to return (default 50).
+            offset: Number of RSEs to skip for pagination.
         """
         try:
             scope, name = parse_did(did)
@@ -118,8 +141,24 @@ def register(mcp: FastMCP) -> None:
         try:
             results = list(client.list_dataset_replicas(scope, name, deep=deep))
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
         if not results:
             return "No dataset replicas found."
-        return format_list(results)
+
+        page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
+        hints = build_hints(
+            [
+                f"Use `rucio_list_file_replicas {did}` for per-file PFN details",
+                f"Use `rucio_list_rules {did}` to see replication rules",
+            ]
+        )
+        return (
+            format_list(
+                page,
+                include_keys=_DATASET_REPLICA_KEYS,
+                byte_keys=_DATASET_REPLICA_BYTE_KEYS,
+            )
+            + footer
+            + hints
+        )

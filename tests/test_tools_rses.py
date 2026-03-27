@@ -126,7 +126,7 @@ class TestRucioListRseUsage:
         fn = registered_tools["rucio_list_rse_usage"]
         result = await fn("CERN-PROD_DATADISK", ctx=mock_ctx)
         assert "| source | used | free | total |" in result
-        assert "| rucio | 1000 | 500 | 1500 |" in result
+        assert "| rucio | 1000 B | 500 B | 1.46 KB |" in result
 
     async def test_error_on_exception(
         self,

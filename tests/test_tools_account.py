@@ -42,7 +42,7 @@ class TestRucioListAccountUsage:
         fn = registered_tools["rucio_list_account_usage"]
         result = await fn(ctx=mock_ctx)
         assert "CERN-PROD_DATADISK" in result
-        assert "1000000" in result
+        assert "976.56 KB" in result
 
     async def test_uses_provided_account(
         self,
@@ -125,7 +125,7 @@ class TestRucioListAccountLimits:
         fn = registered_tools["rucio_list_account_limits"]
         result = await fn(ctx=mock_ctx)
         assert "CERN-PROD_DATADISK" in result
-        assert "10000000000" in result
+        assert "9.31 GB" in result
 
     async def test_uses_client_account_when_empty(
         self,

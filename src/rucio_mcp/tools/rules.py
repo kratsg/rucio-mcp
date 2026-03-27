@@ -7,11 +7,46 @@ from typing import Any
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
 from rucio_mcp.tools._helpers import (
+    build_hints,
     check_write_allowed,
+    classify_error,
     format_dict,
     format_list,
+    paginate_iter,
     parse_did,
 )
+
+_RULE_LIST_KEYS = [
+    "id",
+    "state",
+    "rse_expression",
+    "account",
+    "copies",
+    "expires_at",
+    "locks_ok_cnt",
+    "locks_replicating_cnt",
+    "locks_stuck_cnt",
+]
+
+_RULE_INFO_KEYS = [
+    "id",
+    "state",
+    "rse_expression",
+    "account",
+    "scope",
+    "name",
+    "copies",
+    "bytes",
+    "locks_ok_cnt",
+    "locks_replicating_cnt",
+    "locks_stuck_cnt",
+    "error",
+    "expires_at",
+    "created_at",
+    "updated_at",
+]
+
+_RULE_BYTE_KEYS = frozenset({"bytes"})
 
 
 def register(mcp: FastMCP) -> None:
@@ -41,11 +76,20 @@ def register(mcp: FastMCP) -> None:
         try:
             results = list(client.list_did_rules(scope, name))
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
         if not results:
             return "No replication rules found."
-        return format_list(results)
+
+        hints = build_hints(
+            ["Use `rucio_rule_info <rule_id>` to see full details of a specific rule"]
+        )
+        return (
+            format_list(
+                results, include_keys=_RULE_LIST_KEYS, byte_keys=_RULE_BYTE_KEYS
+            )
+            + hints
+        )
 
     @mcp.tool()
     async def rucio_rule_info(
@@ -65,13 +109,47 @@ def register(mcp: FastMCP) -> None:
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
             result = client.get_replication_rule(rule_id)
-            return format_dict(result)
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
+
+        state = result.get("state", "")
+        did = f"{result.get('scope', '')}:{result.get('name', '')}"
+        if state == "STUCK":
+            hints = build_hints(
+                [
+                    "Rule is STUCK. Check if the destination RSE has capacity: "
+                    f"`rucio_list_rse_usage {result.get('rse_expression', '<rse>')}`",
+                    "Check the `error` field above for the specific failure reason",
+                ]
+            )
+        elif state == "REPLICATING":
+            hints = build_hints(
+                [
+                    f"Rule is still transferring. Check again with `rucio_rule_info {rule_id}`",
+                    f"Use `rucio_list_dataset_replicas {did}` to see per-RSE progress",
+                ]
+            )
+        elif state == "OK":
+            hints = build_hints(
+                [
+                    f"Rule is complete. Use `rucio_list_dataset_replicas {did}` to verify replicas",
+                ]
+            )
+        else:
+            hints = build_hints(
+                [f"Use `rucio_list_rules {did}` to see all rules for this DID"]
+            )
+
+        return (
+            format_dict(result, include_keys=_RULE_INFO_KEYS, byte_keys=_RULE_BYTE_KEYS)
+            + hints
+        )
 
     @mcp.tool()
     async def rucio_list_rule_history(
         did: str,
+        limit: int = 50,
+        offset: int = 0,
         *,
         ctx: Context[Any, Any],
     ) -> str:
@@ -83,6 +161,8 @@ def register(mcp: FastMCP) -> None:
 
         Args:
             did: The data identifier in ``scope:name`` format.
+            limit: Maximum number of history entries to return (default 50).
+            offset: Number of entries to skip for pagination.
         """
         try:
             scope, name = parse_did(did)
@@ -93,16 +173,20 @@ def register(mcp: FastMCP) -> None:
         try:
             results = list(client.list_replication_rule_full_history(scope, name))
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
         if not results:
             return "No rule history found."
-        return format_list(results)
+
+        page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
+        return format_list(page) + footer
 
     @mcp.tool()
     async def rucio_list_replication_rules(
         scope: str = "",
         account: str = "",
+        limit: int = 50,
+        offset: int = 0,
         *,
         ctx: Context[Any, Any],
     ) -> str:
@@ -118,6 +202,8 @@ def register(mcp: FastMCP) -> None:
                 (e.g. ``mc20_13TeV``). Omit to match all scopes.
             account: Restrict to rules owned by this account
                 (e.g. ``gstark``). Omit to match all accounts.
+            limit: Maximum number of rules to return (default 50).
+            offset: Number of rules to skip for pagination.
         """
         filters: dict[str, Any] = {}
         if scope:
@@ -127,13 +213,24 @@ def register(mcp: FastMCP) -> None:
 
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
-            results = list(client.list_replication_rules(filters=filters))
+            it = client.list_replication_rules(filters=filters)
+            results, footer = paginate_iter(it, limit=limit, offset=offset)
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
         if not results:
             return "No replication rules found."
-        return format_list(results)
+
+        hints = build_hints(
+            ["Use `rucio_rule_info <rule_id>` to see full details of a specific rule"]
+        )
+        return (
+            format_list(
+                results, include_keys=_RULE_LIST_KEYS, byte_keys=_RULE_BYTE_KEYS
+            )
+            + footer
+            + hints
+        )
 
     @mcp.tool()
     async def rucio_add_rule(
@@ -226,9 +323,17 @@ def register(mcp: FastMCP) -> None:
                 parsed, copies, rse_expression, **kwargs
             )
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
-        return "**Created rule(s):**\n" + "\n".join(f"- `{rid}`" for rid in rule_ids)
+        rule_list = "\n".join(f"- `{rid}`" for rid in rule_ids)
+        hints = build_hints(
+            [
+                f"Use `rucio_rule_info {rule_ids[0]}` to check rule status"
+                if rule_ids
+                else "Use `rucio_list_replication_rules` to find your rules"
+            ]
+        )
+        return "**Created rule(s):**\n" + rule_list + hints
 
     @mcp.tool()
     async def rucio_delete_rule(
@@ -254,7 +359,7 @@ def register(mcp: FastMCP) -> None:
         try:
             client.delete_replication_rule(rule_id, purge_replicas=purge_replicas)
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
         return f"Rule {rule_id} deleted."
 
@@ -297,9 +402,10 @@ def register(mcp: FastMCP) -> None:
         try:
             client.update_replication_rule(rule_id, options)
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
-        return f"Rule {rule_id} updated."
+        hints = build_hints([f"Use `rucio_rule_info {rule_id}` to verify the change"])
+        return f"Rule {rule_id} updated." + hints
 
     @mcp.tool()
     async def rucio_reduce_rule(
@@ -330,9 +436,12 @@ def register(mcp: FastMCP) -> None:
                 rule_id, copies, exclude_expression=exclude_expression or None
             )
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
-        return f"Rule reduced. New rule ID: {new_rule_id}"
+        hints = build_hints(
+            [f"Use `rucio_rule_info {new_rule_id}` to check the new rule status"]
+        )
+        return f"Rule reduced. New rule ID: {new_rule_id}" + hints
 
     @mcp.tool()
     async def rucio_move_rule(
@@ -359,9 +468,12 @@ def register(mcp: FastMCP) -> None:
                 rule_id, rse_expression, override={}
             )
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
-        return f"Rule moved. New rule ID: {new_rule_id}"
+        hints = build_hints(
+            [f"Use `rucio_rule_info {new_rule_id}` to check the new rule status"]
+        )
+        return f"Rule moved. New rule ID: {new_rule_id}" + hints
 
     @mcp.tool()
     async def rucio_approve_rule(
@@ -384,9 +496,12 @@ def register(mcp: FastMCP) -> None:
         try:
             client.approve_replication_rule(rule_id)
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
-        return f"Rule {rule_id} approved."
+        hints = build_hints(
+            [f"Use `rucio_rule_info {rule_id}` to see updated rule status"]
+        )
+        return f"Rule {rule_id} approved." + hints
 
     @mcp.tool()
     async def rucio_deny_rule(
@@ -408,6 +523,9 @@ def register(mcp: FastMCP) -> None:
         try:
             client.deny_replication_rule(rule_id, reason=reason or None)
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
-        return f"Rule {rule_id} denied."
+        hints = build_hints(
+            [f"Use `rucio_rule_info {rule_id}` to see updated rule status"]
+        )
+        return f"Rule {rule_id} denied." + hints

@@ -6,7 +6,17 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
-from rucio_mcp.tools._helpers import format_dict, format_list
+from rucio_mcp.tools._helpers import (
+    build_hints,
+    classify_error,
+    format_dict,
+    format_list,
+    human_bytes,
+    paginate_iter,
+)
+
+_USAGE_KEYS = ["rse", "bytes", "bytes_limit", "bytes_remaining", "files"]
+_USAGE_BYTE_KEYS = frozenset({"bytes", "bytes_limit", "bytes_remaining"})
 
 
 def register(mcp: FastMCP) -> None:
@@ -16,6 +26,9 @@ def register(mcp: FastMCP) -> None:
     async def rucio_list_account_usage(
         account: str = "",
         rse: str = "",
+        hide_zero: bool = True,
+        limit: int = 50,
+        offset: int = 0,
         *,
         ctx: Context[Any, Any],
     ) -> str:
@@ -29,6 +42,11 @@ def register(mcp: FastMCP) -> None:
                 (from ``RUCIO_ACCOUNT`` env var or rucio.cfg).
             rse: Limit results to a specific RSE name. If empty, all RSEs
                 with usage are returned.
+            hide_zero: If True (default), hide RSEs with zero bytes and zero
+                files — most accounts have limits set at many RSEs but only
+                use a few.
+            limit: Maximum number of RSEs to return (default 50).
+            offset: Number of RSEs to skip for pagination.
         """
         client = ctx.request_context.lifespan_context["rucio_client"]
         effective_account = account or client.account
@@ -38,11 +56,27 @@ def register(mcp: FastMCP) -> None:
                 client.get_local_account_usage(effective_account, rse=rse_filter)
             )
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
+
+        if hide_zero:
+            results = [
+                r
+                for r in results
+                if (r.get("bytes") or 0) != 0 or (r.get("files") or 0) != 0
+            ]
 
         if not results:
             return "No account usage found."
-        return format_list(results)
+
+        page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
+        hints = build_hints(
+            ["Use `rucio_list_account_limits` to see your full quota allocations"]
+        )
+        return (
+            format_list(page, include_keys=_USAGE_KEYS, byte_keys=_USAGE_BYTE_KEYS)
+            + footer
+            + hints
+        )
 
     @mcp.tool()
     async def rucio_list_account_limits(
@@ -72,8 +106,20 @@ def register(mcp: FastMCP) -> None:
                 )
             else:
                 result = client.get_local_account_limits(effective_account)
-            return format_dict(
-                {k: v if v is not None else "none" for k, v in result.items()}
-            )
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
+
+        # Humanize byte values; render None as "none"
+        rendered = {}
+        for k, v in result.items():
+            if v is None:
+                rendered[k] = "none"
+            elif isinstance(v, (int, float)):
+                rendered[k] = human_bytes(v)
+            else:
+                rendered[k] = v
+
+        hints = build_hints(
+            ["Use `rucio_list_account_usage` to see actual storage consumption"]
+        )
+        return format_dict(rendered, byte_keys=frozenset()) + hints

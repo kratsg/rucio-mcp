@@ -7,6 +7,8 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
+from rucio_mcp.tools._helpers import build_hints, classify_error, paginate_iter
+
 
 def register(mcp: FastMCP) -> None:
     """Register scope tools with the MCP server."""
@@ -14,6 +16,8 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def rucio_list_scopes(
         pattern: str = "",
+        limit: int = 100,
+        offset: int = 0,
         *,
         ctx: Context[Any, Any],
     ) -> str:
@@ -28,16 +32,24 @@ def register(mcp: FastMCP) -> None:
             pattern: Optional wildcard pattern to filter scopes (e.g. ``mc*``,
                 ``data2?_13TeV``, ``user.*``). Uses Unix shell-style matching.
                 If empty, all scopes are returned.
+            limit: Maximum number of scopes to return (default 100).
+            offset: Number of scopes to skip for pagination.
         """
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
             scopes = client.list_scopes()
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
         if pattern:
             scopes = [s for s in scopes if fnmatch.fnmatch(s, pattern)]
 
         if not scopes:
             return "No scopes found matching the pattern."
-        return "\n".join(f"- {s}" for s in sorted(scopes))
+
+        sorted_scopes = sorted(scopes)
+        page, footer = paginate_iter(iter(sorted_scopes), limit=limit, offset=offset)
+        hints = build_hints(
+            ["Use `rucio_list_dids <scope>:*` to search for DIDs within a scope"]
+        )
+        return "\n".join(f"- {s}" for s in page) + footer + hints

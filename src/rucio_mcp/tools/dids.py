@@ -6,7 +6,29 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
-from rucio_mcp.tools._helpers import format_dict, format_list, parse_did
+from rucio_mcp.tools._helpers import (
+    build_hints,
+    classify_error,
+    format_dict,
+    format_list,
+    paginate_iter,
+    parse_did,
+)
+
+_STAT_KEYS = [
+    "scope",
+    "name",
+    "type",
+    "bytes",
+    "length",
+    "account",
+    "open",
+    "monotonic",
+    "created_at",
+    "updated_at",
+]
+
+_CONTENT_KEYS = ["scope", "name", "type", "bytes", "length"]
 
 
 def register(mcp: FastMCP) -> None:
@@ -17,15 +39,16 @@ def register(mcp: FastMCP) -> None:
         did_pattern: str,
         did_type: str = "collection",
         recursive: bool = False,
+        limit: int = 50,
+        offset: int = 0,
         *,
         ctx: Context[Any, Any],
     ) -> str:
         """Search for ATLAS datasets and containers matching a wildcard pattern.
 
-        Returns a newline-separated list of matching DIDs in ``scope:name``
-        format. For physics analysis, containers (dataset containers) are the
-        typical target — they group all datasets from a single production
-        campaign.
+        Returns a list of matching DIDs in ``scope:name`` format. For physics
+        analysis, containers (dataset containers) are the typical target —
+        they group all datasets from a single production campaign.
 
         Args:
             did_pattern: Pattern in ``scope:name_pattern`` format. Wildcards
@@ -36,6 +59,8 @@ def register(mcp: FastMCP) -> None:
             did_type: Type filter. One of: ``all``, ``collection``,
                 ``dataset``, ``container``, ``file``. Default: ``collection``.
             recursive: Whether to list DIDs recursively into containers.
+            limit: Maximum number of results to return (default 50).
+            offset: Number of results to skip for pagination.
 
         """
         try:
@@ -45,23 +70,31 @@ def register(mcp: FastMCP) -> None:
 
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
-            results = list(
-                client.list_dids(
-                    scope,
-                    {"name": name},
-                    did_type=did_type,
-                    recursive=recursive,
-                )
+            it = client.list_dids(
+                scope,
+                {"name": name},
+                did_type=did_type,
+                recursive=recursive,
             )
+            results, footer = paginate_iter(it, limit=limit, offset=offset)
         except Exception as exc:  # noqa: BLE001
-            return f"Error listing DIDs: {exc}"
+            return classify_error(exc)
 
         if not results:
             return "No DIDs found matching the pattern."
-        return "\n".join(
+
+        lines = "\n".join(
             f"- `{scope}:{r['name']}`" if isinstance(r, dict) else f"- `{scope}:{r}`"
             for r in results
         )
+        hints = build_hints(
+            [
+                "Use `rucio_stat <scope:name>` to inspect a specific DID",
+                "Use `rucio_list_dataset_replicas <scope:name>` to find where it is stored",
+                "Use `rucio_list_rules <scope:name>` to see replication rules",
+            ]
+        )
+        return lines + footer + hints
 
     @mcp.tool()
     async def rucio_stat(
@@ -85,13 +118,41 @@ def register(mcp: FastMCP) -> None:
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
             result = client.get_did(scope, name, dynamic=True)
-            return format_dict(result)
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
+
+        did_type = result.get("type", "")
+        if did_type == "CONTAINER":
+            hints = build_hints(
+                [
+                    f"Use `rucio_list_content {did}` to see child datasets",
+                    f"Use `rucio_list_rules {did}` to see replication rules",
+                    f"Use `rucio_get_metadata {did}` for additional metadata",
+                ]
+            )
+        elif did_type == "DATASET":
+            hints = build_hints(
+                [
+                    f"Use `rucio_list_file_replicas {did}` to find where files are stored",
+                    f"Use `rucio_list_rules {did}` to see replication rules",
+                    f"Use `rucio_get_metadata {did}` for additional metadata",
+                ]
+            )
+        else:
+            hints = build_hints(
+                [
+                    f"Use `rucio_list_parent_dids {did}` to find parent datasets",
+                    f"Use `rucio_list_file_replicas {did}` to find replica locations",
+                ]
+            )
+
+        return format_dict(result, include_keys=_STAT_KEYS) + hints
 
     @mcp.tool()
     async def rucio_list_content(
         did: str,
+        limit: int = 50,
+        offset: int = 0,
         *,
         ctx: Context[Any, Any],
     ) -> str:
@@ -102,6 +163,8 @@ def register(mcp: FastMCP) -> None:
 
         Args:
             did: The container or dataset in ``scope:name`` format.
+            limit: Maximum number of results to return (default 50).
+            offset: Number of results to skip for pagination.
         """
         try:
             scope, name = parse_did(did)
@@ -112,16 +175,21 @@ def register(mcp: FastMCP) -> None:
         try:
             results = list(client.list_content(scope, name))
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
         if not results:
             return "No contents found."
-        return format_list(results)
+
+        page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
+        hints = build_hints(["Use `rucio_stat <scope:name>` to inspect any child DID"])
+        return format_list(page, include_keys=_CONTENT_KEYS) + footer + hints
 
     @mcp.tool()
     async def rucio_list_files(
         did: str,
         long: bool = False,
+        limit: int = 100,
+        offset: int = 0,
         *,
         ctx: Context[Any, Any],
     ) -> str:
@@ -130,6 +198,8 @@ def register(mcp: FastMCP) -> None:
         Args:
             did: The dataset or container in ``scope:name`` format.
             long: If True, include GUID, adler32 checksum, and file size.
+            limit: Maximum number of files to return (default 100).
+            offset: Number of files to skip for pagination.
         """
         try:
             scope, name = parse_did(did)
@@ -140,14 +210,19 @@ def register(mcp: FastMCP) -> None:
         try:
             results = list(client.list_files(scope, name, long=long))
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
         if not results:
             return "No files found."
+
+        page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
         if long:
-            return format_list(results)
-        return "\n".join(
-            f"- `{r['scope']}:{r['name']}`" for r in results if isinstance(r, dict)
+            return format_list(page) + footer
+        return (
+            "\n".join(
+                f"- `{r['scope']}:{r['name']}`" for r in page if isinstance(r, dict)
+            )
+            + footer
         )
 
     @mcp.tool()
@@ -174,11 +249,13 @@ def register(mcp: FastMCP) -> None:
             result = client.get_metadata(scope, name, plugin=plugin)
             return format_dict(result)
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
     @mcp.tool()
     async def rucio_list_parent_dids(
         did: str,
+        limit: int = 50,
+        offset: int = 0,
         *,
         ctx: Context[Any, Any],
     ) -> str:
@@ -188,6 +265,8 @@ def register(mcp: FastMCP) -> None:
 
         Args:
             did: The data identifier in ``scope:name`` format.
+            limit: Maximum number of results to return (default 50).
+            offset: Number of results to skip for pagination.
         """
         try:
             scope, name = parse_did(did)
@@ -198,8 +277,11 @@ def register(mcp: FastMCP) -> None:
         try:
             results = list(client.list_parent_dids(scope, name))
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
 
         if not results:
             return "No parent DIDs found."
-        return format_list(results)
+
+        page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
+        hints = build_hints(["Use `rucio_stat <scope:name>` to inspect any parent DID"])
+        return format_list(page) + footer + hints

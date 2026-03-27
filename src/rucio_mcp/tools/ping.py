@@ -6,7 +6,7 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
-from rucio_mcp.tools._helpers import format_dict
+from rucio_mcp.tools._helpers import build_hints, classify_error, format_dict
 
 
 def register(mcp: FastMCP) -> None:
@@ -22,9 +22,12 @@ def register(mcp: FastMCP) -> None:
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
             result = client.ping()
-            return format_dict(result) if isinstance(result, dict) else str(result)
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
+
+        body = format_dict(result) if isinstance(result, dict) else str(result)
+        hints = build_hints(["Use `rucio_whoami` to check your authenticated account"])
+        return body + hints
 
     @mcp.tool()
     async def rucio_whoami(*, ctx: Context[Any, Any]) -> str:
@@ -36,6 +39,13 @@ def register(mcp: FastMCP) -> None:
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
             result = client.whoami()
-            return format_dict(result)
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
+
+        hints = build_hints(
+            [
+                "Use `rucio_list_account_usage` to check your storage consumption",
+                "Use `rucio_list_account_limits` to see your storage quotas",
+            ]
+        )
+        return format_dict(result) + hints
