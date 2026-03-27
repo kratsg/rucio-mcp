@@ -72,6 +72,8 @@ def register(mcp: FastMCP) -> None:
                 )
             else:
                 result = client.get_local_account_limits(effective_account)
-            return format_dict({k: v if v is not None else "none" for k, v in result.items()})
+            return format_dict(
+                {k: v if v is not None else "none" for k, v in result.items()}
+            )
         except Exception as exc:  # noqa: BLE001
             return f"Error: {exc}"
