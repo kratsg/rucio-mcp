@@ -8200,6 +8200,7 @@ packages:
   - rich
   - rucio-clients >=35.0.0
   - mcp >=1.0
+  - ca-policy-lcg
   - python >=3.10
   - python *
   license: Apache-2.0

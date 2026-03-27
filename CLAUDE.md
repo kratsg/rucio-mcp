@@ -261,9 +261,9 @@ where the directory is the first three digits + `xxx` and then the full DSID.
        rucio-mcp serve
    ```
 
-   - `RUCIO_HOME` — points to a versioned rucio-clients installation (e.g. `35.6.0`).
-     The rucio client reads `$RUCIO_HOME/etc/rucio.cfg` for `rucio_host`, `auth_host`,
-     and proxy path settings.
+   - `RUCIO_HOME` — points to a versioned rucio-clients installation (e.g.
+     `35.6.0`). The rucio client reads `$RUCIO_HOME/etc/rucio.cfg` for
+     `rucio_host`, `auth_host`, and proxy path settings.
 
 4. Example Claude Code MCP config (`~/.claude.json` or project `.mcp.json`):
 
@@ -275,7 +275,13 @@ where the directory is the first three digits + `xxx` and then the full DSID.
        "atlas": {
          "type": "stdio",
          "command": "pixi",
-         "args": ["run", "--manifest-path", "/path/to/rucio-mcp", "rucio-mcp", "serve"],
+         "args": [
+           "run",
+           "--manifest-path",
+           "/path/to/rucio-mcp",
+           "rucio-mcp",
+           "serve"
+         ],
          "env": {
            "RUCIO_AUTH_TYPE": "x509_proxy",
            "RUCIO_ACCOUNT": "gstark",
