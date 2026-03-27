@@ -228,7 +228,7 @@ def register(mcp: FastMCP) -> None:
         except Exception as exc:  # noqa: BLE001
             return f"Error: {exc}"
 
-        return "Created rule(s):\n" + "\n".join(rule_ids)
+        return "**Created rule(s):**\n" + "\n".join(f"- `{rid}`" for rid in rule_ids)
 
     @mcp.tool()
     async def rucio_delete_rule(

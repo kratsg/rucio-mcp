@@ -103,6 +103,19 @@ class TestRucioListDids:
         result = await fn("mc16_13TeV:foo*", ctx=mock_ctx)
         assert "Error" in result
 
+    async def test_returns_markdown_bullet_list(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_dids.return_value = iter(
+            [{"name": "mc20_13TeV.700320.Sh_2211_Zee.deriv.DAOD_PHYS.e8351_p5855"}]
+        )
+        fn = registered_tools["rucio_list_dids"]
+        result = await fn("mc20_13TeV:mc20_13TeV.700320.*DAOD_PHYS*", ctx=mock_ctx)
+        assert "- `mc20_13TeV:" in result
+
 
 class TestRucioStat:
     async def test_returns_stat(
@@ -181,6 +194,19 @@ class TestRucioListFiles:
         result = await fn("mc16_13TeV:dataset1", ctx=mock_ctx)
         assert "mc16_13TeV:file1.pool.root" in result
         assert "mc16_13TeV:file2.pool.root" in result
+
+    async def test_returns_markdown_bullet_list(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_files.return_value = iter(
+            [{"scope": "mc16_13TeV", "name": "file1.pool.root"}]
+        )
+        fn = registered_tools["rucio_list_files"]
+        result = await fn("mc16_13TeV:dataset1", ctx=mock_ctx)
+        assert "- `mc16_13TeV:file1.pool.root`" in result
 
     async def test_long_mode(
         self,

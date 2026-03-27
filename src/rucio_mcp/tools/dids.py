@@ -59,7 +59,7 @@ def register(mcp: FastMCP) -> None:
         if not results:
             return "No DIDs found matching the pattern."
         return "\n".join(
-            f"{scope}:{r['name']}" if isinstance(r, dict) else f"{scope}:{r}"
+            f"- `{scope}:{r['name']}`" if isinstance(r, dict) else f"- `{scope}:{r}`"
             for r in results
         )
 
@@ -147,7 +147,7 @@ def register(mcp: FastMCP) -> None:
         if long:
             return format_list(results)
         return "\n".join(
-            f"{r['scope']}:{r['name']}" for r in results if isinstance(r, dict)
+            f"- `{r['scope']}:{r['name']}`" for r in results if isinstance(r, dict)
         )
 
     @mcp.tool()

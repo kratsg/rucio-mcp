@@ -65,7 +65,9 @@ def register(mcp: FastMCP) -> None:
         effective_account = account or client.account
         try:
             result = client.get_account_limits(
-                effective_account, rse_expression=rse_expression or None
+                effective_account,
+                rse_expression=rse_expression or None,
+                locality="local",
             )
             return format_dict(result)
         except Exception as exc:  # noqa: BLE001

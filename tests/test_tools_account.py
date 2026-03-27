@@ -138,7 +138,7 @@ class TestRucioListAccountLimits:
         fn = registered_tools["rucio_list_account_limits"]
         await fn(ctx=mock_ctx)
         mock_rucio_client.get_account_limits.assert_called_once_with(
-            "gstark", rse_expression=None
+            "gstark", rse_expression=None, locality="local"
         )
 
     async def test_client_error(

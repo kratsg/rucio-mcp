@@ -40,7 +40,7 @@ def register(mcp: FastMCP) -> None:
 
         if not results:
             return "No RSEs found."
-        return "\n".join(r["rse"] for r in results if isinstance(r, dict))
+        return "\n".join(f"- `{r['rse']}`" for r in results if isinstance(r, dict))
 
     @mcp.tool()
     async def rucio_list_rse_attributes(

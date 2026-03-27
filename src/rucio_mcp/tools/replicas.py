@@ -10,26 +10,27 @@ from rucio_mcp.tools._helpers import format_list, parse_did
 
 
 def _format_file_replicas(replicas: list[dict[str, Any]]) -> str:
-    """Format list_replicas output as readable text.
+    """Format list_replicas output as markdown.
 
-    Each replica entry includes the file DID and its physical locations
-    (PFNs) grouped by RSE.
+    Each replica entry includes the file DID as a heading and its physical
+    locations (PFNs) as a bulleted list grouped by RSE.
     """
     lines = []
     for replica in replicas:
         scope = replica.get("scope", "")
         name = replica.get("name", "")
-        lines.append(f"{scope}:{name}")
+        lines.append(f"### `{scope}:{name}`")
         pfns: dict[str, Any] = replica.get("pfns", {})
         if pfns:
             for pfn, info in pfns.items():
                 rse = (
                     info.get("rse", "unknown") if isinstance(info, dict) else "unknown"
                 )
-                lines.append(f"  [{rse}] {pfn}")
+                lines.append(f"- **{rse}:** `{pfn}`")
         else:
-            lines.append("  (no replicas available)")
-    return "\n".join(lines)
+            lines.append("- *(no replicas available)*")
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
 
 def register(mcp: FastMCP) -> None:

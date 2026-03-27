@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 
@@ -26,8 +25,8 @@ def parse_did(did: str) -> tuple[str, str]:
 
 
 def format_dict(data: dict[str, Any]) -> str:
-    """Format a dict as readable key: value lines."""
-    return "\n".join(f"{k}: {v}" for k, v in data.items() if v is not None)
+    """Format a dict as a markdown key-value bullet list."""
+    return "\n".join(f"- **{k}:** {v}" for k, v in data.items() if v is not None)
 
 
 _READ_ONLY_ERROR = (
@@ -43,15 +42,35 @@ def check_write_allowed(lifespan_context: dict[str, Any]) -> str | None:
     return None
 
 
-def format_list(items: list[Any]) -> str:
-    """Format a list of items, one per line.
+def _format_markdown_table(items: list[dict[str, Any]], keys: list[str]) -> str:
+    """Render a list of dicts as a markdown table."""
+    header = "| " + " | ".join(str(k) for k in keys) + " |"
+    separator = "| " + " | ".join("---" for _ in keys) + " |"
+    rows = [
+        "| " + " | ".join(str(item.get(k, "")) for k in keys) + " |" for item in items
+    ]
+    return "\n".join([header, separator, *rows])
 
-    Dicts are rendered as compact JSON; other types use str().
+
+def format_list(items: list[Any]) -> str:
+    """Format a list of items as markdown.
+
+    If all items are dicts with the same keys, renders as a markdown table.
+    Otherwise renders as a bulleted list.
     """
+    if not items:
+        return ""
+
+    if all(isinstance(item, dict) for item in items):
+        all_keys = list(items[0].keys())
+        if all(list(item.keys()) == all_keys for item in items):
+            return _format_markdown_table(items, all_keys)
+
     lines = []
     for item in items:
         if isinstance(item, dict):
-            lines.append(json.dumps(item, default=str))
+            parts = [f"**{k}:** {v}" for k, v in item.items() if v is not None]
+            lines.append("- " + ", ".join(parts))
         else:
-            lines.append(str(item))
+            lines.append(f"- {item}")
     return "\n".join(lines)

@@ -22,6 +22,6 @@ def register(mcp: FastMCP) -> None:
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
             scopes = client.list_scopes()
-            return "\n".join(sorted(scopes))
+            return "\n".join(f"- {s}" for s in sorted(scopes))
         except Exception as exc:  # noqa: BLE001
             return f"Error: {exc}"

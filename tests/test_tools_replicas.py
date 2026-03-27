@@ -92,6 +92,31 @@ class TestRucioListFileReplicas:
         result = await fn("mc16_13TeV:file1", ctx=mock_ctx)
         assert "No replicas" in result
 
+    async def test_returns_markdown_format(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_replicas.return_value = iter(
+            [
+                {
+                    "scope": "mc16_13TeV",
+                    "name": "file1.pool.root",
+                    "pfns": {
+                        "root://eosatlas.cern.ch//eos/atlas/file1.pool.root": {
+                            "rse": "CERN-PROD_DATADISK",
+                            "type": "DISK",
+                        }
+                    },
+                }
+            ]
+        )
+        fn = registered_tools["rucio_list_file_replicas"]
+        result = await fn("mc16_13TeV:file1.pool.root", ctx=mock_ctx)
+        assert "### `mc16_13TeV:file1.pool.root`" in result
+        assert "- **CERN-PROD_DATADISK:**" in result
+
 
 class TestRucioListDatasetReplicas:
     async def test_returns_replicas(

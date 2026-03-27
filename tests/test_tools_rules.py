@@ -179,6 +179,23 @@ class TestRucioAddRule:
         )
         assert "rule-id-xyz" in result
 
+    async def test_returns_markdown_rule_ids(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.add_replication_rule.return_value = ["rule-id-xyz"]
+        fn = registered_tools["rucio_add_rule"]
+        result = await fn(
+            "mc16_13TeV:some.dataset",
+            copies=1,
+            rse_expression="CERN-PROD_DATADISK",
+            ctx=mock_ctx,
+        )
+        assert "**Created rule(s):**" in result
+        assert "- `rule-id-xyz`" in result
+
     async def test_passes_correct_args(
         self,
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
