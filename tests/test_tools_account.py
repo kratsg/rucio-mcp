@@ -156,6 +156,21 @@ class TestRucioListAccountLimits:
         )
         assert "BNL-OSG2_DATADISK" in result
 
+    async def test_none_limit_rendered_as_none(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.account = "gstark"
+        mock_rucio_client.get_account_limits.return_value = {
+            "BNL-OSG2_DATADISK": None,
+        }
+        fn = registered_tools["rucio_list_account_limits"]
+        result = await fn(rse_expression="BNL-OSG2_DATADISK", ctx=mock_ctx)
+        assert "BNL-OSG2_DATADISK" in result
+        assert "none" in result
+
     async def test_client_error(
         self,
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
