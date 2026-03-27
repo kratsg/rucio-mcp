@@ -64,11 +64,14 @@ def register(mcp: FastMCP) -> None:
         client = ctx.request_context.lifespan_context["rucio_client"]
         effective_account = account or client.account
         try:
-            result = client.get_account_limits(
-                effective_account,
-                rse_expression=rse_expression or None,
-                locality="local",
-            )
+            if rse_expression:
+                result = client.get_account_limits(
+                    effective_account,
+                    rse_expression=rse_expression,
+                    locality="local",
+                )
+            else:
+                result = client.get_local_account_limits(effective_account)
             return format_dict(result)
         except Exception as exc:  # noqa: BLE001
             return f"Error: {exc}"

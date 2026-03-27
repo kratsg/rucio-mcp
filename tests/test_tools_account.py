@@ -118,7 +118,7 @@ class TestRucioListAccountLimits:
         mock_rucio_client: MagicMock,
     ) -> None:
         mock_rucio_client.account = "gstark"
-        mock_rucio_client.get_account_limits.return_value = {
+        mock_rucio_client.get_local_account_limits.return_value = {
             "CERN-PROD_DATADISK": 10000000000,
             "BNL-OSG2_DATADISK": 5000000000,
         }
@@ -134,12 +134,27 @@ class TestRucioListAccountLimits:
         mock_rucio_client: MagicMock,
     ) -> None:
         mock_rucio_client.account = "gstark"
-        mock_rucio_client.get_account_limits.return_value = {}
+        mock_rucio_client.get_local_account_limits.return_value = {}
         fn = registered_tools["rucio_list_account_limits"]
         await fn(ctx=mock_ctx)
+        mock_rucio_client.get_local_account_limits.assert_called_once_with("gstark")
+
+    async def test_rse_expression_uses_get_account_limits(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.account = "gstark"
+        mock_rucio_client.get_account_limits.return_value = {
+            "BNL-OSG2_DATADISK": 5000000000,
+        }
+        fn = registered_tools["rucio_list_account_limits"]
+        result = await fn(rse_expression="BNL-OSG2_DATADISK", ctx=mock_ctx)
         mock_rucio_client.get_account_limits.assert_called_once_with(
-            "gstark", rse_expression=None, locality="local"
+            "gstark", rse_expression="BNL-OSG2_DATADISK", locality="local"
         )
+        assert "BNL-OSG2_DATADISK" in result
 
     async def test_client_error(
         self,
@@ -148,7 +163,7 @@ class TestRucioListAccountLimits:
         mock_rucio_client: MagicMock,
     ) -> None:
         mock_rucio_client.account = "gstark"
-        mock_rucio_client.get_account_limits.side_effect = RuntimeError("denied")
+        mock_rucio_client.get_local_account_limits.side_effect = RuntimeError("denied")
         fn = registered_tools["rucio_list_account_limits"]
         result = await fn(ctx=mock_ctx)
         assert "Error" in result
