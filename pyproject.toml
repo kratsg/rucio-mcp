@@ -37,6 +37,7 @@ dependencies = [
 rucio-mcp = "rucio_mcp.cli:main"
 
 [project.urls]
+Documentation = "https://rucio-mcp.readthedocs.io/"
 Homepage = "https://github.com/kratsg/rucio-mcp"
 "Bug Tracker" = "https://github.com/kratsg/rucio-mcp/issues"
 Discussions = "https://github.com/kratsg/rucio-mcp/discussions"
