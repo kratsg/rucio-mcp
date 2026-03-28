@@ -25,7 +25,8 @@ src/rucio_mcp/
 ├── nomenclature.py # ATLAS dataset naming constants embedded in server instructions
 ├── resources.py    # MCP resources (static docs); register(mcp) wired in server.py
 └── tools/
-    ├── _helpers.py  # parse_did(), format_dict(), format_list(), check_write_allowed()
+    ├── _helpers.py  # parse_did(), format_dict(), format_list(), check_write_allowed(),
+    │                # human_bytes(), paginate_iter(), build_hints(), classify_error()
     ├── ping.py      # rucio_ping, rucio_whoami
     ├── dids.py      # rucio_list_dids, rucio_stat, rucio_list_content,
     │                # rucio_list_files, rucio_get_metadata, rucio_list_parent_dids
@@ -63,17 +64,22 @@ are defined as closures inside `register()` using the `@mcp.tool()` decorator.
 from mcp.server.fastmcp import Context, FastMCP
 from typing import Any
 
+from rucio_mcp.tools._helpers import build_hints, classify_error
+
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
-    async def rucio_my_tool(param: str, *, ctx: Context[Any, Any]) -> str:
+    async def rucio_my_tool(
+        param: str, limit: int = 50, offset: int = 0, *, ctx: Context[Any, Any]
+    ) -> str:
         """Tool description — shown to the LLM as the tool's purpose."""
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
             result = client.some_method(param)
-            return str(result)
-        except Exception as exc:
-            return f"Error: {exc}"
+        except Exception as exc:  # noqa: BLE001
+            return classify_error(exc)
+        hints = build_hints(["Use `rucio_other_tool` to do the next thing"])
+        return str(result) + hints
 ```
 
 Key conventions:
@@ -81,10 +87,16 @@ Key conventions:
 - Tool names are prefixed with `rucio_` to avoid collisions
 - `ctx` is keyword-only (after `*`) so optional parameters can have defaults
   before it
-- Errors are returned as text strings (`"Error: ..."`) — never raised as
-  exceptions
+- Errors are returned via `classify_error(exc)` from `_helpers.py` — never
+  raised as exceptions, never bare `f"Error: {exc}"`
 - `except Exception as exc:` lines carry `# noqa: BLE001` inline;
   `broad-exception-caught` is disabled globally in pylint (`pyproject.toml`)
+- List tools accept `limit: int` and `offset: int` for pagination; use
+  `paginate_iter(iterator, limit, offset)` from `_helpers.py`
+- All tools append `build_hints([...])` from `_helpers.py` to guide the LLM on
+  what to do next
+- Byte values in output are humanized via `human_bytes()` from `_helpers.py`;
+  pass `byte_keys=frozenset({...})` to `format_dict`/`format_list` to enable
 - Write tools call `check_write_allowed(ctx.request_context.lifespan_context)`
   from `_helpers.py` and return its error string if non-None
 
