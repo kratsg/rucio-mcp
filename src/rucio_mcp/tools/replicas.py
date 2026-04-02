@@ -144,13 +144,22 @@ def register(mcp: FastMCP) -> None:
             return classify_error(exc)
 
         if not results:
-            return "No dataset replicas found."
+            hints = build_hints(
+                [
+                    f"If {did} is a container, it may have no replicas at the container level. "
+                    f"Use `rucio_list_content {did}` to find child datasets, then call "
+                    f"`rucio_list_dataset_replicas <child_did>` on each one.",
+                ]
+            )
+            return "No dataset replicas found." + hints
 
         page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
         hints = build_hints(
             [
                 f"Use `rucio_list_file_replicas {did}` for per-file PFN details",
                 f"Use `rucio_list_rules {did}` to see replication rules",
+                f"If results look incomplete and {did} is a container, use "
+                f"`rucio_list_content {did}` to find child datasets and check their replicas individually.",
             ]
         )
         return (
