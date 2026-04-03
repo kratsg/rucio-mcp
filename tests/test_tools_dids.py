@@ -139,6 +139,39 @@ class TestRucioStat:
         assert "CONTAINER" in result
         assert "117.74 MB" in result
 
+    async def test_container_hints_suggest_dataset_replicas(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.get_did.return_value = {
+            "scope": "mc16_13TeV",
+            "name": "some.container",
+            "type": "CONTAINER",
+        }
+        fn = registered_tools["rucio_stat"]
+        result = await fn("mc16_13TeV:some.container", ctx=mock_ctx)
+        assert "rucio_list_dataset_replicas" in result
+        assert "rucio_list_content" not in result
+        assert "rucio_get_metadata" not in result
+
+    async def test_dataset_hints_suggest_dataset_replicas(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.get_did.return_value = {
+            "scope": "mc16_13TeV",
+            "name": "some.dataset",
+            "type": "DATASET",
+        }
+        fn = registered_tools["rucio_stat"]
+        result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
+        assert "rucio_list_dataset_replicas" in result
+        assert "rucio_get_metadata" not in result
+
     async def test_invalid_did(
         self,
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
@@ -228,6 +261,19 @@ class TestRucioListFiles:
         result = await fn("mc16_13TeV:dataset1", long=True, ctx=mock_ctx)
         assert "adler32" in result
 
+    async def test_includes_hints(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_files.return_value = iter(
+            [{"scope": "mc16_13TeV", "name": "file1.pool.root"}]
+        )
+        fn = registered_tools["rucio_list_files"]
+        result = await fn("mc16_13TeV:dataset1", ctx=mock_ctx)
+        assert "rucio_list_file_replicas" in result
+
 
 class TestRucioGetMetadata:
     async def test_returns_metadata(
@@ -243,3 +289,14 @@ class TestRucioGetMetadata:
         fn = registered_tools["rucio_get_metadata"]
         result = await fn("mc20_13TeV:somename", ctx=mock_ctx)
         assert "DAOD_PHYS" in result
+
+    async def test_includes_hints(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.get_metadata.return_value = {"datatype": "DAOD_PHYS"}
+        fn = registered_tools["rucio_get_metadata"]
+        result = await fn("mc20_13TeV:somename", ctx=mock_ctx)
+        assert "rucio_stat" in result

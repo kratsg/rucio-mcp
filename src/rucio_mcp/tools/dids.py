@@ -125,17 +125,16 @@ def register(mcp: FastMCP) -> None:
         if did_type == "CONTAINER":
             hints = build_hints(
                 [
-                    f"Use `rucio_list_content {did}` to see child datasets",
+                    f"Use `rucio_list_dataset_replicas {did}` to find where it is stored",
                     f"Use `rucio_list_rules {did}` to see replication rules",
-                    f"Use `rucio_get_metadata {did}` for additional metadata",
                 ]
             )
         elif did_type == "DATASET":
             hints = build_hints(
                 [
-                    f"Use `rucio_list_file_replicas {did}` to find where files are stored",
+                    f"Use `rucio_list_dataset_replicas {did}` for a summary view per RSE",
+                    f"Use `rucio_list_file_replicas {did}` for per-file PFN details",
                     f"Use `rucio_list_rules {did}` to see replication rules",
-                    f"Use `rucio_get_metadata {did}` for additional metadata",
                 ]
             )
         else:
@@ -216,13 +215,17 @@ def register(mcp: FastMCP) -> None:
             return "No files found."
 
         page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
+        hints = build_hints(
+            [f"Use `rucio_list_file_replicas {did}` to find where files are stored"]
+        )
         if long:
-            return format_list(page) + footer
+            return format_list(page) + footer + hints
         return (
             "\n".join(
                 f"- `{r['scope']}:{r['name']}`" for r in page if isinstance(r, dict)
             )
             + footer
+            + hints
         )
 
     @mcp.tool()
@@ -247,9 +250,13 @@ def register(mcp: FastMCP) -> None:
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
             result = client.get_metadata(scope, name, plugin=plugin)
-            return format_dict(result)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
+
+        hints = build_hints(
+            [f"Use `rucio_stat {did}` for structure and size information"]
+        )
+        return format_dict(result) + hints
 
     @mcp.tool()
     async def rucio_list_parent_dids(

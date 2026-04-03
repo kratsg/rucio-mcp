@@ -161,6 +161,19 @@ class TestRucioListRuleHistory:
         result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
         assert "No rule history" in result
 
+    async def test_includes_hints(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_replication_rule_full_history.return_value = iter(
+            [{"id": "abc123", "state": "OK", "rse_expression": "CERN-PROD_DATADISK"}]
+        )
+        fn = registered_tools["rucio_list_rule_history"]
+        result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
+        assert "rucio_list_rules" in result
+
 
 class TestRucioAddRule:
     async def test_creates_rule(
@@ -305,6 +318,15 @@ class TestRucioDeleteRule:
         fn = registered_tools["rucio_delete_rule"]
         result = await fn("bad-uuid", ctx=mock_ctx)
         assert "Error" in result
+
+    async def test_includes_hints(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+    ) -> None:
+        fn = registered_tools["rucio_delete_rule"]
+        result = await fn("abc123", ctx=mock_ctx)
+        assert "rucio_list_rules" in result
 
 
 class TestRucioUpdateRule:

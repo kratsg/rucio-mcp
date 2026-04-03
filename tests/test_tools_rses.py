@@ -109,6 +109,17 @@ class TestRucioListRseAttributes:
         result = await fn("NONEXISTENT", ctx=mock_ctx)
         assert result.startswith("Error:")
 
+    async def test_includes_hints(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_rse_attributes.return_value = {"tier": 1}
+        fn = registered_tools["rucio_list_rse_attributes"]
+        result = await fn("CERN-PROD_DATADISK", ctx=mock_ctx)
+        assert "rucio_list_rse_usage" in result
+
 
 class TestRucioListRseUsage:
     async def test_returns_markdown_table(
@@ -138,3 +149,16 @@ class TestRucioListRseUsage:
         fn = registered_tools["rucio_list_rse_usage"]
         result = await fn("NONEXISTENT", ctx=mock_ctx)
         assert result.startswith("Error:")
+
+    async def test_includes_hints(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.get_rse_usage.return_value = iter(
+            [{"source": "rucio", "used": 1000, "free": 500, "total": 1500}]
+        )
+        fn = registered_tools["rucio_list_rse_usage"]
+        result = await fn("CERN-PROD_DATADISK", ctx=mock_ctx)
+        assert "rucio_list_rse_attributes" in result

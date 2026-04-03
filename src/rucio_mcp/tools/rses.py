@@ -81,9 +81,13 @@ def register(mcp: FastMCP) -> None:
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
             result = client.list_rse_attributes(rse)
-            return format_dict(result)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
+
+        hints = build_hints(
+            [f"Use `rucio_list_rse_usage {rse}` to check storage capacity"]
+        )
+        return format_dict(result) + hints
 
     @mcp.tool()
     async def rucio_list_rse_usage(
@@ -99,10 +103,17 @@ def register(mcp: FastMCP) -> None:
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
             results = list(client.get_rse_usage(rse))
-            return format_list(
-                results,
-                include_keys=_RSE_USAGE_KEYS,
-                byte_keys=_RSE_USAGE_BYTE_KEYS,
-            )
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
+
+        hints = build_hints(
+            [
+                f"Use `rucio_list_rse_attributes {rse}` to see RSE properties (type, tier, country)"
+            ]
+        )
+        return (
+            format_list(
+                results, include_keys=_RSE_USAGE_KEYS, byte_keys=_RSE_USAGE_BYTE_KEYS
+            )
+            + hints
+        )

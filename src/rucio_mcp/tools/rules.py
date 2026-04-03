@@ -179,7 +179,12 @@ def register(mcp: FastMCP) -> None:
             return "No rule history found."
 
         page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
-        return format_list(page) + footer
+        hints = build_hints(
+            [
+                f"Use `rucio_list_rules {did}` to see the current active rules for this DID"
+            ]
+        )
+        return format_list(page) + footer + hints
 
     @mcp.tool()
     async def rucio_list_replication_rules(
@@ -361,7 +366,10 @@ def register(mcp: FastMCP) -> None:
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
-        return f"Rule {rule_id} deleted."
+        hints = build_hints(
+            ["Use `rucio_list_rules <scope:name>` to verify the rule is gone"]
+        )
+        return f"Rule {rule_id} deleted." + hints
 
     @mcp.tool()
     async def rucio_update_rule(
