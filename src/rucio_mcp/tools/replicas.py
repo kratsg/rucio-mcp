@@ -140,6 +140,18 @@ def register(mcp: FastMCP) -> None:
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
             results = list(client.list_dataset_replicas(scope, name, deep=deep))
+            if not results:
+                # DID may be a container — walk its children and aggregate
+                children = list(client.list_content(scope, name))
+                for child in children:
+                    child_scope = child.get("scope", scope)
+                    child_name = child.get("name", "")
+                    if child_name:
+                        results.extend(
+                            client.list_dataset_replicas(
+                                child_scope, child_name, deep=deep
+                            )
+                        )
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
