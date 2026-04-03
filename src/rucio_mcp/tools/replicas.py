@@ -111,6 +111,68 @@ def register(mcp: FastMCP) -> None:
         return _format_file_replicas(results) + footer + hints
 
     @mcp.tool()
+    async def rucio_list_container_replicas(
+        did: str,
+        deep: bool = False,
+        limit: int = 50,
+        offset: int = 0,
+        *,
+        ctx: Context[Any, Any],
+    ) -> str:
+        """Show dataset-level replica availability for all datasets in a container.
+
+        Walks the immediate children of a container DID and aggregates
+        ``list_dataset_replicas`` results across all child datasets. Use this
+        when ``rucio_list_dataset_replicas`` returns empty because the DID is a
+        container rather than a plain dataset.
+
+        Args:
+            did: The container in ``scope:name`` format.
+            deep: If True, check individual file availability for each child
+                dataset (slower but accurate).
+            limit: Maximum number of RSE rows to return in total (default 50).
+            offset: Number of RSE rows to skip for pagination.
+        """
+        try:
+            scope, name = parse_did(did)
+        except ValueError as exc:
+            return str(exc)
+
+        client = ctx.request_context.lifespan_context["rucio_client"]
+        try:
+            children = list(client.list_content(scope, name))
+            results = []
+            for child in children:
+                child_scope = child.get("scope", scope)
+                child_name = child.get("name", "")
+                if child_name:
+                    results.extend(
+                        client.list_dataset_replicas(child_scope, child_name, deep=deep)
+                    )
+        except Exception as exc:  # noqa: BLE001
+            return classify_error(exc)
+
+        if not results:
+            return "No dataset replicas found for container children."
+
+        page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
+        hints = build_hints(
+            [
+                f"Use `rucio_list_file_replicas {did}` for per-file PFN details",
+                f"Use `rucio_list_rules {did}` to see replication rules",
+            ]
+        )
+        return (
+            format_list(
+                page,
+                include_keys=_DATASET_REPLICA_KEYS,
+                byte_keys=_DATASET_REPLICA_BYTE_KEYS,
+            )
+            + footer
+            + hints
+        )
+
+    @mcp.tool()
     async def rucio_list_dataset_replicas(
         did: str,
         deep: bool = False,
@@ -140,27 +202,13 @@ def register(mcp: FastMCP) -> None:
         client = ctx.request_context.lifespan_context["rucio_client"]
         try:
             results = list(client.list_dataset_replicas(scope, name, deep=deep))
-            if not results:
-                # DID may be a container — walk its children and aggregate
-                children = list(client.list_content(scope, name))
-                for child in children:
-                    child_scope = child.get("scope", scope)
-                    child_name = child.get("name", "")
-                    if child_name:
-                        results.extend(
-                            client.list_dataset_replicas(
-                                child_scope, child_name, deep=deep
-                            )
-                        )
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
         if not results:
             hints = build_hints(
                 [
-                    f"If {did} is a container, it may have no replicas at the container level. "
-                    f"Use `rucio_list_content {did}` to find child datasets, then call "
-                    f"`rucio_list_dataset_replicas <child_did>` on each one.",
+                    f"If {did} is a container DID, use `rucio_list_container_replicas {did}` instead",
                 ]
             )
             return "No dataset replicas found." + hints

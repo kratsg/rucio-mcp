@@ -125,7 +125,7 @@ def register(mcp: FastMCP) -> None:
         if did_type == "CONTAINER":
             hints = build_hints(
                 [
-                    f"Use `rucio_list_dataset_replicas {did}` to find where it is stored",
+                    f"Use `rucio_list_container_replicas {did}` to find where it is stored",
                     f"Use `rucio_list_rules {did}` to see replication rules",
                 ]
             )

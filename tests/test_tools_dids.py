@@ -139,7 +139,7 @@ class TestRucioStat:
         assert "CONTAINER" in result
         assert "117.74 MB" in result
 
-    async def test_container_hints_suggest_dataset_replicas(
+    async def test_container_hints_suggest_container_replicas(
         self,
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
         mock_ctx: MagicMock,
@@ -152,7 +152,7 @@ class TestRucioStat:
         }
         fn = registered_tools["rucio_stat"]
         result = await fn("mc16_13TeV:some.container", ctx=mock_ctx)
-        assert "rucio_list_dataset_replicas" in result
+        assert "rucio_list_container_replicas" in result
         assert "rucio_list_content" not in result
         assert "rucio_get_metadata" not in result
 

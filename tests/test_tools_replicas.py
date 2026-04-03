@@ -146,69 +146,120 @@ class TestRucioListDatasetReplicas:
         mock_rucio_client: MagicMock,
     ) -> None:
         mock_rucio_client.list_dataset_replicas.return_value = iter([])
-        mock_rucio_client.list_content.return_value = iter([])
         fn = registered_tools["rucio_list_dataset_replicas"]
         result = await fn("mc16_13TeV:nonexistent", ctx=mock_ctx)
         assert "No dataset replicas" in result
 
-    async def test_container_walks_children_when_direct_call_empty(
+    async def test_does_not_walk_container_children(
         self,
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
-        """Container DIDs return empty from list_dataset_replicas directly;
-        the tool must walk list_content and aggregate child dataset replicas."""
-        container = "mc16_13TeV:mc16_13TeV.538179.MGPy8EG.deriv.DAOD_SUSY5.e8545_p4172"
+        """rucio_list_dataset_replicas must NOT walk list_content for containers.
+        Use rucio_list_container_replicas for that."""
+        mock_rucio_client.list_dataset_replicas.return_value = iter([])
+        fn = registered_tools["rucio_list_dataset_replicas"]
+        await fn("mc16_13TeV:some.container", ctx=mock_ctx)
+        mock_rucio_client.list_content.assert_not_called()
+
+
+class TestRucioListContainerReplicas:
+    async def test_walks_children_and_aggregates_replicas(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        """Container DID is walked via list_content; child dataset replicas are aggregated."""
         child_name = (
             "mc16_13TeV.538179.MGPy8EG.deriv.DAOD_SUSY5.e8545_p4172_tid40499505_00"
         )
-
-        # Direct call returns nothing (it's a container)
-        mock_rucio_client.list_dataset_replicas.return_value = iter([])
-        # Children are returned by list_content
         mock_rucio_client.list_content.return_value = iter(
             [{"scope": "mc16_13TeV", "name": child_name, "type": "DATASET"}]
         )
-        # Child has replicas
-        mock_rucio_client.list_dataset_replicas.side_effect = [
-            iter([]),  # first call: container itself → empty
-            iter(
-                [
-                    {
-                        "rse": "IN2P3-LAPP-DCACHE_DATADISK",
-                        "available_bytes": 700000000,
-                        "available_length": 10,
-                        "state": "AVAILABLE",
-                    }
-                ]
-            ),  # second call: child dataset → has replicas
-        ]
-
-        fn = registered_tools["rucio_list_dataset_replicas"]
-        result = await fn(container, ctx=mock_ctx)
-
+        mock_rucio_client.list_dataset_replicas.return_value = iter(
+            [
+                {
+                    "rse": "IN2P3-LAPP-DCACHE_DATADISK",
+                    "available_bytes": 700000000,
+                    "available_length": 10,
+                    "state": "AVAILABLE",
+                }
+            ]
+        )
+        fn = registered_tools["rucio_list_container_replicas"]
+        result = await fn(
+            "mc16_13TeV:mc16_13TeV.538179.MGPy8EG.deriv.DAOD_SUSY5.e8545_p4172",
+            ctx=mock_ctx,
+        )
         assert "IN2P3-LAPP-DCACHE_DATADISK" in result
         assert "AVAILABLE" in result
-        # list_content must have been called with the container scope/name
-        mock_rucio_client.list_content.assert_called_once_with(
-            "mc16_13TeV", container.split(":")[1]
-        )
 
-    async def test_container_with_no_replicas_in_children(
+    async def test_no_children(
         self,
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
-        """Container whose children also have no replicas returns empty message."""
-        mock_rucio_client.list_dataset_replicas.side_effect = [
-            iter([]),  # container itself → empty
-            iter([]),  # child → also empty
-        ]
+        mock_rucio_client.list_content.return_value = iter([])
+        fn = registered_tools["rucio_list_container_replicas"]
+        result = await fn("mc16_13TeV:some.container", ctx=mock_ctx)
+        assert "No" in result
+
+    async def test_children_with_no_replicas(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
         mock_rucio_client.list_content.return_value = iter(
             [{"scope": "mc16_13TeV", "name": "child_ds", "type": "DATASET"}]
         )
-        fn = registered_tools["rucio_list_dataset_replicas"]
+        mock_rucio_client.list_dataset_replicas.return_value = iter([])
+        fn = registered_tools["rucio_list_container_replicas"]
         result = await fn("mc16_13TeV:some.container", ctx=mock_ctx)
-        assert "No dataset replicas" in result
+        assert "No" in result
+
+    async def test_invalid_did(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+    ) -> None:
+        fn = registered_tools["rucio_list_container_replicas"]
+        result = await fn("nodidformat", ctx=mock_ctx)
+        assert "scope:name" in result
+
+    async def test_client_error(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_content.side_effect = RuntimeError("server error")
+        fn = registered_tools["rucio_list_container_replicas"]
+        result = await fn("mc16_13TeV:some.container", ctx=mock_ctx)
+        assert "Error" in result
+
+    async def test_includes_hints(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_content.return_value = iter(
+            [{"scope": "mc16_13TeV", "name": "child_ds", "type": "DATASET"}]
+        )
+        mock_rucio_client.list_dataset_replicas.return_value = iter(
+            [
+                {
+                    "rse": "CERN-PROD_DATADISK",
+                    "available_bytes": 1000,
+                    "available_length": 1,
+                    "state": "AVAILABLE",
+                }
+            ]
+        )
+        fn = registered_tools["rucio_list_container_replicas"]
+        result = await fn("mc16_13TeV:some.container", ctx=mock_ctx)
+        assert "rucio_list_rules" in result
