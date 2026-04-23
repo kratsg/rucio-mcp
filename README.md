@@ -86,6 +86,20 @@ export RUCIO_HOME=/path/to/rucio-clients   # directory containing etc/rucio.cfg
 automatically to the certificates bundled in the conda environment. No manual
 configuration needed.
 
+If you run into an error about expired CRLs
+
+```text
+Error: Certificate verification failed.
+sslutils.c:1911:error:40000405:lib(128)::outdated CRL found, revoking all certs till you get new CRL
+sslutils.c:2106:error:40000411:lib(128)::certificate validation error: CRL has expired
+```
+
+then you need to run the following to refresh the CRLs:
+
+```bash
+pixi run sh -c '$X509_CERT_DIR/refresh_crls.sh'
+```
+
 **On CVMFS-based facilities without pixi (e.g. UChicago Analysis Facility):**
 
 ```bash
