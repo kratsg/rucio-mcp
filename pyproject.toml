@@ -59,7 +59,8 @@ docs = [
 
 
 [tool.hatch]
-version.path = "src/rucio_mcp/__init__.py"
+version.source = "vcs"
+build.hooks.vcs.version-file = "src/rucio_mcp/_version.py"
 
 [tool.hatch.envs.default]
 dependency-groups = ["dev"]
