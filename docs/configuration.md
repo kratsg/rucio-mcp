@@ -19,7 +19,7 @@ Then set your account and renew your proxy:
 
 ```bash
 export RUCIO_ACCOUNT=<your-atlas-account>
-voms-proxy-init -voms atlas
+pixi exec --with rucio-mcp voms-proxy-init -voms atlas
 rucio-mcp serve
 ```
 
@@ -56,7 +56,7 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
     ```bash
     rucio-mcp init atlas
     export RUCIO_ACCOUNT=<your_atlas_account>
-    voms-proxy-init -voms atlas
+    pixi exec --with rucio-mcp voms-proxy-init -voms atlas
     rucio-mcp serve
     ```
 
