@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import sys
 from importlib.resources import files
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from rucio_mcp.config_paths import managed_rucio_config
 from rucio_mcp.presets import PRESETS
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def init(
@@ -41,10 +44,7 @@ def init(
         return 1
 
     entry = PRESETS[preset]
-    if prefix is not None:
-        cfg_path = prefix / "rucio.cfg"
-    else:
-        cfg_path = managed_rucio_config()
+    cfg_path = prefix / "rucio.cfg" if prefix is not None else managed_rucio_config()
 
     if cfg_path.exists() and not force:
         sys.stdout.write(

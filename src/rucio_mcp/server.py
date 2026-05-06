@@ -40,7 +40,6 @@ def _preflight_check() -> None:
     warnings: list[str] = []
 
     # --- rucio.cfg resolution ---
-    # Priority: RUCIO_CONFIG > managed ~/.config/rucio-mcp/rucio.cfg > RUCIO_HOME (compat)
     rucio_config = os.environ.get("RUCIO_CONFIG")
     if rucio_config:
         if not Path(rucio_config).exists():
@@ -53,24 +52,14 @@ def _preflight_check() -> None:
         if managed_cfg.exists():
             os.environ["RUCIO_CONFIG"] = str(managed_cfg)
         else:
-            # Backward compat: RUCIO_HOME points to a directory with etc/rucio.cfg
-            rucio_home = os.environ.get("RUCIO_HOME")
-            if rucio_home:
-                home_cfg = Path(rucio_home) / "etc" / "rucio.cfg"
-                if not home_cfg.exists():
-                    errors.append(
-                        f"RUCIO_HOME={rucio_home!r} is set but {home_cfg} does not exist.\n"
-                        "    Verify RUCIO_HOME points to a valid rucio-clients installation."
-                    )
-            else:
-                errors.append(
-                    "RUCIO_CONFIG is not set and no managed config was found.\n"
-                    "    Run one of the following to get started:\n"
-                    "      rucio-mcp init atlas\n"
-                    "      rucio-mcp init --list\n"
-                    "    Or set RUCIO_CONFIG manually:\n"
-                    "      export RUCIO_CONFIG=/path/to/rucio.cfg"
-                )
+            errors.append(
+                "RUCIO_CONFIG is not set and no managed config was found.\n"
+                "    Run one of the following to get started:\n"
+                "      rucio-mcp init atlas\n"
+                "      rucio-mcp init --list\n"
+                "    Or set RUCIO_CONFIG manually:\n"
+                "      export RUCIO_CONFIG=/path/to/rucio.cfg"
+            )
 
     # --- auth type --- defaults to x509_proxy
     os.environ.setdefault("RUCIO_AUTH_TYPE", "x509_proxy")

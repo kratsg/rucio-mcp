@@ -105,7 +105,7 @@ class TestInitCommand:
         out = capsys.readouterr().out
         assert "RUCIO_ACCOUNT" in out
 
-    def test_list_requires_no_preset(self, tmp_path, monkeypatch, capsys) -> None:
+    def test_list_requires_no_preset(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("HOME", str(tmp_path))
         result = init(None, force=False, prefix=None, list_presets=True)
         assert result == 0

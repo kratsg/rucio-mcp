@@ -4,8 +4,8 @@ These tests require a valid Rucio environment (authentication, network access).
 Run with: ``pixi run test-slow``
 
 Setup on UChicago Analysis Facility (or any site with Rucio + VOMS):
-  1. Ensure rucio.cfg is configured (typically in $RUCIO_HOME/etc/rucio.cfg
-     or /etc/rucio.cfg) with the correct rucio_host and auth_host.
+  1. Ensure rucio.cfg is configured (set RUCIO_CONFIG to its path, or run
+     ``rucio-mcp init atlas``) with the correct rucio_host and auth_host.
   2. Set RUCIO_ACCOUNT to your ATLAS account (e.g. ``export RUCIO_ACCOUNT=gstark``).
   3. For x509_proxy auth: run ``voms-proxy-init -voms atlas`` and set
      ``export RUCIO_AUTH_TYPE=x509_proxy``.

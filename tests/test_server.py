@@ -18,15 +18,6 @@ def valid_rucio_config(tmp_path):
     return cfg
 
 
-@pytest.fixture
-def valid_rucio_home(tmp_path):
-    """A tmp_path with etc/rucio.cfg — for RUCIO_HOME backward-compat tests."""
-    cfg = tmp_path / "etc" / "rucio.cfg"
-    cfg.parent.mkdir()
-    cfg.touch()
-    return tmp_path
-
-
 class TestPreflightCheck:
     def test_fails_without_any_config(self, tmp_path) -> None:
         env = {"HOME": str(tmp_path), "RUCIO_AUTH_TYPE": "x509_proxy"}
@@ -186,27 +177,6 @@ class TestPreflightCheck:
         with patch.dict("os.environ", env, clear=True):
             _preflight_check()
             assert os.environ["RUCIO_CONFIG"] == str(valid_rucio_config)
-
-    def test_rucio_home_backward_compat(self, valid_rucio_home, tmp_path) -> None:
-        env = {
-            "HOME": str(tmp_path),
-            "RUCIO_HOME": str(valid_rucio_home),
-            "RUCIO_AUTH_TYPE": "x509_proxy",
-        }
-        with patch.dict("os.environ", env, clear=True):
-            _preflight_check()  # must not raise
-
-    def test_rucio_home_backward_compat_missing_cfg(self, tmp_path) -> None:
-        env = {
-            "HOME": str(tmp_path),
-            "RUCIO_HOME": str(tmp_path / "missing"),
-            "RUCIO_AUTH_TYPE": "x509_proxy",
-        }
-        with (
-            patch.dict("os.environ", env, clear=True),
-            pytest.raises(SystemExit),
-        ):
-            _preflight_check()
 
     def test_error_mentions_init_when_no_config_found(self, tmp_path, capsys) -> None:
         env = {"HOME": str(tmp_path), "RUCIO_AUTH_TYPE": "x509_proxy"}

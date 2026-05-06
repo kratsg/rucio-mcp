@@ -150,7 +150,7 @@ class TestRucioMyTool:
    ```bash
    env RUCIO_AUTH_TYPE=x509_proxy \
        X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates \
-       RUCIO_HOME=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0 \
+       RUCIO_CONFIG=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0/etc/rucio.cfg \
        rucio-mcp serve
    ```
 

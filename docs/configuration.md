@@ -136,9 +136,7 @@ When `rucio-mcp serve` starts, it looks for `rucio.cfg` in this order:
 2. **`~/.config/rucio-mcp/rucio.cfg`** — used when `RUCIO_CONFIG` is unset and
    this file exists (created by `rucio-mcp init`). `RUCIO_CONFIG` is set to this
    path for the lifetime of the process.
-3. **`$RUCIO_HOME/etc/rucio.cfg`** — backward-compatibility fallback when
-   `RUCIO_HOME` is set (e.g. site-managed CVMFS installations).
-4. Neither found → startup fails with a clear error pointing to
+3. Neither found → startup fails with a clear error pointing to
    `rucio-mcp init`.
 
 `XDG_CONFIG_HOME` is respected: if set, step 2 looks in
