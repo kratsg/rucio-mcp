@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 from mcp.server.fastmcp import FastMCP
 from rucio.client import Client
 
+from rucio_mcp.config_paths import managed_rucio_config
 from rucio_mcp.nomenclature import ATLAS_NOMENCLATURE
 from rucio_mcp.resources import register as register_resources
 from rucio_mcp.tools import account, dids, ping, proxy, replicas, rses, rules, scopes
@@ -38,36 +39,48 @@ def _preflight_check() -> None:
     errors: list[str] = []
     warnings: list[str] = []
 
-    # --- rucio.cfg ---
-    rucio_home = os.environ.get("RUCIO_HOME")
-    if rucio_home:
-        cfg = Path(rucio_home) / "etc" / "rucio.cfg"
-        if not cfg.exists():
+    # --- rucio.cfg resolution ---
+    # Priority: RUCIO_CONFIG > managed ~/.config/rucio-mcp/rucio.cfg > RUCIO_HOME (compat)
+    rucio_config = os.environ.get("RUCIO_CONFIG")
+    if rucio_config:
+        if not Path(rucio_config).exists():
             errors.append(
-                f"RUCIO_HOME={rucio_home!r} is set but {cfg} does not exist.\n"
-                "    Verify RUCIO_HOME points to a valid rucio-clients installation."
+                f"RUCIO_CONFIG={rucio_config!r} is set but the file does not exist.\n"
+                "    Verify the path or run: rucio-mcp init atlas"
             )
     else:
-        errors.append(
-            "RUCIO_HOME is not set. Set it to the rucio-clients directory\n"
-            "    that contains etc/rucio.cfg.\n"
-            "    Example:\n"
-            "      export RUCIO_HOME=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase"
-            "/x86_64/rucio-clients/35.6.0"
-        )
+        managed_cfg = managed_rucio_config()
+        if managed_cfg.exists():
+            os.environ["RUCIO_CONFIG"] = str(managed_cfg)
+        else:
+            # Backward compat: RUCIO_HOME points to a directory with etc/rucio.cfg
+            rucio_home = os.environ.get("RUCIO_HOME")
+            if rucio_home:
+                home_cfg = Path(rucio_home) / "etc" / "rucio.cfg"
+                if not home_cfg.exists():
+                    errors.append(
+                        f"RUCIO_HOME={rucio_home!r} is set but {home_cfg} does not exist.\n"
+                        "    Verify RUCIO_HOME points to a valid rucio-clients installation."
+                    )
+            else:
+                errors.append(
+                    "RUCIO_CONFIG is not set and no managed config was found.\n"
+                    "    Run one of the following to get started:\n"
+                    "      rucio-mcp init atlas\n"
+                    "      rucio-mcp init --list\n"
+                    "    Or set RUCIO_CONFIG manually:\n"
+                    "      export RUCIO_CONFIG=/path/to/rucio.cfg"
+                )
 
-    # --- auth type ---
-    auth_type = os.environ.get("RUCIO_AUTH_TYPE")
-    if auth_type is None:
-        errors.append(
-            "RUCIO_AUTH_TYPE is not set. Set it to your authentication method,\n"
-            "    or add 'auth_type = ...' to the [client] section of rucio.cfg.\n"
-            "    Example:\n"
-            "      export RUCIO_AUTH_TYPE=x509_proxy"
-        )
+    # --- auth type --- defaults to x509_proxy
+    os.environ.setdefault("RUCIO_AUTH_TYPE", "x509_proxy")
+    auth_type = os.environ["RUCIO_AUTH_TYPE"]
 
     # --- x509 proxy specifics ---
     if auth_type == "x509_proxy":
+        # Default proxy path to /tmp/x509up_u<uid> if not set
+        os.environ.setdefault("X509_USER_PROXY", f"/tmp/x509up_u{os.getuid()}")
+
         cert_dir = os.environ.get("X509_CERT_DIR")
         if cert_dir is None:
             warnings.append(
@@ -101,6 +114,17 @@ def _preflight_check() -> None:
         sys.exit(1)
 
 
+def ping_server() -> None:
+    """Check connectivity to the Rucio server and print version/account info."""
+    _preflight_check()
+    client = Client()
+    info = client.ping()
+    who = client.whoami()
+    sys.stdout.write(f"version: {info.get('version', 'unknown')}\n")
+    sys.stdout.write(f"account: {who.get('account', 'unknown')}\n")
+    sys.stdout.write("status: ok\n")
+
+
 def _make_mcp(read_only: bool = False) -> FastMCP:
     """Build and return a configured FastMCP instance.
 
@@ -118,7 +142,7 @@ def _make_mcp(read_only: bool = False) -> FastMCP:
         and/or the rucio.cfg file automatically:
           - RUCIO_AUTH_TYPE  (e.g. x509_proxy, userpass, oidc)
           - RUCIO_ACCOUNT
-          - RUCIO_HOME       (directory containing rucio.cfg)
+          - RUCIO_CONFIG     (direct path to rucio.cfg)
           - X509_USER_PROXY  (path to proxy cert when RUCIO_AUTH_TYPE=x509_proxy)
         """
         client = Client()
