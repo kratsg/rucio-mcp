@@ -100,6 +100,13 @@ then you need to run the following to refresh the CRLs:
 pixi run sh -c '$X509_CERT_DIR/refresh_crls.sh'
 ```
 
+or
+
+```
+bash
+pixi exec --with rucio-mcp sh -c '$X509_CERT_DIR/refresh_crls.sh'
+```
+
 **On CVMFS-based facilities without pixi (e.g. UChicago Analysis Facility):**
 
 ```bash

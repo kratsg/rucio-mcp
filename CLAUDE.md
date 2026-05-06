@@ -193,10 +193,12 @@ sub-clients. Key methods by category (source in `rucio/lib/rucio/client/`):
 
 Authentication is configured via environment variables:
 
-- `RUCIO_AUTH_TYPE`: `x509_proxy`, `userpass`, `oidc`, `x509`, `gss`
+- `RUCIO_AUTH_TYPE`: `x509_proxy`, `userpass`, `oidc`, `x509`, `gss` (defaults
+  to `x509_proxy`)
 - `RUCIO_ACCOUNT`: your Rucio account name
-- `RUCIO_HOME`: directory containing `etc/rucio.cfg`
-- `X509_USER_PROXY`: path to proxy cert (when `RUCIO_AUTH_TYPE=x509_proxy`)
+- `RUCIO_CONFIG`: direct path to `rucio.cfg` (set automatically by
+  `rucio-mcp init`)
+- `X509_USER_PROXY`: path to proxy cert (defaults to `/tmp/x509up_u<uid>`)
 
 ## ATLAS dataset nomenclature
 
@@ -260,7 +262,7 @@ where the directory is the first three digits + `xxx` and then the full DSID.
 
    ```bash
    env RUCIO_AUTH_TYPE=x509_proxy \
-       RUCIO_HOME=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/<version> \
+       RUCIO_CONFIG=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/<version>/etc/rucio.cfg \
        rucio-mcp serve
    ```
 
@@ -269,13 +271,12 @@ where the directory is the first three digits + `xxx` and then the full DSID.
    ```bash
    env RUCIO_AUTH_TYPE=x509_proxy \
        X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates \
-       RUCIO_HOME=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/<version> \
+       RUCIO_CONFIG=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/<version>/etc/rucio.cfg \
        rucio-mcp serve
    ```
 
-   - `RUCIO_HOME` — points to a versioned rucio-clients installation (e.g.
-     `35.6.0`). The rucio client reads `$RUCIO_HOME/etc/rucio.cfg` for
-     `rucio_host`, `auth_host`, and proxy path settings.
+   - `RUCIO_CONFIG` — direct path to the site's `rucio.cfg` file inside the
+     versioned rucio-clients installation on CVMFS.
 
 4. Example Claude Code MCP config (`~/.claude.json` or project `.mcp.json`):
 
@@ -297,7 +298,7 @@ where the directory is the first three digits + `xxx` and then the full DSID.
          "env": {
            "RUCIO_AUTH_TYPE": "x509_proxy",
            "RUCIO_ACCOUNT": "gstark",
-           "RUCIO_HOME": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0"
+           "RUCIO_CONFIG": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0/etc/rucio.cfg"
          }
        }
      }
@@ -317,7 +318,7 @@ where the directory is the first three digits + `xxx` and then the full DSID.
            "RUCIO_AUTH_TYPE": "x509_proxy",
            "RUCIO_ACCOUNT": "gstark",
            "X509_CERT_DIR": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates",
-           "RUCIO_HOME": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0"
+           "RUCIO_CONFIG": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0/etc/rucio.cfg"
          }
        }
      }
