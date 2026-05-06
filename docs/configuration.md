@@ -7,8 +7,8 @@ icon: lucide/settings
 ## Quick setup
 
 The easiest way to configure `rucio-mcp` is the `init` subcommand, which writes
-a preset `rucio.cfg` to `~/.config/rucio-mcp/rucio.cfg` so the server finds
-it automatically — no extra environment variables required.
+a preset `rucio.cfg` to `~/.config/rucio-mcp/rucio.cfg` so the server finds it
+automatically — no extra environment variables required.
 
 ```bash
 rucio-mcp init atlas        # write the ATLAS preset
@@ -26,21 +26,21 @@ rucio-mcp serve
 !!! tip "Site-managed Rucio clients (UChicago AF, CERN lxplus, CVMFS)" If your
 site already provides a Rucio client installation, set `RUCIO_CONFIG` to point
 directly at the site's `rucio.cfg` — `init` is not needed and `RUCIO_CONFIG`
-takes full priority. See
-[Site-managed deployments](#site-managed-deployments) below.
+takes full priority. See [Site-managed deployments](#site-managed-deployments)
+below.
 
 ## Environment variables
 
 All authentication configuration is passed via environment variables, which are
 read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 
-| Variable          | Required               | Description                                                                                               |
-| ----------------- | ---------------------- | --------------------------------------------------------------------------------------------------------- |
+| Variable          | Required               | Description                                                                                              |
+| ----------------- | ---------------------- | -------------------------------------------------------------------------------------------------------- |
 | `RUCIO_CONFIG`    | No (if `init` was run) | Direct path to a `rucio.cfg` file. Takes highest priority when set.                                      |
 | `RUCIO_AUTH_TYPE` | No                     | Authentication method: `x509_proxy`, `userpass`, `oidc`, `x509`. Defaults to `x509_proxy`.               |
-| `RUCIO_ACCOUNT`   | Yes                    | Your Rucio account name                                                                                   |
+| `RUCIO_ACCOUNT`   | Yes                    | Your Rucio account name                                                                                  |
 | `X509_USER_PROXY` | x509                   | Path to your VOMS proxy certificate. Defaults to `/tmp/x509up_u<uid>`.                                   |
-| `X509_CERT_DIR`   | x509                   | Directory of CA certificates for SSL verification. Set automatically by `ca-policy-lcg` when using pixi.  |
+| `X509_CERT_DIR`   | x509                   | Directory of CA certificates for SSL verification. Set automatically by `ca-policy-lcg` when using pixi. |
 
 ## Authentication methods
 
@@ -118,8 +118,8 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 ## Rucio configuration presets
 
 `rucio-mcp init <preset>` copies a bundled `rucio.cfg` to
-`~/.config/rucio-mcp/rucio.cfg`. The file is a starting point — edit it
-after running `init` if your site uses non-standard endpoints.
+`~/.config/rucio-mcp/rucio.cfg`. The file is a starting point — edit it after
+running `init` if your site uses non-standard endpoints.
 
 === "ATLAS"
 
@@ -134,8 +134,8 @@ When `rucio-mcp serve` starts, it looks for `rucio.cfg` in this order:
 1. **`$RUCIO_CONFIG`** — used when `RUCIO_CONFIG` is explicitly set to a file
    path. Never overridden.
 2. **`~/.config/rucio-mcp/rucio.cfg`** — used when `RUCIO_CONFIG` is unset and
-   this file exists (created by `rucio-mcp init`). `RUCIO_CONFIG` is set to
-   this path for the lifetime of the process.
+   this file exists (created by `rucio-mcp init`). `RUCIO_CONFIG` is set to this
+   path for the lifetime of the process.
 3. **`$RUCIO_HOME/etc/rucio.cfg`** — backward-compatibility fallback when
    `RUCIO_HOME` is set (e.g. site-managed CVMFS installations).
 4. Neither found → startup fails with a clear error pointing to
@@ -180,8 +180,8 @@ rucio-mcp ping
 # status: ok
 ```
 
-This runs the same preflight checks as `serve` and then contacts the server,
-so it also validates that your proxy and certificates are working.
+This runs the same preflight checks as `serve` and then contacts the server, so
+it also validates that your proxy and certificates are working.
 
 ## Site-managed deployments
 

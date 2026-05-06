@@ -48,8 +48,7 @@ def init(
 
     if cfg_path.exists() and not force:
         sys.stdout.write(
-            f"Error: {cfg_path} already exists.\n"
-            "  Use --force to overwrite.\n"
+            f"Error: {cfg_path} already exists.\n  Use --force to overwrite.\n"
         )
         return 1
 

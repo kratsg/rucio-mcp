@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from importlib.resources import files
 
-import pytest
-
 from rucio_mcp.config_paths import managed_rucio_config
 from rucio_mcp.init import init
 
@@ -14,7 +12,9 @@ class TestManagedRucioConfig:
     def test_default_uses_home_config(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
-        assert managed_rucio_config() == tmp_path / ".config" / "rucio-mcp" / "rucio.cfg"
+        assert (
+            managed_rucio_config() == tmp_path / ".config" / "rucio-mcp" / "rucio.cfg"
+        )
 
     def test_respects_xdg_config_home(self, tmp_path, monkeypatch) -> None:
         xdg = tmp_path / "xdg"
@@ -23,9 +23,7 @@ class TestManagedRucioConfig:
 
 
 class TestInitCommand:
-    def test_writes_atlas_cfg_to_managed_location(
-        self, tmp_path, monkeypatch
-    ) -> None:
+    def test_writes_atlas_cfg_to_managed_location(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
         result = init("atlas", force=False, prefix=None, list_presets=False)
@@ -64,7 +62,9 @@ class TestInitCommand:
         self, tmp_path, monkeypatch, capsys
     ) -> None:
         monkeypatch.setenv("HOME", str(tmp_path))
-        result = init("not_a_real_experiment", force=False, prefix=None, list_presets=False)
+        result = init(
+            "not_a_real_experiment", force=False, prefix=None, list_presets=False
+        )
         assert result != 0
         assert "atlas" in capsys.readouterr().out
 

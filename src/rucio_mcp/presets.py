@@ -13,7 +13,7 @@ class Preset:
     name: str
     description: str
     config_resource: str  # filename inside the rucio_mcp.data package
-    post_init_hint: str   # guidance printed after a successful init
+    post_init_hint: str  # guidance printed after a successful init
 
 
 PRESETS: dict[str, Preset] = {
