@@ -24,7 +24,9 @@ hatch-vcs = ">=0.4"
 [package.run-dependencies]
 rich = "*"
 rucio-clients = ">=35.0.0"
-mcp = ">=1.0"
+mcp = ">=1.10"
+pyjwt = ">=2.8"
+cryptography = ">=42"
 ca-policy-lcg = "*"
 voms = "*"
 voms-lsc = "*"
@@ -45,6 +47,8 @@ python = "<3.14,>=3.13"
 pytest = ">=9"
 pytest-cov = ">=3"
 pytest-asyncio = ">=0.24"
+cryptography = ">=42"
+pyjwt = ">=2.8"
 
 [feature.test.tasks]
 test = { cmd = "pytest -m 'not slow'", description = "Run quick tests (skip slow)" }

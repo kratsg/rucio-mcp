@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from rucio_mcp.server import _preflight_check, ping_server, serve
+from rucio_mcp.server import _make_http_mcp, _preflight_check, ping_server, serve
 
 
 @pytest.fixture
@@ -186,6 +186,42 @@ class TestPreflightCheck:
         ):
             _preflight_check()
         assert "rucio-mcp init" in capsys.readouterr().err
+
+
+class TestMakeHttpMcp:
+    def test_http_mcp_has_token_verifier(self) -> None:
+        from rucio_mcp.auth.site_config import SiteAuthConfig
+
+        site_cfg = SiteAuthConfig.from_preset("atlas")
+        mcp = _make_http_mcp(
+            read_only=False,
+            host="127.0.0.1",
+            port=8000,
+            site_cfg=site_cfg,
+            resource_url="http://localhost:8000",
+            issuer_override=site_cfg.issuer,
+            audiences=[site_cfg.audience],
+            required_scopes=site_cfg.required_scopes,
+        )
+        assert mcp._token_verifier is not None
+
+    def test_http_mcp_verifier_uses_site_jwks_uri(self) -> None:
+        from rucio_mcp.auth.jwks_verifier import JWKSTokenVerifier
+        from rucio_mcp.auth.site_config import SiteAuthConfig
+
+        site_cfg = SiteAuthConfig.from_preset("atlas")
+        mcp = _make_http_mcp(
+            read_only=False,
+            host="127.0.0.1",
+            port=8000,
+            site_cfg=site_cfg,
+            resource_url="http://localhost:8000",
+            issuer_override=site_cfg.issuer,
+            audiences=[site_cfg.audience],
+            required_scopes=site_cfg.required_scopes,
+        )
+        assert isinstance(mcp._token_verifier, JWKSTokenVerifier)
+        assert "atlas-auth.cern.ch" in mcp._token_verifier._issuer
 
 
 class TestServeHTTP:

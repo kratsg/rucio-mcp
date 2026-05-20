@@ -14,7 +14,11 @@ if TYPE_CHECKING:
 from mcp.server.fastmcp import FastMCP
 from rucio.client import Client
 
+from mcp.server.auth.settings import AuthSettings
+from pydantic import AnyHttpUrl
+
 from rucio_mcp.auth.factory import BearerTokenClientFactory, EnvBasedClientFactory
+from rucio_mcp.auth.jwks_verifier import JWKSTokenVerifier
 from rucio_mcp.auth.session_cache import SessionCache
 from rucio_mcp.auth.site_config import SiteAuthConfig
 from rucio_mcp.config_paths import managed_rucio_config
@@ -162,11 +166,7 @@ def _make_http_mcp(
     audiences: list[str],
     required_scopes: list[str],
 ) -> FastMCP:
-    """Build and return a configured FastMCP instance for HTTP transport.
-
-    Auth wiring (JWKSTokenVerifier, BearerTokenClientFactory) is added in
-    Phase 5. This stub provides the correct transport parameters.
-    """
+    """Build and return a configured FastMCP instance for HTTP transport."""
 
     @asynccontextmanager
     async def _http_lifespan(_server: FastMCP) -> AsyncGenerator[dict[str, Any], None]:
@@ -177,12 +177,25 @@ def _make_http_mcp(
         finally:
             factory.close()
 
+    verifier = JWKSTokenVerifier(
+        jwks_uri=site_cfg.jwks_uri,
+        issuer=issuer_override,
+        accepted_audiences=audiences,
+        required_scopes=required_scopes,
+    )
+
     mcp = FastMCP(
         "rucio-mcp",
         instructions=_INSTRUCTIONS,
         host=host,
         port=port,
         lifespan=_http_lifespan,
+        token_verifier=verifier,
+        auth=AuthSettings(
+            issuer_url=AnyHttpUrl(issuer_override),
+            required_scopes=required_scopes,
+            resource_server_url=AnyHttpUrl(resource_url),
+        ),
     )
 
     for _module in [ping, dids, replicas, scopes, rses, rules, account, proxy]:
