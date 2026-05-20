@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass, field
 from importlib.resources import files
 from typing import TYPE_CHECKING
 
-import tomllib
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 from rucio_mcp.presets import PRESETS
 

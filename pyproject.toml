@@ -32,6 +32,7 @@ dynamic = ["version"]
 dependencies = [
   "mcp>=1.10",
   "pyjwt[crypto]>=2.8",
+  "tomli>=1.1; python_version<'3.11'",
 ]
 
 [project.scripts]
@@ -118,8 +119,9 @@ module = ["rucio.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# tomllib is stdlib from Python 3.11; mypy targets 3.10 so can't find it
-module = ["tomllib"]
+# tomllib is stdlib from Python 3.11; mypy targets 3.10 so can't find it.
+# tomli is the backport used on 3.10 and also has no bundled stubs.
+module = ["tomllib", "tomli"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
