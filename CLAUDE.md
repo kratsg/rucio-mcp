@@ -5,28 +5,81 @@ LLMs.
 
 ## Architecture
 
+Two transport modes:
+
 ```
+# stdio (local, single-user)
 LLM <--MCP/stdio--> rucio-mcp serve <--HTTPS (rucio.client)--> Rucio server
                               |
                               +--subprocess--> voms-proxy-info
+
+# http (hosted, multi-user)
+LLM <--MCP/HTTP (Bearer)--> rucio-mcp serve --transport http <--HTTPS--> Rucio server
+              |                        |
+           atlas-auth.cern.ch     JWKSTokenVerifier validates JWT
+           (ATLAS IAM IdP)        BearerTokenClientFactory builds per-session Client
 ```
 
-The server uses the **rucio Python client library directly**
-(`rucio.client.Client`), not the `rucio` CLI. Authentication (x509_proxy, OIDC,
-userpass) is handled by the rucio client reading environment variables and
-`rucio.cfg` automatically.
+**Stdio mode:** one `rucio.client.Client` built at server startup from env vars;
+reused for all tool calls. All rucio auth types supported.
+
+**HTTP mode:** MCP server acts as an OAuth 2.1 Resource Server (RFC 9728). Each
+MCP session gets its own `TokenInjectedClient` built from the validated bearer
+token. Clients are cached by `mcp-session-id` and evicted when the JWT expires.
+
+### Client factory pattern
+
+All tools obtain the rucio client via `get_rucio_client(ctx)` from
+`tools/_helpers.py`, which reads `ctx.request_context.lifespan_context["client_factory"]`
+and calls `factory.get_client(ctx)`. This is the **canonical** way to get a client
+in a tool — never access `lifespan_context["rucio_client"]` directly.
+
+- **`EnvBasedClientFactory`** (stdio): wraps a single pre-built `Client`
+- **`BearerTokenClientFactory`** (http): extracts bearer from headers, builds
+  `TokenInjectedClient`, caches by session
+
+### `TokenInjectedClient`
+
+Subclass of `rucio.client.Client` that overrides the two name-mangled auth hooks:
+- `_BaseClient__authenticate`: injects the bearer into `self.auth_token` and
+  `self.headers["X-Rucio-Auth-Token"]` without any auth-server round-trip
+- `_BaseClient__get_token`: raises `CannotAuthenticate` on 401 (no silent re-auth)
+
+### Preset extension: `<site>-auth.toml`
+
+Each site preset (`rucio-mcp init atlas`) installs two files:
+- `rucio.cfg` — rucio client configuration
+- `atlas-auth.toml` — OAuth metadata (issuer, JWKS URI, audience, scopes)
+
+To add a new site: create `src/rucio_mcp/data/<site>.cfg` and
+`src/rucio_mcp/data/<site>-auth.toml`, then add a `Preset` entry to
+`src/rucio_mcp/presets.py`.
 
 ## Project layout
 
 ```
 src/rucio_mcp/
-├── cli.py          # argparse entry point: `rucio-mcp serve [--read-only]`
-├── server.py       # FastMCP setup, _preflight_check, _make_mcp factory, lifespan
+├── cli.py          # argparse: `rucio-mcp serve [--transport {stdio,http}] [--site atlas] ...`
+├── server.py       # FastMCP setup; _make_stdio_mcp / _make_http_mcp; serve()
 ├── nomenclature.py # ATLAS dataset naming constants embedded in server instructions
 ├── resources.py    # MCP resources (static docs); register(mcp) wired in server.py
+├── presets.py      # Preset dataclass; PRESETS dict (atlas → atlas.cfg + atlas-auth.toml)
+├── init.py         # `rucio-mcp init <preset>` — installs rucio.cfg + <site>-auth.toml
+├── config_paths.py # managed_rucio_config() → ~/.config/rucio-mcp/rucio.cfg
+├── auth/
+│   ├── factory.py        # RucioClientFactory ABC, EnvBasedClientFactory,
+│   │                     # BearerTokenClientFactory, _extract_request_auth
+│   ├── token_client.py   # TokenInjectedClient (bearer injection, no auth-server)
+│   ├── session_cache.py  # SessionCache (thread-safe, JWT-exp TTL)
+│   ├── jwks_verifier.py  # JWKSTokenVerifier (RS256, issuer, aud, scope checks)
+│   └── site_config.py    # SiteAuthConfig dataclass + TOML loader (from_path/from_preset)
+├── data/
+│   ├── atlas.cfg          # ATLAS rucio.cfg preset
+│   └── atlas-auth.toml    # ATLAS OAuth metadata preset
 └── tools/
     ├── _helpers.py  # parse_did(), format_dict(), format_list(), check_write_allowed(),
-    │                # human_bytes(), paginate_iter(), build_hints(), classify_error()
+    │                # human_bytes(), paginate_iter(), build_hints(), classify_error(),
+    │                # get_rucio_client()  ← use this in all tools
     ├── ping.py      # rucio_ping, rucio_whoami
     ├── dids.py      # rucio_list_dids, rucio_stat, rucio_list_content,
     │                # rucio_list_files, rucio_get_metadata, rucio_list_parent_dids
@@ -40,16 +93,24 @@ src/rucio_mcp/
     ├── account.py   # rucio_list_account_usage, rucio_list_account_limits
     └── proxy.py     # rucio_voms_proxy_info (shells out to voms-proxy-info)
 tests/
-├── conftest.py               # mock_rucio_client, mock_ctx, mock_ctx_readonly fixtures
+├── conftest.py               # mock_rucio_client, mock_ctx (EnvBasedClientFactory), mock_ctx_readonly
 ├── test_cli.py
 ├── test_server.py
+├── test_helpers.py
 ├── test_resources.py
+├── test_init.py
 ├── test_tools_ping.py
 ├── test_tools_dids.py
 ├── test_tools_replicas.py
 ├── test_tools_rules.py
 ├── test_tools_account.py
 ├── test_tools_proxy.py
+├── auth/
+│   ├── test_factory.py       # EnvBasedClientFactory, BearerTokenClientFactory, _extract_request_auth
+│   ├── test_jwks_verifier.py # JWKSTokenVerifier (uses generated RSA keys, no network)
+│   ├── test_session_cache.py # SessionCache (TTL eviction, thread safety)
+│   ├── test_site_config.py   # SiteAuthConfig TOML loader
+│   └── test_token_client.py  # TokenInjectedClient method overrides
 └── integration/test_live.py  # requires live rucio access, run with --runslow
 ```
 
@@ -64,7 +125,7 @@ are defined as closures inside `register()` using the `@mcp.tool()` decorator.
 from mcp.server.fastmcp import Context, FastMCP
 from typing import Any
 
-from rucio_mcp.tools._helpers import build_hints, classify_error
+from rucio_mcp.tools._helpers import build_hints, classify_error, get_rucio_client
 
 
 def register(mcp: FastMCP) -> None:
@@ -73,7 +134,7 @@ def register(mcp: FastMCP) -> None:
         param: str, limit: int = 50, offset: int = 0, *, ctx: Context[Any, Any]
     ) -> str:
         """Tool description — shown to the LLM as the tool's purpose."""
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)  # works in both stdio and http transport
         try:
             result = client.some_method(param)
         except Exception as exc:  # noqa: BLE001
