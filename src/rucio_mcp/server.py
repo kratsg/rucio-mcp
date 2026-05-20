@@ -15,6 +15,7 @@ from mcp.server.fastmcp import FastMCP
 from rucio.client import Client
 
 from rucio_mcp.auth.factory import EnvBasedClientFactory
+from rucio_mcp.auth.site_config import SiteAuthConfig
 from rucio_mcp.config_paths import managed_rucio_config
 from rucio_mcp.nomenclature import ATLAS_NOMENCLATURE
 from rucio_mcp.resources import register as register_resources
@@ -115,14 +116,8 @@ def ping_server() -> None:
     sys.stdout.write("status: ok\n")
 
 
-def _make_mcp(read_only: bool = False) -> FastMCP:
-    """Build and return a configured FastMCP instance.
-
-    Args:
-        read_only: If True, write operations (add/delete/update rules, etc.)
-            will be blocked. The lifespan context exposes this flag so each
-            write tool can enforce it.
-    """
+def _make_stdio_mcp(read_only: bool = False) -> FastMCP:
+    """Build and return a configured FastMCP instance for stdio transport."""
 
     @asynccontextmanager
     async def _lifespan(_server: FastMCP) -> AsyncGenerator[dict[str, Any], None]:
@@ -155,7 +150,81 @@ def _make_mcp(read_only: bool = False) -> FastMCP:
     return mcp
 
 
-def serve(read_only: bool = False) -> None:
-    """Start the MCP server over stdio."""
-    _preflight_check()
-    _make_mcp(read_only=read_only).run(transport="stdio")
+def _make_http_mcp(
+    *,
+    read_only: bool,
+    host: str,
+    port: int,
+    site_cfg: SiteAuthConfig,
+    resource_url: str,
+    issuer_override: str,
+    audiences: list[str],
+    required_scopes: list[str],
+) -> FastMCP:
+    """Build and return a configured FastMCP instance for HTTP transport.
+
+    Auth wiring (JWKSTokenVerifier, BearerTokenClientFactory) is added in
+    Phase 5. This stub provides the correct transport parameters.
+    """
+
+    @asynccontextmanager
+    async def _http_lifespan(_server: FastMCP) -> AsyncGenerator[dict[str, Any], None]:
+        # Per-session client_factory is wired in Phase 4.
+        yield {"read_only": read_only}
+
+    mcp = FastMCP(
+        "rucio-mcp",
+        instructions=_INSTRUCTIONS,
+        host=host,
+        port=port,
+        lifespan=_http_lifespan,
+    )
+
+    for _module in [ping, dids, replicas, scopes, rses, rules, account, proxy]:
+        _module.register(mcp)
+
+    register_resources(mcp)
+
+    return mcp
+
+
+def serve(
+    read_only: bool = False,
+    transport: str = "stdio",
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    site: str = "atlas",
+    resource_url: str | None = None,
+    issuer_url: str | None = None,
+    audience: list[str] | None = None,
+    required_scope: list[str] | None = None,
+) -> None:
+    """Start the MCP server over the selected transport."""
+    if transport == "stdio":
+        _preflight_check()
+        _make_stdio_mcp(read_only=read_only).run(transport="stdio")
+        return
+
+    # HTTP transport
+    if not resource_url:
+        sys.stderr.write(
+            "[rucio-mcp] Error: --resource-url is required for HTTP transport.\n"
+        )
+        sys.exit(1)
+
+    try:
+        site_cfg = SiteAuthConfig.from_preset(site)
+    except ValueError as exc:
+        sys.stderr.write(f"[rucio-mcp] Error: {exc}\n")
+        sys.exit(1)
+
+    _make_http_mcp(
+        read_only=read_only,
+        host=host,
+        port=port,
+        site_cfg=site_cfg,
+        resource_url=resource_url,
+        issuer_override=issuer_url or site_cfg.issuer,
+        audiences=audience or [site_cfg.audience],
+        required_scopes=required_scope or site_cfg.required_scopes,
+    ).run(transport="streamable-http")

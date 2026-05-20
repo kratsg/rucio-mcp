@@ -28,10 +28,10 @@ class TestCLIServe:
 
     def test_read_only_flag_passed_to_lifespan(self) -> None:
         """--read-only must end up as read_only=True in the lifespan context."""
-        captured: dict[str, bool] = {}
+        captured: dict[str, object] = {}
 
-        def fake_serve(read_only: bool = False) -> None:
-            captured["read_only"] = read_only
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
 
         with (
             patch("sys.argv", ["rucio-mcp", "serve", "--read-only"]),
@@ -42,10 +42,10 @@ class TestCLIServe:
         assert captured["read_only"] is True
 
     def test_default_is_not_read_only(self) -> None:
-        captured: dict[str, bool] = {}
+        captured: dict[str, object] = {}
 
-        def fake_serve(read_only: bool = False) -> None:
-            captured["read_only"] = read_only
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
 
         with (
             patch("sys.argv", ["rucio-mcp", "serve"]),
@@ -54,6 +54,95 @@ class TestCLIServe:
             main()
 
         assert captured["read_only"] is False
+
+    def test_transport_defaults_to_stdio(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch("sys.argv", ["rucio-mcp", "serve"]),
+            patch("rucio_mcp.cli.serve", fake_serve),
+        ):
+            main()
+
+        assert captured["transport"] == "stdio"
+
+    def test_http_transport_args_forwarded_to_serve(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "rucio-mcp",
+                    "serve",
+                    "--transport",
+                    "http",
+                    "--host",
+                    "0.0.0.0",
+                    "--port",
+                    "8001",
+                    "--site",
+                    "atlas",
+                    "--resource-url",
+                    "http://localhost:8001",
+                ],
+            ),
+            patch("rucio_mcp.cli.serve", fake_serve),
+        ):
+            main()
+
+        assert captured["transport"] == "http"
+        assert captured["host"] == "0.0.0.0"
+        assert captured["port"] == 8001
+        assert captured["site"] == "atlas"
+        assert captured["resource_url"] == "http://localhost:8001"
+
+    def test_audience_flag_repeatable(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch(
+                "sys.argv",
+                ["rucio-mcp", "serve", "--audience", "rucio", "--audience", "other"],
+            ),
+            patch("rucio_mcp.cli.serve", fake_serve),
+        ):
+            main()
+
+        assert captured["audience"] == ["rucio", "other"]
+
+    def test_required_scope_flag_repeatable(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "rucio-mcp",
+                    "serve",
+                    "--required-scope",
+                    "openid",
+                    "--required-scope",
+                    "profile",
+                ],
+            ),
+            patch("rucio_mcp.cli.serve", fake_serve),
+        ):
+            main()
+
+        assert captured["required_scope"] == ["openid", "profile"]
 
 
 class TestCLIInit:

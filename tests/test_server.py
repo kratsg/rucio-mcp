@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from rucio_mcp.server import _preflight_check, ping_server
+from rucio_mcp.server import _preflight_check, ping_server, serve
 
 
 @pytest.fixture
@@ -186,6 +186,41 @@ class TestPreflightCheck:
         ):
             _preflight_check()
         assert "rucio-mcp init" in capsys.readouterr().err
+
+
+class TestServeHTTP:
+    def test_http_missing_resource_url_exits_nonzero(self) -> None:
+        with pytest.raises(SystemExit) as exc_info:
+            serve(transport="http", resource_url=None)
+        assert exc_info.value.code != 0
+
+    def test_http_unknown_site_exits_nonzero(self) -> None:
+        with pytest.raises(SystemExit) as exc_info:
+            serve(
+                transport="http",
+                resource_url="http://localhost:8000",
+                site="nonexistent_xyz",
+            )
+        assert exc_info.value.code != 0
+
+    def test_http_error_mentions_resource_url(self, capsys) -> None:
+        with pytest.raises(SystemExit):
+            serve(transport="http", resource_url=None)
+        assert "resource-url" in capsys.readouterr().err
+
+    def test_stdio_calls_preflight_http_does_not(self) -> None:
+        """stdio path calls _preflight_check; http path does not (no rucio.cfg needed)."""
+        with (
+            patch("rucio_mcp.server._preflight_check") as mock_check,
+            patch("rucio_mcp.server._make_http_mcp") as mock_make,
+        ):
+            mock_make.return_value.run = lambda **_: None
+            serve(
+                transport="http",
+                resource_url="http://localhost:8000",
+                site="atlas",
+            )
+        mock_check.assert_not_called()
 
 
 class TestPingServer:
