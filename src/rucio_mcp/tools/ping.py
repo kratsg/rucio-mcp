@@ -6,7 +6,12 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
-from rucio_mcp.tools._helpers import build_hints, classify_error, format_dict, get_rucio_client
+from rucio_mcp.tools._helpers import (
+    build_hints,
+    classify_error,
+    format_dict,
+    get_rucio_client,
+)
 
 
 def register(mcp: FastMCP) -> None:
