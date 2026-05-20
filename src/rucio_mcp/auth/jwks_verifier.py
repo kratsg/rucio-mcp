@@ -24,12 +24,14 @@ class JWKSTokenVerifier(TokenVerifier):
         accepted_audiences: list[str],
         required_scopes: list[str],
     ) -> None:
+        """Configure the verifier with IdP coordinates and acceptance criteria."""
         self._jwks_client: Any = PyJWKClient(jwks_uri, cache_keys=True)
         self._issuer = issuer
         self._accepted_audiences = list(accepted_audiences)
         self._required_scopes = set(required_scopes)
 
     async def verify_token(self, token: str) -> AccessToken | None:
+        """Validate token signature, issuer, audience, expiry, and scopes."""
         try:
             signing_key = self._jwks_client.get_signing_key_from_jwt(token).key
             payload = jwt.decode(

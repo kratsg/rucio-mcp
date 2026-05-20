@@ -17,6 +17,7 @@ class TokenInjectedClient(Client):
     """
 
     def __init__(self, *, bearer_token: str, account: str, **kwargs: object) -> None:
+        """Store the bearer token before super().__init__ triggers authentication."""
         self._injected_bearer = bearer_token
         super().__init__(
             auth_type="oidc",

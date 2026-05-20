@@ -19,10 +19,12 @@ class SessionCache:
     """
 
     def __init__(self) -> None:
+        """Initialise an empty cache with a threading lock."""
         self._lock = threading.Lock()
         self._data: dict[str, tuple[Client, float]] = {}
 
     def get(self, session_id: str) -> Client | None:
+        """Return the cached client if present and unexpired, else None."""
         with self._lock:
             entry = self._data.get(session_id)
             if entry is None:
@@ -34,9 +36,11 @@ class SessionCache:
             return client
 
     def put(self, session_id: str, client: Client, expires_at: float) -> None:
+        """Store a client under session_id, expiring at the given epoch."""
         with self._lock:
             self._data[session_id] = (client, expires_at)
 
     def close(self) -> None:
+        """Evict all cached clients."""
         with self._lock:
             self._data.clear()

@@ -19,7 +19,8 @@ class RucioClientFactory(ABC):
     """Returns the rucio.Client appropriate for the current request/session."""
 
     @abstractmethod
-    def get_client(self, ctx: Any) -> Client: ...
+    def get_client(self, ctx: Any) -> Client:
+        """Return the rucio Client for the given request context."""
 
     @abstractmethod
     def close(self) -> None:
@@ -30,9 +31,11 @@ class EnvBasedClientFactory(RucioClientFactory):
     """Stdio-mode factory: wraps a single Client built from process env vars."""
 
     def __init__(self, client: Client) -> None:
+        """Store the pre-built client."""
         self._client = client
 
     def get_client(self, _ctx: Any) -> Client:
+        """Return the single shared client regardless of context."""
         return self._client
 
     def close(self) -> None:
@@ -67,9 +70,11 @@ class BearerTokenClientFactory(RucioClientFactory):
     """HTTP-mode factory: builds and caches one TokenInjectedClient per MCP session."""
 
     def __init__(self, cache: SessionCache) -> None:
+        """Store the session cache."""
         self._cache = cache
 
     def get_client(self, ctx: Any) -> Client:
+        """Return a cached or newly built TokenInjectedClient for this session."""
         session_id, bearer, account, exp = _extract_request_auth(ctx)
         cached = self._cache.get(session_id)
         if cached is not None:
@@ -79,4 +84,5 @@ class BearerTokenClientFactory(RucioClientFactory):
         return client
 
     def close(self) -> None:
+        """Evict all cached clients."""
         self._cache.close()
