@@ -14,7 +14,8 @@ if TYPE_CHECKING:
 from mcp.server.fastmcp import FastMCP
 from rucio.client import Client
 
-from rucio_mcp.auth.factory import EnvBasedClientFactory
+from rucio_mcp.auth.factory import BearerTokenClientFactory, EnvBasedClientFactory
+from rucio_mcp.auth.session_cache import SessionCache
 from rucio_mcp.auth.site_config import SiteAuthConfig
 from rucio_mcp.config_paths import managed_rucio_config
 from rucio_mcp.nomenclature import ATLAS_NOMENCLATURE
@@ -169,8 +170,12 @@ def _make_http_mcp(
 
     @asynccontextmanager
     async def _http_lifespan(_server: FastMCP) -> AsyncGenerator[dict[str, Any], None]:
-        # Per-session client_factory is wired in Phase 4.
-        yield {"read_only": read_only}
+        cache = SessionCache()
+        factory = BearerTokenClientFactory(cache=cache)
+        try:
+            yield {"client_factory": factory, "read_only": read_only}
+        finally:
+            factory.close()
 
     mcp = FastMCP(
         "rucio-mcp",

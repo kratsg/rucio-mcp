@@ -30,7 +30,8 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-  "mcp>=1.0",
+  "mcp>=1.10",
+  "pyjwt[crypto]>=2.8",
 ]
 
 [project.scripts]
