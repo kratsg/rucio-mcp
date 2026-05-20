@@ -1,0 +1,22 @@
+# Per-site OAuth metadata for rucio-mcp HTTP transport.
+# Distributed alongside the site's rucio.cfg; selected via `--site atlas`.
+#
+# ATLAS uses INDIGO IAM at https://atlas-auth.cern.ch/. The audience is
+# passed as a separate parameter (RFC 8707) rather than as a scope — resulting
+# JWTs carry `aud: "rucio"`.
+
+[oauth]
+issuer = "https://atlas-auth.cern.ch/"
+jwks_uri = "https://atlas-auth.cern.ch/jwk"
+authorization_endpoint = "https://atlas-auth.cern.ch/authorize"
+token_endpoint = "https://atlas-auth.cern.ch/token"
+registration_endpoint = "https://atlas-auth.cern.ch/iam/api/client-registration"
+
+# Audience value the Rucio server expects in the JWT 'aud' claim.
+audience = "rucio"
+
+# Scopes the MCP client should request from ATLAS IAM.
+scopes = ["openid", "profile", "email"]
+
+# Scopes the MCP server requires to be present in the access token.
+required_scopes = ["openid"]

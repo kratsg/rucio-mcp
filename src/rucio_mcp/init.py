@@ -55,6 +55,13 @@ def init(
     cfg_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     data = files("rucio_mcp.data").joinpath(entry.config_resource).read_bytes()
     cfg_path.write_bytes(data)
+    sys.stdout.write(f"Created {cfg_path}\n")
 
-    sys.stdout.write(f"Created {cfg_path}\n\n{entry.post_init_hint}\n")
+    if entry.auth_resource is not None:
+        auth_path = cfg_path.parent / entry.auth_resource
+        auth_data = files("rucio_mcp.data").joinpath(entry.auth_resource).read_bytes()
+        auth_path.write_bytes(auth_data)
+        sys.stdout.write(f"Created {auth_path}\n")
+
+    sys.stdout.write(f"\n{entry.post_init_hint}\n")
     return 0

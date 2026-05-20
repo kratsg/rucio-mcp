@@ -14,6 +14,7 @@ class Preset:
     description: str
     config_resource: str  # filename inside the rucio_mcp.data package
     post_init_hint: str  # guidance printed after a successful init
+    auth_resource: str | None = None  # optional <site>-auth.toml inside rucio_mcp.data
 
 
 PRESETS: dict[str, Preset] = {
@@ -21,6 +22,7 @@ PRESETS: dict[str, Preset] = {
         name="atlas",
         description="ATLAS at CERN",
         config_resource="atlas.cfg",
+        auth_resource="atlas-auth.toml",
         post_init_hint=textwrap.dedent("""\
             Next steps:
               export RUCIO_ACCOUNT=<your-atlas-account>
