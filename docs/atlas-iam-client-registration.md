@@ -1,93 +1,111 @@
-# ATLAS IAM Client Registration
+# Registering rucio-mcp as an ATLAS IAM Client
 
-When an MCP client (Claude Desktop, VS Code, etc.) connects to an HTTP-mode
-rucio-mcp server, it needs a `client_id` registered with ATLAS IAM
-(`https://atlas-auth.cern.ch/`) so it can perform the PKCE authorization-code
-flow.
-
-The MCP **server** itself does not hold a client_id — the `client_id` belongs to
-the MCP **client** and is configured there.
+A **single registration** with ATLAS IAM is done by the deployment administrator
+(e.g., UChicago SysAdmins for `rucio-mcp.af.uchicago.edu`). End users and their
+MCP clients (Claude Code, Claude Desktop, VS Code, …) need no ATLAS IAM
+registration at all.
 
 ---
 
-## Option A: Admin-managed registration (recommended)
+## How the auth flow works
 
-Submit a client registration request to the ATLAS IAM administrators. This is
-the same path used for `atlas-rucio-webui`
-(`client_id=63b7d8a4-87ef-4aa3-938b-222223c2dd9b`).
+```
+User's MCP client          rucio-mcp server             ATLAS IAM
+(Claude Desktop, etc.)     (af.uchicago.edu)         (atlas-auth.cern.ch)
 
-### What to provide
+1. Connect to MCP server
+   ─────────────────────►
+2. MCP client gets redirected
+   to server /authorize
+   ─────────────────────►
+3. Server redirects user's browser to ATLAS IAM
+                           ─────────────────────────────►
+4. User logs in (CERN SSO / ATLAS credentials)
+                                                     ◄────────────────
+5. ATLAS IAM sends code to server /oauth/callback
+                           ◄─────────────────────────────
+6. Server exchanges code for ATLAS IAM token
+   (using its registered client_id + client_secret)
+                           ─────────────────────────────►
+                           ◄─────────────────────────────
+7. Server returns ATLAS IAM token to MCP client
+   ◄─────────────────────
+8. All subsequent MCP calls include the token
+   ─────────────────────►
+9. Server validates token (JWKS) and forwards to Rucio
+                           ──────────────────────────────► Rucio
+```
 
-| Field                        | Value                                 |
-| ---------------------------- | ------------------------------------- |
-| `client_name`                | `Rucio MCP — <your-deployment-name>`  |
-| `grant_types`                | `authorization_code`, `refresh_token` |
-| `response_types`             | `code`                                |
-| `token_endpoint_auth_method` | `none` (public client, PKCE only)     |
-| `redirect_uris`              | See below                             |
-| `scope`                      | `openid profile email`                |
+The ATLAS IAM token (with `aud: rucio`) is used both as the MCP bearer token and
+as the Rucio authentication token. No additional token exchange is needed.
 
-### Redirect URIs by MCP client
+---
 
-| MCP client     | Redirect URI                               |
-| -------------- | ------------------------------------------ |
-| Claude Desktop | `http://localhost:*/` (loopback, any port) |
-| VS Code        | `vscode://anthropic.claude/oauth/callback` |
-| Custom / CLI   | `http://localhost:<port>/callback`         |
+## What to register
 
-Contact: email `atlas-auth-support@cern.ch` or open a ticket in
+Submit a client registration request to ATLAS IAM. The same path was used for
+`atlas-rucio-webui` — contact `atlas-auth-support@cern.ch` or open a ticket in
 [ATLAS JIRA](https://its.cern.ch/jira/projects/ATPHYSIT).
 
-Reference example: the `atlas-rucio-webui` client uses
-`redirect_uri=https://atlas-rucio-webui.cern.ch/api/auth/callback/atlas`.
+| Field                        | Value                                                                 |
+| ---------------------------- | --------------------------------------------------------------------- |
+| `client_name`                | `Rucio MCP — <your-deployment-name>` (e.g. `Rucio MCP — UChicago AF`) |
+| `client_type`                | `confidential`                                                        |
+| `grant_types`                | `authorization_code`, `refresh_token`                                 |
+| `response_types`             | `code`                                                                |
+| `token_endpoint_auth_method` | `client_secret_basic`                                                 |
+| `redirect_uris`              | `https://<your-server>/oauth/callback`                                |
+| `scope`                      | `openid profile email`                                                |
+
+Replace `<your-server>` with the public hostname (e.g.
+`rucio-mcp.af.uchicago.edu`). For a local test deployment on port 8000 you would
+use `http://localhost:8000/oauth/callback`.
+
+The `audience=rucio` parameter is added by the server at authorization time as a
+separate query parameter (INDIGO IAM RFC 8707 style); it does not appear in the
+registered `scope`.
 
 ---
 
-## Option B: Dynamic Client Registration (DCR)
+## What you receive from ATLAS IAM
 
-ATLAS IAM exposes a DCR endpoint at:
+After registration you receive:
 
-```
-https://atlas-auth.cern.ch/iam/api/client-registration
-```
+- `client_id` — a UUID or string identifying the rucio-mcp deployment
+- `client_secret` — the confidential secret; store it securely (env var, vault,
+  k8s secret), never in source code or config files
 
-You can attempt automatic registration, but note that ATLAS IAM typically
-requires admin approval for new clients.
-
-Example DCR request:
+Configure the server at startup:
 
 ```bash
-curl -X POST https://atlas-auth.cern.ch/iam/api/client-registration \
-  -H "Content-Type: application/json" \
-  -d '{
-    "client_name": "My Rucio MCP client",
-    "grant_types": ["authorization_code"],
-    "response_types": ["code"],
-    "token_endpoint_auth_method": "none",
-    "redirect_uris": ["http://localhost:8080/callback"],
-    "scope": "openid profile email"
-  }'
+rucio-mcp serve \
+  --transport http \
+  --site atlas \
+  --resource-url https://rucio-mcp.af.uchicago.edu \
+  --client-id <client_id> \
+  --client-secret <client_secret>
 ```
 
-If the response is `201 Created`, use the returned `client_id` in your MCP
-client configuration. If it is pending approval, follow up with the admins.
+Or via environment variables:
+
+```bash
+export RUCIO_MCP_CLIENT_ID=<client_id>
+export RUCIO_MCP_CLIENT_SECRET=<client_secret>
+rucio-mcp serve --transport http --site atlas \
+  --resource-url https://rucio-mcp.af.uchicago.edu
+```
 
 ---
 
-## Authorization request parameters
+## Verifying the registration
 
-When requesting a token for use with rucio-mcp, the MCP client must include:
+Once the server is running you can confirm the OAuth metadata is discoverable:
 
-```
-GET https://atlas-auth.cern.ch/authorize?
-    client_id=<registered-client-id>
-    &response_type=code
-    &scope=openid profile email
-    &audience=rucio
-    &redirect_uri=<registered-redirect-uri>
-    &code_challenge=<S256-challenge>
-    &code_challenge_method=S256
+```bash
+curl https://rucio-mcp.af.uchicago.edu/.well-known/oauth-authorization-server \
+  | python -m json.tool
 ```
 
-The `audience=rucio` parameter (RFC 8707) is separate from `scope`. The
-resulting JWT will have `"aud": "rucio"` which the rucio-mcp server validates.
+The MCP client will use this document to find the authorization endpoint
+automatically — no manual configuration of ATLAS IAM URLs in Claude Desktop or
+VS Code is needed.
