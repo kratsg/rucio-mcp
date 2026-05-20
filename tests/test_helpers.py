@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
+from rucio_mcp.auth.factory import EnvBasedClientFactory
 from rucio_mcp.tools._helpers import format_dict, format_list, get_rucio_client
 
 
@@ -67,8 +68,6 @@ class TestFormatList:
 
 class TestGetRucioClient:
     def test_returns_client_from_factory(self) -> None:
-        from rucio_mcp.auth.factory import EnvBasedClientFactory
-
         expected = MagicMock(name="rucio_client")
         factory = EnvBasedClientFactory(client=expected)
         ctx = MagicMock()

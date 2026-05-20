@@ -3,24 +3,25 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import jwt
 
-from rucio_mcp.auth.session_cache import SessionCache
 from rucio_mcp.auth.token_client import TokenInjectedClient
 
 if TYPE_CHECKING:
-    from mcp.server.fastmcp import Context
     from rucio.client import Client
+
+    from rucio_mcp.auth.session_cache import SessionCache
 
 
 class RucioClientFactory(ABC):
     """Returns the rucio.Client appropriate for the current request/session."""
 
     @abstractmethod
-    def get_client(self, ctx: Context) -> Client: ...
+    def get_client(self, ctx: Any) -> Client: ...
 
+    @abstractmethod
     def close(self) -> None:
         """Release any cached clients or resources."""
 
@@ -31,11 +32,14 @@ class EnvBasedClientFactory(RucioClientFactory):
     def __init__(self, client: Client) -> None:
         self._client = client
 
-    def get_client(self, ctx: Context) -> Client:
+    def get_client(self, _ctx: Any) -> Client:
         return self._client
 
+    def close(self) -> None:
+        """No-op: stdio client holds no resources to release."""
 
-def _extract_request_auth(ctx: Context) -> tuple[str, str, str, float]:
+
+def _extract_request_auth(ctx: Any) -> tuple[str, str, str, float]:
     """Extract (session_id, bearer_token, rucio_account, exp) from the request.
 
     Reads the MCP-Session-Id header, Authorization: Bearer header, and optionally
@@ -47,7 +51,8 @@ def _extract_request_auth(ctx: Context) -> tuple[str, str, str, float]:
     session_id: str = req.headers.get("mcp-session-id", "")
     auth: str = req.headers.get("authorization", "") or ""
     if not auth.lower().startswith("bearer "):
-        raise PermissionError("Missing Bearer token in Authorization header")
+        msg = "Missing Bearer token in Authorization header"
+        raise PermissionError(msg)
     bearer = auth[7:].strip()
     claims = jwt.decode(bearer, options={"verify_signature": False})
     account: str = (
@@ -64,7 +69,7 @@ class BearerTokenClientFactory(RucioClientFactory):
     def __init__(self, cache: SessionCache) -> None:
         self._cache = cache
 
-    def get_client(self, ctx: Context) -> Client:
+    def get_client(self, ctx: Any) -> Client:
         session_id, bearer, account, exp = _extract_request_auth(ctx)
         cached = self._cache.get(session_id)
         if cached is not None:

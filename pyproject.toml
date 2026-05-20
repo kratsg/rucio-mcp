@@ -117,6 +117,16 @@ disallow_incomplete_defs = true
 module = ["rucio.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# tomllib is stdlib from Python 3.11; mypy targets 3.10 so can't find it
+module = ["tomllib"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# rucio.client.Client has no stubs so mypy sees it as Any; subclassing Any is valid here
+module = ["rucio_mcp.auth.token_client"]
+disallow_subclassing_any = false
+
 
 [tool.ruff]
 show-fixes = true

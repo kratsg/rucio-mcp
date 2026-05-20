@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
+from rucio_mcp.auth.jwks_verifier import JWKSTokenVerifier
+from rucio_mcp.auth.site_config import SiteAuthConfig
 from rucio_mcp.server import _make_http_mcp, _preflight_check, ping_server, serve
 
 
@@ -190,8 +192,6 @@ class TestPreflightCheck:
 
 class TestMakeHttpMcp:
     def test_http_mcp_has_token_verifier(self) -> None:
-        from rucio_mcp.auth.site_config import SiteAuthConfig
-
         site_cfg = SiteAuthConfig.from_preset("atlas")
         mcp = _make_http_mcp(
             read_only=False,
@@ -206,9 +206,6 @@ class TestMakeHttpMcp:
         assert mcp._token_verifier is not None
 
     def test_http_mcp_verifier_uses_site_jwks_uri(self) -> None:
-        from rucio_mcp.auth.jwks_verifier import JWKSTokenVerifier
-        from rucio_mcp.auth.site_config import SiteAuthConfig
-
         site_cfg = SiteAuthConfig.from_preset("atlas")
         mcp = _make_http_mcp(
             read_only=False,

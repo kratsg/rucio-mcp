@@ -6,25 +6,21 @@ import threading
 import time
 from unittest.mock import MagicMock
 
+from rucio_mcp.auth.session_cache import SessionCache
+
 
 class TestSessionCache:
     def test_put_and_get_round_trip(self) -> None:
-        from rucio_mcp.auth.session_cache import SessionCache
-
         cache = SessionCache()
         client = MagicMock()
         cache.put("sid-1", client, time.time() + 3600)
         assert cache.get("sid-1") is client
 
     def test_get_returns_none_for_unknown_session(self) -> None:
-        from rucio_mcp.auth.session_cache import SessionCache
-
         cache = SessionCache()
         assert cache.get("no-such-session") is None
 
     def test_expired_entry_is_evicted_on_get(self) -> None:
-        from rucio_mcp.auth.session_cache import SessionCache
-
         cache = SessionCache()
         client = MagicMock()
         # expires in the past
@@ -32,8 +28,6 @@ class TestSessionCache:
         assert cache.get("sid-expired") is None
 
     def test_close_clears_all_entries(self) -> None:
-        from rucio_mcp.auth.session_cache import SessionCache
-
         cache = SessionCache()
         cache.put("a", MagicMock(), time.time() + 3600)
         cache.put("b", MagicMock(), time.time() + 3600)
@@ -42,8 +36,6 @@ class TestSessionCache:
         assert cache.get("b") is None
 
     def test_concurrent_access_does_not_corrupt(self) -> None:
-        from rucio_mcp.auth.session_cache import SessionCache
-
         cache = SessionCache()
         errors: list[Exception] = []
 

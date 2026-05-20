@@ -2,7 +2,8 @@
 
 When an MCP client (Claude Desktop, VS Code, etc.) connects to an HTTP-mode
 rucio-mcp server, it needs a `client_id` registered with ATLAS IAM
-(`https://atlas-auth.cern.ch/`) so it can perform the PKCE authorization-code flow.
+(`https://atlas-auth.cern.ch/`) so it can perform the PKCE authorization-code
+flow.
 
 The MCP **server** itself does not hold a client_id — the `client_id` belongs to
 the MCP **client** and is configured there.
@@ -17,22 +18,22 @@ the same path used for `atlas-rucio-webui`
 
 ### What to provide
 
-| Field | Value |
-|---|---|
-| `client_name` | `Rucio MCP — <your-deployment-name>` |
-| `grant_types` | `authorization_code`, `refresh_token` |
-| `response_types` | `code` |
-| `token_endpoint_auth_method` | `none` (public client, PKCE only) |
-| `redirect_uris` | See below |
-| `scope` | `openid profile email` |
+| Field                        | Value                                 |
+| ---------------------------- | ------------------------------------- |
+| `client_name`                | `Rucio MCP — <your-deployment-name>`  |
+| `grant_types`                | `authorization_code`, `refresh_token` |
+| `response_types`             | `code`                                |
+| `token_endpoint_auth_method` | `none` (public client, PKCE only)     |
+| `redirect_uris`              | See below                             |
+| `scope`                      | `openid profile email`                |
 
 ### Redirect URIs by MCP client
 
-| MCP client | Redirect URI |
-|---|---|
+| MCP client     | Redirect URI                               |
+| -------------- | ------------------------------------------ |
 | Claude Desktop | `http://localhost:*/` (loopback, any port) |
-| VS Code | `vscode://anthropic.claude/oauth/callback` |
-| Custom / CLI | `http://localhost:<port>/callback` |
+| VS Code        | `vscode://anthropic.claude/oauth/callback` |
+| Custom / CLI   | `http://localhost:<port>/callback`         |
 
 Contact: email `atlas-auth-support@cern.ch` or open a ticket in
 [ATLAS JIRA](https://its.cern.ch/jira/projects/ATPHYSIT).
@@ -88,5 +89,5 @@ GET https://atlas-auth.cern.ch/authorize?
     &code_challenge_method=S256
 ```
 
-The `audience=rucio` parameter (RFC 8707) is separate from `scope`.
-The resulting JWT will have `"aud": "rucio"` which the rucio-mcp server validates.
+The `audience=rucio` parameter (RFC 8707) is separate from `scope`. The
+resulting JWT will have `"aud": "rucio"` which the rucio-mcp server validates.

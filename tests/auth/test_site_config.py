@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from rucio_mcp.auth.site_config import SiteAuthConfig
+from rucio_mcp.presets import PRESETS, Preset
+
 
 def test_load_atlas_preset():
-    from rucio_mcp.auth.site_config import SiteAuthConfig
-
     cfg = SiteAuthConfig.from_preset("atlas")
     assert cfg.issuer == "https://atlas-auth.cern.ch/"
     assert cfg.audience == "rucio"
@@ -17,11 +18,9 @@ def test_load_atlas_preset():
 
 
 def test_load_from_path(tmp_path):
-    from rucio_mcp.auth.site_config import SiteAuthConfig
-
     p = tmp_path / "x-auth.toml"
     p.write_text(
-        '[oauth]\n'
+        "[oauth]\n"
         'issuer = "https://x.example.com/"\n'
         'jwks_uri = "https://x.example.com/jwks"\n'
         'audience = "my-resource"\n'
@@ -35,11 +34,9 @@ def test_load_from_path(tmp_path):
 
 
 def test_load_with_optional_endpoints(tmp_path):
-    from rucio_mcp.auth.site_config import SiteAuthConfig
-
     p = tmp_path / "full-auth.toml"
     p.write_text(
-        '[oauth]\n'
+        "[oauth]\n"
         'issuer = "https://iam.example.com/"\n'
         'jwks_uri = "https://iam.example.com/jwk"\n'
         'audience = "rucio"\n'
@@ -56,8 +53,6 @@ def test_load_with_optional_endpoints(tmp_path):
 
 
 def test_missing_required_field_errors(tmp_path):
-    from rucio_mcp.auth.site_config import SiteAuthConfig
-
     p = tmp_path / "bad.toml"
     p.write_text('[oauth]\nissuer = "https://x"\n')
     with pytest.raises(ValueError, match="missing required oauth keys"):
@@ -65,8 +60,6 @@ def test_missing_required_field_errors(tmp_path):
 
 
 def test_missing_oauth_section_errors(tmp_path):
-    from rucio_mcp.auth.site_config import SiteAuthConfig
-
     p = tmp_path / "nosection.toml"
     p.write_text('[other]\nfoo = "bar"\n')
     with pytest.raises(ValueError, match="missing required oauth keys"):
@@ -74,17 +67,12 @@ def test_missing_oauth_section_errors(tmp_path):
 
 
 def test_unknown_site_errors():
-    from rucio_mcp.auth.site_config import SiteAuthConfig
-
     with pytest.raises(ValueError, match="No auth config for site"):
         SiteAuthConfig.from_preset("nonexistent_site_xyz")
 
 
 def test_preset_without_auth_resource_errors():
     """Preset that exists but has no auth_resource raises a clear error."""
-    from rucio_mcp.auth.site_config import SiteAuthConfig
-    from rucio_mcp.presets import PRESETS, Preset
-
     fake_preset = Preset(
         name="noauth",
         description="No auth resource",

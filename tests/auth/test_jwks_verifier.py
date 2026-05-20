@@ -3,13 +3,20 @@
 from __future__ import annotations
 
 import time
-from typing import Any
-from unittest.mock import MagicMock, patch
+from typing import TYPE_CHECKING, Any
+from unittest.mock import MagicMock
 
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
+
+from rucio_mcp.auth.jwks_verifier import JWKSTokenVerifier
+
+if TYPE_CHECKING:
+    from cryptography.hazmat.primitives.asymmetric.rsa import (
+        RSAPrivateKey,
+        RSAPublicKey,
+    )
 
 
 @pytest.fixture(scope="module")
@@ -48,8 +55,6 @@ def _make_verifier_with_mock_jwks(
     accepted_audiences: list[str] | None = None,
     required_scopes: list[str] | None = None,
 ) -> Any:
-    from rucio_mcp.auth.jwks_verifier import JWKSTokenVerifier
-
     if accepted_audiences is None:
         accepted_audiences = ["rucio"]
     if required_scopes is None:
@@ -119,9 +124,7 @@ class TestJWKSTokenVerifier:
     ) -> None:
         private_key, public_key = rsa_keys
         token = _make_token(private_key, scope="profile email")  # no "openid"
-        verifier = _make_verifier_with_mock_jwks(
-            public_key, required_scopes=["openid"]
-        )
+        verifier = _make_verifier_with_mock_jwks(public_key, required_scopes=["openid"])
 
         result = await verifier.verify_token(token)
 
@@ -141,8 +144,6 @@ class TestJWKSTokenVerifier:
 
     @pytest.mark.asyncio
     async def test_malformed_token_returns_none(self) -> None:
-        from rucio_mcp.auth.jwks_verifier import JWKSTokenVerifier
-
         verifier = JWKSTokenVerifier(
             jwks_uri="https://example.com/jwk",
             issuer="https://example.com/",

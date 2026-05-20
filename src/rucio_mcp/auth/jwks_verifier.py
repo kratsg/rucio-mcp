@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import jwt
 from jwt import PyJWKClient
 from mcp.server.auth.provider import AccessToken, TokenVerifier
@@ -22,7 +24,7 @@ class JWKSTokenVerifier(TokenVerifier):
         accepted_audiences: list[str],
         required_scopes: list[str],
     ) -> None:
-        self._jwks_client = PyJWKClient(jwks_uri, cache_keys=True)
+        self._jwks_client: Any = PyJWKClient(jwks_uri, cache_keys=True)
         self._issuer = issuer
         self._accepted_audiences = list(accepted_audiences)
         self._required_scopes = set(required_scopes)

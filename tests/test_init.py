@@ -118,9 +118,7 @@ class TestInitCommand:
         mode = oct(rucio_mcp_dir.stat().st_mode)[-3:]
         assert mode == "700"
 
-    def test_writes_atlas_auth_toml_alongside_cfg(
-        self, tmp_path, monkeypatch
-    ) -> None:
+    def test_writes_atlas_auth_toml_alongside_cfg(self, tmp_path, monkeypatch) -> None:
         monkeypatch.setenv("HOME", str(tmp_path))
         monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
         result = init("atlas", force=False, prefix=None, list_presets=False)

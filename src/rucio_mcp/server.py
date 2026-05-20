@@ -11,11 +11,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-from mcp.server.fastmcp import FastMCP
-from rucio.client import Client
-
 from mcp.server.auth.settings import AuthSettings
+from mcp.server.fastmcp import FastMCP
 from pydantic import AnyHttpUrl
+from rucio.client import Client
 
 from rucio_mcp.auth.factory import BearerTokenClientFactory, EnvBasedClientFactory
 from rucio_mcp.auth.jwks_verifier import JWKSTokenVerifier

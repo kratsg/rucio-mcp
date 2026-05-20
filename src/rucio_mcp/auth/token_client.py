@@ -25,12 +25,13 @@ class TokenInjectedClient(Client):
             **kwargs,
         )
 
-    def _BaseClient__authenticate(self) -> None:  # type: ignore[override]
+    def _BaseClient__authenticate(self) -> None:  # pylint: disable=invalid-name
         self.auth_token = self._injected_bearer
         self.headers["X-Rucio-Auth-Token"] = self.auth_token
 
-    def _BaseClient__get_token(self) -> None:  # type: ignore[override]
-        raise CannotAuthenticate(
+    def _BaseClient__get_token(self) -> None:  # pylint: disable=invalid-name
+        msg = (
             "Bearer token expired or rejected by Rucio. "
             "Re-acquire via the MCP OAuth flow and reconnect."
         )
+        raise CannotAuthenticate(msg)

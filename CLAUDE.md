@@ -30,9 +30,10 @@ token. Clients are cached by `mcp-session-id` and evicted when the JWT expires.
 ### Client factory pattern
 
 All tools obtain the rucio client via `get_rucio_client(ctx)` from
-`tools/_helpers.py`, which reads `ctx.request_context.lifespan_context["client_factory"]`
-and calls `factory.get_client(ctx)`. This is the **canonical** way to get a client
-in a tool — never access `lifespan_context["rucio_client"]` directly.
+`tools/_helpers.py`, which reads
+`ctx.request_context.lifespan_context["client_factory"]` and calls
+`factory.get_client(ctx)`. This is the **canonical** way to get a client in a
+tool — never access `lifespan_context["rucio_client"]` directly.
 
 - **`EnvBasedClientFactory`** (stdio): wraps a single pre-built `Client`
 - **`BearerTokenClientFactory`** (http): extracts bearer from headers, builds
@@ -40,14 +41,18 @@ in a tool — never access `lifespan_context["rucio_client"]` directly.
 
 ### `TokenInjectedClient`
 
-Subclass of `rucio.client.Client` that overrides the two name-mangled auth hooks:
+Subclass of `rucio.client.Client` that overrides the two name-mangled auth
+hooks:
+
 - `_BaseClient__authenticate`: injects the bearer into `self.auth_token` and
   `self.headers["X-Rucio-Auth-Token"]` without any auth-server round-trip
-- `_BaseClient__get_token`: raises `CannotAuthenticate` on 401 (no silent re-auth)
+- `_BaseClient__get_token`: raises `CannotAuthenticate` on 401 (no silent
+  re-auth)
 
 ### Preset extension: `<site>-auth.toml`
 
 Each site preset (`rucio-mcp init atlas`) installs two files:
+
 - `rucio.cfg` — rucio client configuration
 - `atlas-auth.toml` — OAuth metadata (issuer, JWKS URI, audience, scopes)
 
