@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 from mcp.server.fastmcp import FastMCP
 from rucio.client import Client
 
+from rucio_mcp.auth.factory import EnvBasedClientFactory
 from rucio_mcp.config_paths import managed_rucio_config
 from rucio_mcp.nomenclature import ATLAS_NOMENCLATURE
 from rucio_mcp.resources import register as register_resources
@@ -134,8 +135,11 @@ def _make_mcp(read_only: bool = False) -> FastMCP:
           - RUCIO_CONFIG     (direct path to rucio.cfg)
           - X509_USER_PROXY  (path to proxy cert when RUCIO_AUTH_TYPE=x509_proxy)
         """
-        client = Client()
-        yield {"rucio_client": client, "read_only": read_only}
+        factory = EnvBasedClientFactory(client=Client())
+        try:
+            yield {"client_factory": factory, "read_only": read_only}
+        finally:
+            factory.close()
 
     mcp = FastMCP("rucio-mcp", lifespan=_lifespan, instructions=_INSTRUCTIONS)
 

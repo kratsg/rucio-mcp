@@ -10,6 +10,7 @@ from rucio_mcp.tools._helpers import (
     build_hints,
     classify_error,
     format_list,
+    get_rucio_client,
     paginate_iter,
     parse_did,
 )
@@ -95,7 +96,7 @@ def register(mcp: FastMCP) -> None:
         if sort:
             kwargs["sort"] = sort
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             it = client.list_replicas(parsed, **kwargs)
             results, footer = paginate_iter(it, limit=limit, offset=offset)
@@ -138,7 +139,7 @@ def register(mcp: FastMCP) -> None:
         except ValueError as exc:
             return str(exc)
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             children = list(client.list_content(scope, name))
             results = []
@@ -199,7 +200,7 @@ def register(mcp: FastMCP) -> None:
         except ValueError as exc:
             return str(exc)
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             results = list(client.list_dataset_replicas(scope, name, deep=deep))
         except Exception as exc:  # noqa: BLE001

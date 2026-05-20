@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from rucio_mcp.tools._helpers import format_dict, format_list
+from unittest.mock import MagicMock
+
+from rucio_mcp.tools._helpers import format_dict, format_list, get_rucio_client
 
 
 class TestFormatDict:
@@ -61,3 +63,27 @@ class TestFormatList:
         result = format_list([{"key": "value"}])
         assert "| key |" in result
         assert "| value |" in result
+
+
+class TestGetRucioClient:
+    def test_returns_client_from_factory(self) -> None:
+        from rucio_mcp.auth.factory import EnvBasedClientFactory
+
+        expected = MagicMock(name="rucio_client")
+        factory = EnvBasedClientFactory(client=expected)
+        ctx = MagicMock()
+        ctx.request_context.lifespan_context = {
+            "client_factory": factory,
+            "read_only": False,
+        }
+        assert get_rucio_client(ctx) is expected
+
+    def test_calls_factory_get_client_with_ctx(self) -> None:
+        factory = MagicMock()
+        ctx = MagicMock()
+        ctx.request_context.lifespan_context = {
+            "client_factory": factory,
+            "read_only": False,
+        }
+        get_rucio_client(ctx)
+        factory.get_client.assert_called_once_with(ctx)

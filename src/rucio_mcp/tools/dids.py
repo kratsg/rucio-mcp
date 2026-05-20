@@ -11,6 +11,7 @@ from rucio_mcp.tools._helpers import (
     classify_error,
     format_dict,
     format_list,
+    get_rucio_client,
     paginate_iter,
     parse_did,
 )
@@ -68,7 +69,7 @@ def register(mcp: FastMCP) -> None:
         except ValueError as exc:
             return str(exc)
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             it = client.list_dids(
                 scope,
@@ -115,7 +116,7 @@ def register(mcp: FastMCP) -> None:
         except ValueError as exc:
             return str(exc)
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             result = client.get_did(scope, name, dynamic=True)
         except Exception as exc:  # noqa: BLE001
@@ -170,7 +171,7 @@ def register(mcp: FastMCP) -> None:
         except ValueError as exc:
             return str(exc)
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             results = list(client.list_content(scope, name))
         except Exception as exc:  # noqa: BLE001
@@ -205,7 +206,7 @@ def register(mcp: FastMCP) -> None:
         except ValueError as exc:
             return str(exc)
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             results = list(client.list_files(scope, name, long=long))
         except Exception as exc:  # noqa: BLE001
@@ -247,7 +248,7 @@ def register(mcp: FastMCP) -> None:
         except ValueError as exc:
             return str(exc)
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             result = client.get_metadata(scope, name, plugin=plugin)
         except Exception as exc:  # noqa: BLE001
@@ -280,7 +281,7 @@ def register(mcp: FastMCP) -> None:
         except ValueError as exc:
             return str(exc)
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             results = list(client.list_parent_dids(scope, name))
         except Exception as exc:  # noqa: BLE001

@@ -356,3 +356,9 @@ def format_list(
         else:
             lines.append(f"- {item}")
     return "\n".join(lines)
+
+
+def get_rucio_client(ctx: Any) -> Any:
+    """Return the rucio.Client for the current request via the lifespan factory."""
+    factory = ctx.request_context.lifespan_context["client_factory"]
+    return factory.get_client(ctx)

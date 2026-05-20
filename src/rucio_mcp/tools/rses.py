@@ -11,6 +11,7 @@ from rucio_mcp.tools._helpers import (
     classify_error,
     format_dict,
     format_list,
+    get_rucio_client,
     paginate_iter,
 )
 
@@ -44,7 +45,7 @@ def register(mcp: FastMCP) -> None:
             limit: Maximum number of RSEs to return (default 100).
             offset: Number of RSEs to skip for pagination.
         """
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             rse_filter = rse_expression or None
             it = iter(client.list_rses(rse_expression=rse_filter))
@@ -78,7 +79,7 @@ def register(mcp: FastMCP) -> None:
         Args:
             rse: The exact RSE name (e.g. ``CERN-PROD_DATADISK``).
         """
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             result = client.list_rse_attributes(rse)
         except Exception as exc:  # noqa: BLE001
@@ -100,7 +101,7 @@ def register(mcp: FastMCP) -> None:
         Args:
             rse: The exact RSE name (e.g. ``CERN-PROD_DATADISK``).
         """
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             results = list(client.get_rse_usage(rse))
         except Exception as exc:  # noqa: BLE001
