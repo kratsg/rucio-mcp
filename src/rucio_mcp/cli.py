@@ -56,26 +56,6 @@ def main() -> None:
         default=os.environ.get("RUCIO_MCP_RESOURCE_URL"),
         help="Public URL of this MCP server. Required for HTTP transport.",
     )
-    serve_parser.add_argument(
-        "--issuer-url",
-        default=None,
-        help="Override the OAuth issuer URL from the site config.",
-    )
-    serve_parser.add_argument(
-        "--audience",
-        action="append",
-        default=None,
-        metavar="AUD",
-        help="Override accepted audience(s) (repeatable). Default: from site config.",
-    )
-    serve_parser.add_argument(
-        "--required-scope",
-        action="append",
-        default=None,
-        metavar="SCOPE",
-        help="Override required scopes (repeatable). Default: from site config.",
-    )
-
     init_parser = subparsers.add_parser(
         "init",
         help="Write a preset rucio.cfg to ~/.config/rucio-mcp/etc/rucio.cfg",
@@ -123,9 +103,6 @@ def main() -> None:
             port=args.port,
             site=args.site,
             resource_url=args.resource_url,
-            issuer_url=args.issuer_url,
-            audience=args.audience,
-            required_scope=args.required_scope,
         )
     elif args.command == "init":
         rc = init_command(

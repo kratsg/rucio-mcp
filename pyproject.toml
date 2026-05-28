@@ -31,8 +31,6 @@ classifiers = [
 dynamic = ["version"]
 dependencies = [
   "mcp>=1.10",
-  "pyjwt[crypto]>=2.8",
-  "tomli>=1.1; python_version<'3.11'",
 ]
 
 [project.scripts]
@@ -119,12 +117,6 @@ module = ["rucio.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-# tomllib is stdlib from Python 3.11; mypy targets 3.10 so can't find it.
-# tomli is the backport used on 3.10 and also has no bundled stubs.
-module = ["tomllib", "tomli"]
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
 # rucio.client.Client has no stubs so mypy sees it as Any; subclassing Any is valid here
 module = ["rucio_mcp.auth.token_client"]
 disallow_subclassing_any = false
@@ -181,7 +173,6 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["T20"]
-"scripts/**" = ["T20", "RUF002"]
 
 
 [tool.pylint]

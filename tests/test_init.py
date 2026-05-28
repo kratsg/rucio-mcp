@@ -118,16 +118,6 @@ class TestInitCommand:
         mode = oct(rucio_mcp_dir.stat().st_mode)[-3:]
         assert mode == "700"
 
-    def test_writes_atlas_auth_toml_alongside_cfg(self, tmp_path, monkeypatch) -> None:
-        monkeypatch.setenv("HOME", str(tmp_path))
-        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
-        result = init("atlas", force=False, prefix=None, list_presets=False)
-        assert result == 0
-        auth_path = tmp_path / ".config" / "rucio-mcp" / "atlas-auth.toml"
-        assert auth_path.exists()
-        expected = files("rucio_mcp.data").joinpath("atlas-auth.toml").read_bytes()
-        assert auth_path.read_bytes() == expected
-
     def test_missing_preset_without_list_exits_nonzero(
         self, tmp_path, monkeypatch
     ) -> None:

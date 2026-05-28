@@ -33,7 +33,6 @@ voms-lsc = "*"
 
 [feature.py310.dependencies]
 python = "<3.11,>=3.10"
-tomli = ">=1.1"
 
 [feature.py311.dependencies]
 python = "<3.12,>=3.11"
@@ -48,12 +47,9 @@ python = "<3.14,>=3.13"
 pytest = ">=9"
 pytest-cov = ">=3"
 pytest-asyncio = ">=0.24"
-cryptography = ">=42"
-pyjwt = ">=2.8"
 
 [feature.test.tasks]
 test = { cmd = "pytest -m 'not slow'", description = "Run quick tests (skip slow)" }
-test-oidc-token = { cmd = "python scripts/test_oidc_token.py", description = "Verify an ATLAS IAM OIDC token works with Rucio (set RUCIO_MCP_TOKEN first)" }
 test-cov = { cmd = "pytest -m 'not slow' --cov=rucio_mcp --cov-report=term --cov-report=html", description = "Run quick tests with coverage" }
 test-docstrings = { cmd = "pytest --doctest-modules src/rucio_mcp", description = "Run doctests in source modules" }
 test-docs = { cmd = "pytest README.md docs", description = "Run doctests in docs and README.md" }

@@ -7,8 +7,6 @@ from unittest.mock import patch
 
 import pytest
 
-from rucio_mcp.auth.jwks_verifier import JWKSTokenVerifier
-from rucio_mcp.auth.site_config import SiteAuthConfig
 from rucio_mcp.server import _make_http_mcp, _preflight_check, ping_server, serve
 
 
@@ -190,50 +188,10 @@ class TestPreflightCheck:
         assert "rucio-mcp init" in capsys.readouterr().err
 
 
-class TestMakeHttpMcp:
-    def test_http_mcp_has_token_verifier(self) -> None:
-        site_cfg = SiteAuthConfig.from_preset("atlas")
-        mcp = _make_http_mcp(
-            read_only=False,
-            host="127.0.0.1",
-            port=8000,
-            site_cfg=site_cfg,
-            resource_url="http://localhost:8000",
-            issuer_override=site_cfg.issuer,
-            audiences=[site_cfg.audience],
-            required_scopes=site_cfg.required_scopes,
-        )
-        assert mcp._token_verifier is not None
-
-    def test_http_mcp_verifier_uses_site_jwks_uri(self) -> None:
-        site_cfg = SiteAuthConfig.from_preset("atlas")
-        mcp = _make_http_mcp(
-            read_only=False,
-            host="127.0.0.1",
-            port=8000,
-            site_cfg=site_cfg,
-            resource_url="http://localhost:8000",
-            issuer_override=site_cfg.issuer,
-            audiences=[site_cfg.audience],
-            required_scopes=site_cfg.required_scopes,
-        )
-        assert isinstance(mcp._token_verifier, JWKSTokenVerifier)
-        assert "atlas-auth.cern.ch" in mcp._token_verifier._issuer
-
-
 class TestServeHTTP:
     def test_http_missing_resource_url_exits_nonzero(self) -> None:
         with pytest.raises(SystemExit) as exc_info:
             serve(transport="http", resource_url=None)
-        assert exc_info.value.code != 0
-
-    def test_http_unknown_site_exits_nonzero(self) -> None:
-        with pytest.raises(SystemExit) as exc_info:
-            serve(
-                transport="http",
-                resource_url="http://localhost:8000",
-                site="nonexistent_xyz",
-            )
         assert exc_info.value.code != 0
 
     def test_http_error_mentions_resource_url(self, capsys) -> None:

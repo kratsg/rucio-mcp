@@ -11,15 +11,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
-from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
-from pydantic import AnyHttpUrl
 from rucio.client import Client
 
-from rucio_mcp.auth.factory import BearerTokenClientFactory, EnvBasedClientFactory
-from rucio_mcp.auth.jwks_verifier import JWKSTokenVerifier
-from rucio_mcp.auth.session_cache import SessionCache
-from rucio_mcp.auth.site_config import SiteAuthConfig
+from rucio_mcp.auth.factory import EnvBasedClientFactory
 from rucio_mcp.config_paths import managed_rucio_config
 from rucio_mcp.nomenclature import ATLAS_NOMENCLATURE
 from rucio_mcp.resources import register as register_resources
@@ -159,50 +154,13 @@ def _make_http_mcp(
     read_only: bool,
     host: str,
     port: int,
-    site_cfg: SiteAuthConfig,
     resource_url: str,
-    issuer_override: str,
-    audiences: list[str],
-    required_scopes: list[str],
 ) -> FastMCP:
-    """Build and return a configured FastMCP instance for HTTP transport."""
+    """Build and return a configured FastMCP instance for HTTP transport.
 
-    @asynccontextmanager
-    async def _http_lifespan(_server: FastMCP) -> AsyncGenerator[dict[str, Any], None]:
-        cache = SessionCache()
-        factory = BearerTokenClientFactory(cache=cache)
-        try:
-            yield {"client_factory": factory, "read_only": read_only}
-        finally:
-            factory.close()
-
-    verifier = JWKSTokenVerifier(
-        jwks_uri=site_cfg.jwks_uri,
-        issuer=issuer_override,
-        accepted_audiences=audiences,
-        required_scopes=required_scopes,
-    )
-
-    mcp = FastMCP(
-        "rucio-mcp",
-        instructions=_INSTRUCTIONS,
-        host=host,
-        port=port,
-        lifespan=_http_lifespan,
-        token_verifier=verifier,
-        auth=AuthSettings(
-            issuer_url=AnyHttpUrl(issuer_override),
-            required_scopes=required_scopes,
-            resource_server_url=AnyHttpUrl(resource_url),
-        ),
-    )
-
-    for _module in [ping, dids, replicas, scopes, rses, rules, account, proxy]:
-        _module.register(mcp)
-
-    register_resources(mcp)
-
-    return mcp
+    Not yet implemented — wired in Phase 6 of the OAuth bridge refactor.
+    """
+    raise NotImplementedError("HTTP transport is not yet implemented")
 
 
 def serve(
@@ -212,9 +170,6 @@ def serve(
     port: int = 8000,
     site: str = "atlas",
     resource_url: str | None = None,
-    issuer_url: str | None = None,
-    audience: list[str] | None = None,
-    required_scope: list[str] | None = None,
 ) -> None:
     """Start the MCP server over the selected transport."""
     if transport == "stdio":
@@ -230,18 +185,14 @@ def serve(
         sys.exit(1)
 
     try:
-        site_cfg = SiteAuthConfig.from_preset(site)
-    except ValueError as exc:
-        sys.stderr.write(f"[rucio-mcp] Error: {exc}\n")
+        _make_http_mcp(
+            read_only=read_only,
+            host=host,
+            port=port,
+            resource_url=resource_url,
+        ).run(transport="streamable-http")
+    except NotImplementedError:
+        sys.stderr.write(
+            "[rucio-mcp] Error: HTTP transport is not yet implemented.\n"
+        )
         sys.exit(1)
-
-    _make_http_mcp(
-        read_only=read_only,
-        host=host,
-        port=port,
-        site_cfg=site_cfg,
-        resource_url=resource_url,
-        issuer_override=issuer_url or site_cfg.issuer,
-        audiences=audience or [site_cfg.audience],
-        required_scopes=required_scope or site_cfg.required_scopes,
-    ).run(transport="streamable-http")

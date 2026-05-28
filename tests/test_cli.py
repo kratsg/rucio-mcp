@@ -103,48 +103,6 @@ class TestCLIServe:
         assert captured["site"] == "atlas"
         assert captured["resource_url"] == "http://localhost:8001"
 
-    def test_audience_flag_repeatable(self) -> None:
-        captured: dict[str, object] = {}
-
-        def fake_serve(**kwargs: object) -> None:
-            captured.update(kwargs)
-
-        with (
-            patch(
-                "sys.argv",
-                ["rucio-mcp", "serve", "--audience", "rucio", "--audience", "other"],
-            ),
-            patch("rucio_mcp.cli.serve", fake_serve),
-        ):
-            main()
-
-        assert captured["audience"] == ["rucio", "other"]
-
-    def test_required_scope_flag_repeatable(self) -> None:
-        captured: dict[str, object] = {}
-
-        def fake_serve(**kwargs: object) -> None:
-            captured.update(kwargs)
-
-        with (
-            patch(
-                "sys.argv",
-                [
-                    "rucio-mcp",
-                    "serve",
-                    "--required-scope",
-                    "openid",
-                    "--required-scope",
-                    "profile",
-                ],
-            ),
-            patch("rucio_mcp.cli.serve", fake_serve),
-        ):
-            main()
-
-        assert captured["required_scope"] == ["openid", "profile"]
-
-
 class TestCLIInit:
     def test_init_dispatches_with_preset(self) -> None:
         captured: dict[str, object] = {}
