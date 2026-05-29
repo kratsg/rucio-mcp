@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import threading
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass
@@ -76,9 +76,7 @@ class BridgeStateStore:
                 return None
             return self._by_session.get(session_id)
 
-    def mark_done(
-        self, session_id: str, *, rucio_token: str, auth_code: str
-    ) -> None:
+    def mark_done(self, session_id: str, *, rucio_token: str, auth_code: str) -> None:
         """Transition *session_id* to ``done`` and register the auth code index."""
         with self._lock:
             s = self._by_session.get(session_id)

@@ -54,7 +54,9 @@ class TestExtractRequestAuth:
 
     def test_extracts_session_id_bearer_account(self) -> None:
         ctx = self._make_ctx("rucio-session-tok", session_id="my-session")
-        session_id, bearer, account = _extract_request_auth(ctx, default_account="alice")
+        session_id, bearer, account = _extract_request_auth(
+            ctx, default_account="alice"
+        )
         assert session_id == "my-session"
         assert bearer == "rucio-session-tok"
         assert account == "alice"

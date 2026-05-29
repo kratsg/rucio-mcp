@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import textwrap
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 from starlette.testclient import TestClient
@@ -88,9 +87,7 @@ class TestOAuthMetadataEndpoints:
 
 
 class TestUnauthenticatedAccess:
-    def test_mcp_post_without_auth_returns_401(
-        self, http_client: TestClient
-    ) -> None:
+    def test_mcp_post_without_auth_returns_401(self, http_client: TestClient) -> None:
         resp = http_client.post(
             "/",
             json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},

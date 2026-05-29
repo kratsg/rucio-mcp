@@ -72,11 +72,11 @@ MCP client to re-run the OAuth flow.
 
 Rucio supports three ways to deliver session tokens after IdP login:
 
-| Method | Why it fails for rucio-mcp |
-|--------|---------------------------|
-| `webhome` cookie | `Domain` is derived from the `webhome` URL; cross-domain deployments (e.g. `rucio-mcp.af.uchicago.edu` ↔ `vre-rucio-auth.cern.ch`) cannot receive the cookie |
-| `fetchcode` | Requires the user to manually copy a code from the browser into a form — worse UX than native PKCE |
-| `oidc_auto` (resource-owner-password) | Explicitly discouraged; requires credentials in rucio-mcp |
+| Method                                | Why it fails for rucio-mcp                                                                                                                                   |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `webhome` cookie                      | `Domain` is derived from the `webhome` URL; cross-domain deployments (e.g. `rucio-mcp.af.uchicago.edu` ↔ `vre-rucio-auth.cern.ch`) cannot receive the cookie |
+| `fetchcode`                           | Requires the user to manually copy a code from the browser into a form — worse UX than native PKCE                                                           |
+| `oidc_auto` (resource-owner-password) | Explicitly discouraged; requires credentials in rucio-mcp                                                                                                    |
 
 Server-side polling (`X-Rucio-Client-Authorize-Polling: True`) is the only
 approach that works cross-domain and requires no user action beyond logging in.
@@ -99,12 +99,12 @@ already uses.
 
 ## Code map
 
-| Component | File | Responsibility |
-|-----------|------|----------------|
-| `RucioCfg` | `auth/rucio_cfg.py` | Read OIDC config from `rucio.cfg` `[client]` |
-| `RucioOidcPoller` | `auth/rucio_oidc_poller.py` | Async `request_auth_url()` + `poll_for_token()` via httpx |
-| `BridgeSession` / `BridgeStateStore` | `auth/bridge_state.py` | Thread-safe in-memory session state with TTL |
-| `RucioBridgeProvider` | `auth/bridge_provider.py` | `OAuthAuthorizationServerProvider` — DCR, authorize, token exchange |
-| `register_bridge_routes` | `auth/bridge_routes.py` | `GET /bridge` (HTML) + `GET /bridge/status` (JSON) |
-| `BearerTokenClientFactory` | `auth/factory.py` | Extract bearer from request, build `TokenInjectedClient`, cache by session |
-| `TokenInjectedClient` | `auth/token_client.py` | Inject Rucio session token into `rucio.client.Client` auth hooks |
+| Component                            | File                        | Responsibility                                                             |
+| ------------------------------------ | --------------------------- | -------------------------------------------------------------------------- |
+| `RucioCfg`                           | `auth/rucio_cfg.py`         | Read OIDC config from `rucio.cfg` `[client]`                               |
+| `RucioOidcPoller`                    | `auth/rucio_oidc_poller.py` | Async `request_auth_url()` + `poll_for_token()` via httpx                  |
+| `BridgeSession` / `BridgeStateStore` | `auth/bridge_state.py`      | Thread-safe in-memory session state with TTL                               |
+| `RucioBridgeProvider`                | `auth/bridge_provider.py`   | `OAuthAuthorizationServerProvider` — DCR, authorize, token exchange        |
+| `register_bridge_routes`             | `auth/bridge_routes.py`     | `GET /bridge` (HTML) + `GET /bridge/status` (JSON)                         |
+| `BearerTokenClientFactory`           | `auth/factory.py`           | Extract bearer from request, build `TokenInjectedClient`, cache by session |
+| `TokenInjectedClient`                | `auth/token_client.py`      | Inject Rucio session token into `rucio.client.Client` auth hooks           |

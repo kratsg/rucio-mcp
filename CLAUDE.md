@@ -26,21 +26,22 @@ reused for all tool calls. All rucio auth types supported.
 **HTTP mode:** rucio-mcp acts as an **OAuth 2.1 Authorization Server proxy**
 (RFC 8414 + RFC 7591 DCR + auth-code+PKCE). It bridges MCP client auth to
 Rucio's custom OIDC polling flow (`/auth/oidc` → `/auth/oidc_redirect`). The
-resulting Rucio session token is returned verbatim as the MCP `access_token`.
-No IAM registration is required by operators or end-users.
+resulting Rucio session token is returned verbatim as the MCP `access_token`. No
+IAM registration is required by operators or end-users.
 
 ### HTTP mode auth flow
 
 1. MCP client does DCR (`POST /register`) → gets a `client_id`
-2. MCP client hits `/authorize` → `RucioBridgeProvider.authorize()` calls
-   Rucio `/auth/oidc`, stores a `BridgeSession`, starts a background async
-   polling task, and returns `302 /bridge?session=<id>`
+2. MCP client hits `/authorize` → `RucioBridgeProvider.authorize()` calls Rucio
+   `/auth/oidc`, stores a `BridgeSession`, starts a background async polling
+   task, and returns `302 /bridge?session=<id>`
 3. User opens the rucio polling URL in their browser and logs in via their IdP
 4. Background task polls `/auth/oidc_redirect`; when the Rucio session token
    arrives, the session is marked done and an MCP auth code is minted
 5. JS in `/bridge` polls `/bridge/status`; when done, redirects to
    `redirect_uri?code=…&state=…`
-6. MCP client exchanges the code at `/token` → gets `{access_token: <rucio token>}`
+6. MCP client exchanges the code at `/token` → gets
+   `{access_token: <rucio token>}`
 7. All subsequent MCP requests carry `Authorization: Bearer <rucio token>`;
    `BearerTokenClientFactory` injects it via `TokenInjectedClient`
 
@@ -54,8 +55,8 @@ tool — never access `lifespan_context["rucio_client"]` directly.
 
 - **`EnvBasedClientFactory`** (stdio): wraps a single pre-built `Client`
 - **`BearerTokenClientFactory`** (http): extracts bearer from `Authorization`
-  header, builds `TokenInjectedClient`, caches by `mcp-session-id` with a
-  fixed 300 s TTL (rucio rejects stale tokens with 401)
+  header, builds `TokenInjectedClient`, caches by `mcp-session-id` with a fixed
+  300 s TTL (rucio rejects stale tokens with 401)
 
 ### `TokenInjectedClient`
 

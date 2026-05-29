@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from mcp.server.auth.provider import AuthorizationCode, AuthorizationParams
@@ -13,7 +13,7 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from pydantic import AnyUrl
 
 from rucio_mcp.auth.bridge_provider import RucioBridgeProvider
-from rucio_mcp.auth.bridge_state import BridgeSession, BridgeStateStore
+from rucio_mcp.auth.bridge_state import BridgeSession
 from rucio_mcp.auth.rucio_cfg import RucioCfg
 
 _MODULE = "rucio_mcp.auth.bridge_provider"
@@ -95,7 +95,11 @@ class TestAuthorize:
         auth_params: AuthorizationParams,
     ) -> None:
         with patch.object(
-            provider._poller, "request_auth_url", new=AsyncMock(return_value="https://idp.example.com/login?state=xyz_polling")
+            provider._poller,
+            "request_auth_url",
+            new=AsyncMock(
+                return_value="https://idp.example.com/login?state=xyz_polling"
+            ),
         ):
             url = await provider.authorize(client_info, auth_params)
 
@@ -108,7 +112,11 @@ class TestAuthorize:
         auth_params: AuthorizationParams,
     ) -> None:
         with patch.object(
-            provider._poller, "request_auth_url", new=AsyncMock(return_value="https://idp.example.com/login?state=xyz_polling")
+            provider._poller,
+            "request_auth_url",
+            new=AsyncMock(
+                return_value="https://idp.example.com/login?state=xyz_polling"
+            ),
         ):
             url = await provider.authorize(client_info, auth_params)
 
@@ -127,7 +135,11 @@ class TestAuthorize:
     ) -> None:
         mock_bg = AsyncMock()
         with (
-            patch.object(provider._poller, "request_auth_url", new=AsyncMock(return_value="https://idp.example.com/login")),
+            patch.object(
+                provider._poller,
+                "request_auth_url",
+                new=AsyncMock(return_value="https://idp.example.com/login"),
+            ),
             patch.object(provider, "_bg_poll", mock_bg),
         ):
             await provider.authorize(client_info, auth_params)
@@ -223,7 +235,9 @@ class TestExchangeAuthorizationCode:
     ) -> None:
         session = _make_session("s1")
         provider._store.put(session)
-        provider._store.mark_done("s1", rucio_token="rucio-session-tok", auth_code="code-abc")
+        provider._store.mark_done(
+            "s1", rucio_token="rucio-session-tok", auth_code="code-abc"
+        )
 
         auth_code = AuthorizationCode(
             code="code-abc",

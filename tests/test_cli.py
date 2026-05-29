@@ -103,6 +103,7 @@ class TestCLIServe:
         assert captured["site"] == "atlas"
         assert captured["resource_url"] == "http://localhost:8001"
 
+
 class TestCLIInit:
     def test_init_dispatches_with_preset(self) -> None:
         captured: dict[str, object] = {}

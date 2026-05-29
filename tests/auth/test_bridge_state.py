@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import time
 
-import pytest
-
 from rucio_mcp.auth.bridge_state import BridgeSession, BridgeStateStore
 
 

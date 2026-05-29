@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from rucio_mcp.server import _make_http_mcp, _preflight_check, ping_server, serve
+from rucio_mcp.server import _preflight_check, ping_server, serve
 
 
 @pytest.fixture

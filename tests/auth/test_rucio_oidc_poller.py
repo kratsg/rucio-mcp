@@ -38,8 +38,10 @@ def _response(status: int = 200, headers: dict[str, str] | None = None) -> Magic
     r.status_code = status
     _headers = headers or {}
     r.headers.get = lambda key, default=None: _headers.get(key, default)
-    r.raise_for_status = MagicMock() if status < 400 else MagicMock(
-        side_effect=Exception(f"HTTP {status}")
+    r.raise_for_status = (
+        MagicMock()
+        if status < 400
+        else MagicMock(side_effect=Exception(f"HTTP {status}"))
     )
     return r
 
@@ -89,7 +91,9 @@ class TestRequestAuthUrl:
         self, poller: RucioOidcPoller
     ) -> None:
         polling_url = "https://rucio-auth.example.com/auth/oidc_token?state=xyz_polling"
-        mock = _mock_client(get_side_effect=[_response(200, {"X-Rucio-OIDC-Auth-URL": polling_url})])
+        mock = _mock_client(
+            get_side_effect=[_response(200, {"X-Rucio-OIDC-Auth-URL": polling_url})]
+        )
 
         with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
             url = await poller.request_auth_url()
@@ -108,8 +112,11 @@ class TestRequestAuthUrl:
         # raise_for_status on a 401 response should raise
         bad_resp = _response(401)
         import httpx as _httpx
+
         bad_resp.raise_for_status = MagicMock(
-            side_effect=_httpx.HTTPStatusError("401", request=MagicMock(), response=MagicMock())
+            side_effect=_httpx.HTTPStatusError(
+                "401", request=MagicMock(), response=MagicMock()
+            )
         )
         mock2 = _mock_client(get_side_effect=[bad_resp])
 

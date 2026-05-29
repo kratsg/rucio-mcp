@@ -2,7 +2,8 @@
 
 rucio-mcp supports two server modes:
 
-- **stdio** (default): single-user, env-driven auth, all rucio auth types supported
+- **stdio** (default): single-user, env-driven auth, all rucio auth types
+  supported
 - **http**: multi-user, OAuth 2.1 bridge, one hosted server for many users
 
 ---
@@ -122,13 +123,14 @@ The server determines your Rucio account using this priority:
 
 ### How the bridge flow works
 
-See [rucio-oauth-bridge.md](rucio-oauth-bridge.md) for the full sequence
-diagram and architecture description.
+See [rucio-oauth-bridge.md](rucio-oauth-bridge.md) for the full sequence diagram
+and architecture description.
 
 ### What the server does NOT do
 
 - Does **not** require operator or end-user IAM registration
-- Does **not** store long-lived refresh tokens (session TTL ≈ Rucio token lifetime)
+- Does **not** store long-lived refresh tokens (session TTL ≈ Rucio token
+  lifetime)
 - Does **not** grant Rucio access — Rucio enforces its own authorization
 - Does **not** silently re-authenticate on 401 — MCP clients re-run the OAuth
   flow when the session token expires

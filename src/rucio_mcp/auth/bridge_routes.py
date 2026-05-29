@@ -16,7 +16,8 @@ GET /bridge/status?session=<sid>
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
@@ -40,7 +41,9 @@ def make_bridge_handlers(
         session = store.get_by_session_id(session_id)
         if session is None:
             return Response("Session not found or expired", status_code=404)
-        html = _build_bridge_html(session_id=session_id, polling_url=session.polling_url)
+        html = _build_bridge_html(
+            session_id=session_id, polling_url=session.polling_url
+        )
         return HTMLResponse(html)
 
     async def bridge_status(request: Request) -> Response:
@@ -49,7 +52,9 @@ def make_bridge_handlers(
             return JSONResponse({"error": "missing session parameter"}, status_code=400)
         session = store.get_by_session_id(session_id)
         if session is None:
-            return JSONResponse({"status": "error", "message": "Session not found or expired"})
+            return JSONResponse(
+                {"status": "error", "message": "Session not found or expired"}
+            )
         if session.status == "done":
             return JSONResponse(
                 {
