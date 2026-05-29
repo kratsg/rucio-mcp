@@ -11,10 +11,16 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.server.fastmcp import FastMCP
+from pydantic import AnyHttpUrl
 from rucio.client import Client
 
-from rucio_mcp.auth.factory import EnvBasedClientFactory
+from rucio_mcp.auth.bridge_provider import RucioBridgeProvider
+from rucio_mcp.auth.bridge_routes import register_bridge_routes
+from rucio_mcp.auth.factory import BearerTokenClientFactory, EnvBasedClientFactory
+from rucio_mcp.auth.rucio_cfg import RucioCfg
+from rucio_mcp.auth.session_cache import SessionCache
 from rucio_mcp.config_paths import managed_rucio_config
 from rucio_mcp.nomenclature import ATLAS_NOMENCLATURE
 from rucio_mcp.resources import register as register_resources
@@ -155,12 +161,44 @@ def _make_http_mcp(
     host: str,
     port: int,
     resource_url: str,
+    rucio_cfg_path: Path,
 ) -> FastMCP:
-    """Build and return a configured FastMCP instance for HTTP transport.
+    """Build and return a configured FastMCP instance for HTTP transport."""
+    cfg = RucioCfg.from_path(rucio_cfg_path)
+    provider = RucioBridgeProvider(rucio_cfg=cfg, resource_url=resource_url)
+    cache = SessionCache()
 
-    Not yet implemented — wired in Phase 6 of the OAuth bridge refactor.
-    """
-    raise NotImplementedError("HTTP transport is not yet implemented")
+    @asynccontextmanager
+    async def _http_lifespan(_server: FastMCP) -> AsyncGenerator[dict[str, Any], None]:
+        factory = BearerTokenClientFactory(cache=cache, default_account=cfg.account)
+        try:
+            yield {"client_factory": factory, "read_only": read_only}
+        finally:
+            factory.close()
+
+    mcp = FastMCP(
+        "rucio-mcp",
+        instructions=_INSTRUCTIONS,
+        host=host,
+        port=port,
+        streamable_http_path="/",
+        lifespan=_http_lifespan,
+        auth_server_provider=provider,
+        auth=AuthSettings(
+            issuer_url=AnyHttpUrl(resource_url),
+            resource_server_url=AnyHttpUrl(resource_url),
+            client_registration_options=ClientRegistrationOptions(enabled=True),
+            required_scopes=[],
+        ),
+    )
+
+    register_bridge_routes(mcp, provider)
+
+    for _module in [ping, dids, replicas, scopes, rses, rules, account, proxy]:
+        _module.register(mcp)
+
+    register_resources(mcp)
+    return mcp
 
 
 def serve(
@@ -170,6 +208,7 @@ def serve(
     port: int = 8000,
     site: str = "atlas",
     resource_url: str | None = None,
+    rucio_cfg: Path | None = None,
 ) -> None:
     """Start the MCP server over the selected transport."""
     if transport == "stdio":
@@ -184,15 +223,18 @@ def serve(
         )
         sys.exit(1)
 
-    try:
-        _make_http_mcp(
-            read_only=read_only,
-            host=host,
-            port=port,
-            resource_url=resource_url,
-        ).run(transport="streamable-http")
-    except NotImplementedError:
+    cfg_path = rucio_cfg or managed_rucio_config()
+    if not cfg_path.exists():
         sys.stderr.write(
-            "[rucio-mcp] Error: HTTP transport is not yet implemented.\n"
+            f"[rucio-mcp] Error: rucio.cfg not found at {cfg_path}.\n"
+            "    Run: rucio-mcp init atlas\n"
         )
         sys.exit(1)
+
+    _make_http_mcp(
+        read_only=read_only,
+        host=host,
+        port=port,
+        resource_url=resource_url,
+        rucio_cfg_path=cfg_path,
+    ).run(transport="streamable-http")

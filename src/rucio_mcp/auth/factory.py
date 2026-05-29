@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
+import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
-
-import jwt
 
 from rucio_mcp.auth.token_client import TokenInjectedClient
 
@@ -42,13 +41,13 @@ class EnvBasedClientFactory(RucioClientFactory):
         """No-op: stdio client holds no resources to release."""
 
 
-def _extract_request_auth(ctx: Any) -> tuple[str, str, str, float]:
-    """Extract (session_id, bearer_token, rucio_account, exp) from the request.
+def _extract_request_auth(
+    ctx: Any, *, default_account: str = ""
+) -> tuple[str, str, str]:
+    """Extract (session_id, bearer_token, rucio_account) from the request.
 
-    Reads the MCP-Session-Id header, Authorization: Bearer header, and optionally
-    the X-Rucio-Account header. Falls back to the JWT preferred_username then sub
-    claim for the Rucio account name. JWT claims are decoded without signature
-    verification — full verification happens upstream in the token verifier.
+    The bearer token IS the rucio session token — no JWT decode is performed.
+    Account comes from the X-Rucio-Account header, falling back to default_account.
     """
     req = ctx.request_context.request
     session_id: str = req.headers.get("mcp-session-id", "")
@@ -57,30 +56,28 @@ def _extract_request_auth(ctx: Any) -> tuple[str, str, str, float]:
         msg = "Missing Bearer token in Authorization header"
         raise PermissionError(msg)
     bearer = auth[7:].strip()
-    claims = jwt.decode(bearer, options={"verify_signature": False})
-    account: str = (
-        req.headers.get("x-rucio-account")
-        or claims.get("preferred_username")
-        or claims["sub"]
-    )
-    return session_id, bearer, account, float(claims["exp"])
+    account: str = req.headers.get("x-rucio-account") or default_account
+    return session_id, bearer, account
 
 
 class BearerTokenClientFactory(RucioClientFactory):
     """HTTP-mode factory: builds and caches one TokenInjectedClient per MCP session."""
 
-    def __init__(self, cache: SessionCache) -> None:
-        """Store the session cache."""
+    def __init__(self, cache: SessionCache, default_account: str = "") -> None:
+        """Store the session cache and the fallback Rucio account name."""
         self._cache = cache
+        self._default_account = default_account
 
     def get_client(self, ctx: Any) -> Client:
         """Return a cached or newly built TokenInjectedClient for this session."""
-        session_id, bearer, account, exp = _extract_request_auth(ctx)
+        session_id, bearer, account = _extract_request_auth(
+            ctx, default_account=self._default_account
+        )
         cached = self._cache.get(session_id)
         if cached is not None:
             return cached
         client = TokenInjectedClient(bearer_token=bearer, account=account)
-        self._cache.put(session_id, client, exp)
+        self._cache.put(session_id, client, time.time() + 300)
         return client
 
     def close(self) -> None:

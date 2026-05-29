@@ -56,6 +56,16 @@ def main() -> None:
         default=os.environ.get("RUCIO_MCP_RESOURCE_URL"),
         help="Public URL of this MCP server. Required for HTTP transport.",
     )
+    serve_parser.add_argument(
+        "--rucio-cfg",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to rucio.cfg for HTTP transport. "
+            "Defaults to the managed config (~/.config/rucio-mcp/rucio.cfg)."
+        ),
+    )
     init_parser = subparsers.add_parser(
         "init",
         help="Write a preset rucio.cfg to ~/.config/rucio-mcp/etc/rucio.cfg",
@@ -103,6 +113,7 @@ def main() -> None:
             port=args.port,
             site=args.site,
             resource_url=args.resource_url,
+            rucio_cfg=args.rucio_cfg,
         )
     elif args.command == "init":
         rc = init_command(
