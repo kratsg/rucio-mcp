@@ -214,3 +214,74 @@ class TestPollForToken:
 
         headers_sent = seen_kwargs[0]["headers"]
         assert headers_sent["X-Rucio-Client-Fetch-Token"] == "True"
+
+    async def test_account_override_used_in_poll_headers(
+        self, poller: RucioOidcPoller
+    ) -> None:
+        """Passing account='bob' overrides X-Rucio-Account in polling request."""
+        seen_kwargs: list[dict[str, Any]] = []
+
+        async def _capture(*_args: Any, **kwargs: Any) -> MagicMock:
+            seen_kwargs.append(kwargs)
+            return _response(200, {"X-Rucio-Auth-Token": "tok"})
+
+        mock = AsyncMock()
+        mock.__aenter__.return_value = mock
+        mock.__aexit__.return_value = False
+        mock.get = _capture
+
+        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
+            await poller.poll_for_token(
+                "https://rucio-auth.example.com/auth/oidc_redirect?state=xyz",
+                timeout=5.0,
+                interval=0.0,
+                account="bob",
+            )
+
+        assert seen_kwargs[0]["headers"]["X-Rucio-Account"] == "bob"
+
+
+class TestRequestAuthUrlAccountOverride:
+    async def test_account_override_used_in_auth_request(
+        self, poller: RucioOidcPoller
+    ) -> None:
+        """Passing account='bob' to request_auth_url overrides X-Rucio-Account."""
+        seen_headers: list[dict[str, str]] = []
+
+        async def _capture(*_args: Any, **kwargs: Any) -> MagicMock:
+            seen_headers.append(kwargs.get("headers", {}))
+            return _response(
+                200, {"X-Rucio-OIDC-Auth-URL": "https://idp.example.com/login"}
+            )
+
+        mock = AsyncMock()
+        mock.__aenter__.return_value = mock
+        mock.__aexit__.return_value = False
+        mock.get = _capture
+
+        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
+            await poller.request_auth_url(account="bob")
+
+        assert seen_headers[0]["X-Rucio-Account"] == "bob"
+
+    async def test_default_account_used_when_no_override(
+        self, poller: RucioOidcPoller
+    ) -> None:
+        """Without account= override, request_auth_url uses poller.account."""
+        seen_headers: list[dict[str, str]] = []
+
+        async def _capture(*_args: Any, **kwargs: Any) -> MagicMock:
+            seen_headers.append(kwargs.get("headers", {}))
+            return _response(
+                200, {"X-Rucio-OIDC-Auth-URL": "https://idp.example.com/login"}
+            )
+
+        mock = AsyncMock()
+        mock.__aenter__.return_value = mock
+        mock.__aexit__.return_value = False
+        mock.get = _capture
+
+        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
+            await poller.request_auth_url()
+
+        assert seen_headers[0]["X-Rucio-Account"] == "alice"

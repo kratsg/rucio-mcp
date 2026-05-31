@@ -52,9 +52,9 @@ class RucioOidcPoller:
     oidc_scope: str
     oidc_issuer: str
 
-    def _base_headers(self) -> dict[str, str]:
+    def _base_headers(self, *, account: str | None = None) -> dict[str, str]:
         h: dict[str, str] = {
-            "X-Rucio-Account": self.account,
+            "X-Rucio-Account": account if account is not None else self.account,
             "X-Rucio-Client-Authorize-Auto": "False",
             "X-Rucio-Client-Authorize-Polling": "True",
             "X-Rucio-Client-Authorize-Scope": self.oidc_scope,
@@ -66,17 +66,20 @@ class RucioOidcPoller:
             h["X-Rucio-Client-Authorize-Issuer"] = self.oidc_issuer
         return h
 
-    async def request_auth_url(self) -> str:
+    async def request_auth_url(self, *, account: str | None = None) -> str:
         """GET /auth/oidc and return the polling URL from the response header."""
+        effective_account = account if account is not None else self.account
         _log.info(
             "Requesting OIDC auth URL from %s for account %s",
             self.auth_host,
-            self.account,
+            effective_account,
         )
         async with httpx.AsyncClient(
             base_url=self.auth_host, timeout=30.0, verify=_ssl_context()
         ) as client:
-            response = await client.get("/auth/oidc", headers=self._base_headers())
+            response = await client.get(
+                "/auth/oidc", headers=self._base_headers(account=account)
+            )
             response.raise_for_status()
             url: str | None = response.headers.get("X-Rucio-OIDC-Auth-URL")
             if not url:
@@ -91,6 +94,7 @@ class RucioOidcPoller:
         *,
         timeout: float = 180.0,
         interval: float = 2.0,
+        account: str | None = None,
     ) -> str:
         """Poll *polling_url* until Rucio issues a session token or *timeout* expires.
 
@@ -98,7 +102,10 @@ class RucioOidcPoller:
         Raises :exc:`asyncio.TimeoutError` if the token is not received within
         *timeout* seconds.
         """
-        headers = {**self._base_headers(), "X-Rucio-Client-Fetch-Token": "True"}
+        headers = {
+            **self._base_headers(account=account),
+            "X-Rucio-Client-Fetch-Token": "True",
+        }
 
         _log.info(
             "Starting token poll (timeout=%.0fs, interval=%.1fs)", timeout, interval

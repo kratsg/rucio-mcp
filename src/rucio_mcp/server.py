@@ -22,7 +22,7 @@ from pydantic import AnyHttpUrl
 from rucio.client import Client
 from starlette.applications import Starlette
 from starlette.responses import Response
-from starlette.routing import Mount, Route
+from starlette.routing import BaseRoute, Mount, Route
 
 from rucio_mcp.auth.bridge_provider import RucioBridgeProvider
 from rucio_mcp.auth.bridge_routes import register_bridge_routes
@@ -343,54 +343,56 @@ def _make_http_app(
                 await stack.enter_async_context(mcp.session_manager.run())
             yield
 
-    mount_routes: list[Mount | Route] = [
+    routes: list[BaseRoute] = [
         Mount(f"/site/{name}", app=sub) for name, sub in sub_apps
     ]
     # RFC 8414 §3: AS metadata at /.well-known/oauth-authorization-server/site/{name}
     # RFC 9728: protected resource metadata at /.well-known/oauth-protected-resource/site/{name}
-    well_known_routes: list[Mount | Route] = [
-        _make_well_known_proxy_route(
-            f"/.well-known/oauth-authorization-server/site/{name}",
-            sub,
-            "/.well-known/oauth-authorization-server",
+    for name, sub in sub_apps:
+        routes.append(
+            _make_well_known_proxy_route(
+                f"/.well-known/oauth-authorization-server/site/{name}",
+                sub,
+                "/.well-known/oauth-authorization-server",
+            )
         )
-        for name, sub in sub_apps
-    ] + [
-        _make_well_known_proxy_route(
-            f"/.well-known/oauth-protected-resource/site/{name}",
-            sub,
-            f"/.well-known/oauth-protected-resource/site/{name}",
+        routes.append(
+            _make_well_known_proxy_route(
+                f"/.well-known/oauth-protected-resource/site/{name}",
+                sub,
+                f"/.well-known/oauth-protected-resource/site/{name}",
+            )
         )
-        for name, sub in sub_apps
-    ]
     # Root-level OAuth fallback for the TypeScript MCP SDK: it constructs
     # OAuth endpoints using new URL('/path', asUrl), which strips the /site/name
     # path (leading slash makes it origin-relative). Proxy root-level endpoints
     # to the first site. For multi-site deployments, only the first site's OAuth
     # endpoints are exposed at root; additional sites need a patched SDK.
-    root_oauth_routes: list[Mount | Route] = []
     if sub_apps:
         _first_sub = sub_apps[0][1]
-        root_oauth_routes = [
+        routes.append(
             _make_well_known_proxy_route(
                 "/.well-known/oauth-authorization-server",
                 _first_sub,
                 "/.well-known/oauth-authorization-server",
-            ),
+            )
+        )
+        routes.append(
             _make_well_known_proxy_route(
                 "/register", _first_sub, "/register", methods=["POST"]
-            ),
+            )
+        )
+        routes.append(
             _make_well_known_proxy_route(
                 "/authorize", _first_sub, "/authorize", methods=["GET"]
-            ),
+            )
+        )
+        routes.append(
             _make_well_known_proxy_route(
                 "/token", _first_sub, "/token", methods=["POST"]
-            ),
-        ]
-    return Starlette(
-        routes=mount_routes + well_known_routes + root_oauth_routes,
-        lifespan=_combined_lifespan,
-    )
+            )
+        )
+    return Starlette(routes=routes, lifespan=_combined_lifespan)
 
 
 def serve(

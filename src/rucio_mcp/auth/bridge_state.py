@@ -28,6 +28,7 @@ class BridgeSession:
     resource: str | None
     state: str | None
     expires_at: float
+    account: str = ""
     status: str = "pending"  # "pending" | "done" | "error"
     rucio_token: str | None = None
     auth_code: str | None = None

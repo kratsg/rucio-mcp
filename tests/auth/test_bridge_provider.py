@@ -149,6 +149,59 @@ class TestAuthorize:
 
         mock_bg.assert_called_once()
 
+    async def test_account_extracted_from_resource_url_stored_in_session(
+        self,
+        provider: RucioBridgeProvider,
+        mock_poller: AsyncMock,
+        client_info: OAuthClientInformationFull,
+    ) -> None:
+        mock_poller.request_auth_url.return_value = "https://idp.example.com/login"
+        params = AuthorizationParams(
+            state="csrf-state",
+            scopes=["openid"],
+            code_challenge="challenge-abc",
+            redirect_uri=AnyUrl("http://localhost:1234/callback"),
+            redirect_uri_provided_explicitly=True,
+            resource="http://localhost:8000/site/escape/?account=alice",
+        )
+        url = await provider.authorize(client_info, params)
+        session_id = url.split("session=")[1]
+        session = provider.store.get_by_session_id(session_id)
+        assert session is not None
+        assert session.account == "alice"
+
+    async def test_account_passed_to_request_auth_url(
+        self,
+        provider: RucioBridgeProvider,
+        mock_poller: AsyncMock,
+        client_info: OAuthClientInformationFull,
+    ) -> None:
+        mock_poller.request_auth_url.return_value = "https://idp.example.com/login"
+        params = AuthorizationParams(
+            state="csrf-state",
+            scopes=["openid"],
+            code_challenge="challenge-abc",
+            redirect_uri=AnyUrl("http://localhost:1234/callback"),
+            redirect_uri_provided_explicitly=True,
+            resource="http://localhost:8000/site/escape/?account=alice",
+        )
+        await provider.authorize(client_info, params)
+        mock_poller.request_auth_url.assert_called_once_with(account="alice")
+
+    async def test_account_empty_when_resource_has_no_account_param(
+        self,
+        provider: RucioBridgeProvider,
+        mock_poller: AsyncMock,
+        client_info: OAuthClientInformationFull,
+        auth_params: AuthorizationParams,
+    ) -> None:
+        mock_poller.request_auth_url.return_value = "https://idp.example.com/login"
+        url = await provider.authorize(client_info, auth_params)
+        session_id = url.split("session=")[1]
+        session = provider.store.get_by_session_id(session_id)
+        assert session is not None
+        assert session.account == ""
+
 
 class TestBgPoll:
     async def test_bg_poll_marks_done_on_success(
@@ -183,6 +236,17 @@ class TestBgPoll:
     ) -> None:
         # Must not raise
         await provider._bg_poll("ghost")
+
+    async def test_bg_poll_passes_session_account_to_poll_for_token(
+        self, provider: RucioBridgeProvider, mock_poller: AsyncMock
+    ) -> None:
+        session = _make_session("s-acct", account="alice")
+        provider.store.put(session)
+        mock_poller.poll_for_token.return_value = "rucio-session-token-xyz"
+        await provider._bg_poll("s-acct")
+        mock_poller.poll_for_token.assert_called_once_with(
+            session.polling_url, account="alice"
+        )
 
 
 class TestLoadAuthorizationCode:

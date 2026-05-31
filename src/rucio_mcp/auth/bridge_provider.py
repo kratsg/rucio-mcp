@@ -21,6 +21,7 @@ import secrets
 import threading
 import time
 from typing import Protocol, runtime_checkable
+from urllib.parse import parse_qs, urlparse
 
 from mcp.server.auth.provider import (
     AccessToken,
@@ -46,10 +47,12 @@ class BridgePoller(Protocol):
 
     auth_host: str
 
-    async def request_auth_url(self) -> str:
+    async def request_auth_url(self, *, account: str | None = None) -> str:
         """Initiate the auth flow and return the URL the user must open."""
 
-    async def poll_for_token(self, polling_url: str) -> str:
+    async def poll_for_token(
+        self, polling_url: str, *, account: str | None = None
+    ) -> str:
         """Poll until a rucio session token is available and return it."""
 
 
@@ -92,8 +95,14 @@ class RucioBridgeProvider:
         self, client: OAuthClientInformationFull, params: AuthorizationParams
     ) -> str:
         """Start the rucio OIDC polling flow and return the interstitial /bridge URL."""
+        account = ""
+        if params.resource:
+            qs = parse_qs(urlparse(params.resource).query)
+            account_vals = qs.get("account", [])
+            if account_vals:
+                account = account_vals[0]
         try:
-            polling_url = await self._poller.request_auth_url()
+            polling_url = await self._poller.request_auth_url(account=account or None)
         except Exception as exc:
             _log.error(
                 "Failed to reach Rucio auth server (%s): %s — "
@@ -114,6 +123,7 @@ class RucioBridgeProvider:
             resource=params.resource,
             state=params.state,
             expires_at=time.time() + 300,
+            account=account,
         )
         self.store.put(session)
         _log.info(
@@ -130,7 +140,9 @@ class RucioBridgeProvider:
         if session is None:
             return
         try:
-            token = await self._poller.poll_for_token(session.polling_url)
+            token = await self._poller.poll_for_token(
+                session.polling_url, account=session.account or None
+            )
             auth_code = secrets.token_urlsafe(32)
             self.store.mark_done(session_id, rucio_token=token, auth_code=auth_code)
             _log.info("Bridge session %s: authentication complete", session_id[:8])
