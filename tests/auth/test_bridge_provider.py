@@ -245,8 +245,21 @@ class TestBgPoll:
         mock_poller.poll_for_token.return_value = "rucio-session-token-xyz"
         await provider._bg_poll("s-acct")
         mock_poller.poll_for_token.assert_called_once_with(
-            session.polling_url, account="alice"
+            session.polling_url, account="alice", timeout=180.0
         )
+
+    async def test_bg_poll_uses_configured_poll_timeout(
+        self, mock_poller: AsyncMock
+    ) -> None:
+        provider = RucioBridgeProvider(
+            poller=mock_poller, resource_url="http://localhost:8000", poll_timeout=30.0
+        )
+        session = _make_session("s-timeout")
+        provider.store.put(session)
+        mock_poller.poll_for_token.return_value = "tok"
+        await provider._bg_poll("s-timeout")
+        _, _, kwargs = mock_poller.poll_for_token.mock_calls[0]
+        assert kwargs.get("timeout") == 30.0
 
 
 class TestLoadAuthorizationCode:

@@ -81,6 +81,16 @@ def main() -> None:
             "For HTTP transport with a single --site, applies to that site only."
         ),
     )
+    serve_parser.add_argument(
+        "--poll-timeout",
+        type=float,
+        default=180.0,
+        metavar="SECONDS",
+        help=(
+            "Maximum seconds to wait for the user to complete OIDC login "
+            "(HTTP transport only, default: 180)."
+        ),
+    )
 
     subparsers.add_parser(
         "ping",
@@ -100,6 +110,7 @@ def main() -> None:
             resource_url=args.resource_url,
             rucio_cfg=args.rucio_cfg,
             auth_type=args.auth_type,
+            poll_timeout=args.poll_timeout,
         )
     elif args.command == "ping":
         ping_server()

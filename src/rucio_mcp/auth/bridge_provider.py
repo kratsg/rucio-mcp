@@ -51,7 +51,7 @@ class BridgePoller(Protocol):
         """Initiate the auth flow and return the URL the user must open."""
 
     async def poll_for_token(
-        self, polling_url: str, *, account: str | None = None
+        self, polling_url: str, *, account: str | None = None, timeout: float = 180.0
     ) -> str:
         """Poll until a rucio session token is available and return it."""
 
@@ -64,10 +64,13 @@ class RucioBridgeProvider:
     and passes it in; the provider is auth-back-end agnostic.
     """
 
-    def __init__(self, *, poller: BridgePoller, resource_url: str) -> None:
+    def __init__(
+        self, *, poller: BridgePoller, resource_url: str, poll_timeout: float = 180.0
+    ) -> None:
         """Initialize rucio bridge provider."""
         self._resource_url = resource_url.rstrip("/")
         self._poller = poller
+        self._poll_timeout = poll_timeout
         self.store = BridgeStateStore()
         self._clients: dict[str, OAuthClientInformationFull] = {}
         self._clients_lock = threading.Lock()
@@ -141,7 +144,9 @@ class RucioBridgeProvider:
             return
         try:
             token = await self._poller.poll_for_token(
-                session.polling_url, account=session.account or None
+                session.polling_url,
+                account=session.account or None,
+                timeout=self._poll_timeout,
             )
             auth_code = secrets.token_urlsafe(32)
             self.store.mark_done(session_id, rucio_token=token, auth_code=auth_code)

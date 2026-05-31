@@ -53,13 +53,15 @@ class RucioOidcPoller:
     oidc_issuer: str
 
     def _base_headers(self, *, account: str | None = None) -> dict[str, str]:
+        effective_account = account if account is not None else self.account
         h: dict[str, str] = {
-            "X-Rucio-Account": account if account is not None else self.account,
             "X-Rucio-Client-Authorize-Auto": "False",
             "X-Rucio-Client-Authorize-Polling": "True",
             "X-Rucio-Client-Authorize-Scope": self.oidc_scope,
             "X-Rucio-Client-Authorize-Refresh-Lifetime": "96",
         }
+        if effective_account:
+            h["X-Rucio-Account"] = effective_account
         if self.oidc_audience:
             h["X-Rucio-Client-Authorize-Audience"] = self.oidc_audience
         if self.oidc_issuer:

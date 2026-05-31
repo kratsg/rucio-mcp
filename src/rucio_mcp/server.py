@@ -186,6 +186,7 @@ def _make_site_mcp(
     read_only: bool,
     host: str,
     port: int,
+    poll_timeout: float = 180.0,
 ) -> FastMCP:
     """Build a single-site FastMCP for HTTP transport.
 
@@ -199,7 +200,9 @@ def _make_site_mcp(
         oidc_scope=cfg.oidc_scope,
         oidc_issuer=cfg.oidc_issuer,
     )
-    provider = RucioBridgeProvider(poller=poller, resource_url=resource_url)
+    provider = RucioBridgeProvider(
+        poller=poller, resource_url=resource_url, poll_timeout=poll_timeout
+    )
     cache = SessionCache()
 
     @asynccontextmanager
@@ -298,6 +301,7 @@ def _make_http_app(
     host: str,
     port: int,
     rucio_cfg_overrides: dict[str, Path] | None = None,
+    poll_timeout: float = 180.0,
 ) -> Starlette:
     """Build a parent Starlette app with one FastMCP per site under /site/{name}/."""
     site_mcps: list[tuple[str, FastMCP]] = []
@@ -327,6 +331,7 @@ def _make_http_app(
             read_only=read_only,
             host=host,
             port=port,
+            poll_timeout=poll_timeout,
         )
         site_mcps.append((site_name, mcp))
 
@@ -404,6 +409,7 @@ def serve(
     resource_url: str | None = None,
     rucio_cfg: Path | None = None,
     auth_type: str | None = None,
+    poll_timeout: float = 180.0,
 ) -> None:
     """Start the MCP server over the selected transport."""
     if sites is None:
@@ -433,5 +439,6 @@ def serve(
         host=host,
         port=port,
         rucio_cfg_overrides=cfg_overrides or None,
+        poll_timeout=poll_timeout,
     )
     uvicorn.run(app, host=host, port=port)

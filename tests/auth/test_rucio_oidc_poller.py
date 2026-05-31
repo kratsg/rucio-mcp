@@ -111,6 +111,28 @@ class TestBaseHeaders:
         h = p._base_headers()
         assert "X-Rucio-Client-Authorize-Issuer" not in h
 
+    def test_account_header_omitted_when_empty(self) -> None:
+        p = RucioOidcPoller(
+            auth_host="https://r",
+            account="",
+            oidc_audience="",
+            oidc_scope="openid",
+            oidc_issuer="",
+        )
+        h = p._base_headers()
+        assert "X-Rucio-Account" not in h
+
+    def test_account_override_none_with_empty_default_omits_header(self) -> None:
+        p = RucioOidcPoller(
+            auth_host="https://r",
+            account="",
+            oidc_audience="",
+            oidc_scope="openid",
+            oidc_issuer="",
+        )
+        h = p._base_headers(account=None)
+        assert "X-Rucio-Account" not in h
+
 
 class TestRequestAuthUrl:
     async def test_returns_polling_url_from_header(
