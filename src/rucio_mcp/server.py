@@ -164,6 +164,10 @@ def _make_http_mcp(
     rucio_cfg_path: Path,
 ) -> FastMCP:
     """Build and return a configured FastMCP instance for HTTP transport."""
+    # TokenInjectedClient inherits rucio.client.Client.__init__ which reads
+    # RUCIO_CONFIG to discover rucio_host and other settings.  Set it here so
+    # tool calls use the same config that the bridge was started with.
+    os.environ["RUCIO_CONFIG"] = str(rucio_cfg_path)
     cfg = RucioCfg.from_path(rucio_cfg_path)
     provider = RucioBridgeProvider(rucio_cfg=cfg, resource_url=resource_url)
     cache = SessionCache()
