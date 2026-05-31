@@ -71,7 +71,8 @@ hooks:
 ### HTTP mode key components
 
 - **`auth/rucio_cfg.py`** — reads `[client]` section from rucio.cfg; provides
-  OIDC config (auth_host, oidc_audience, oidc_scope, oidc_issuer, account)
+  auth_type + OIDC config (auth_host, oidc_audience, oidc_scope, oidc_issuer,
+  account); `auth_type` used by server to validate site supports HTTP mode
 - **`auth/rucio_oidc_poller.py`** — async httpx wrapper for Rucio's two-step
   OIDC flow: `request_auth_url()` → polling URL; `poll_for_token()` → rucio
   session token (or asyncio.TimeoutError)
