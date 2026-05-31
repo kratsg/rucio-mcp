@@ -175,6 +175,35 @@ class TestBridgeRoutesRegistered:
         assert resp.status_code == 400
 
 
+class TestMetricsEndpoint:
+    def test_metrics_returns_200(self, http_client: TestClient) -> None:
+        resp = http_client.get("/metrics")
+        assert resp.status_code == 200
+
+    def test_metrics_content_type_is_prometheus(self, http_client: TestClient) -> None:
+        resp = http_client.get("/metrics")
+        assert "text/plain" in resp.headers["content-type"]
+
+    def test_metrics_contains_bridge_sessions_gauge(
+        self, http_client: TestClient
+    ) -> None:
+        resp = http_client.get("/metrics")
+        assert "rucio_mcp_bridge_sessions" in resp.text
+
+    def test_metrics_contains_cached_clients_gauge(
+        self, http_client: TestClient
+    ) -> None:
+        resp = http_client.get("/metrics")
+        assert "rucio_mcp_cached_clients" in resp.text
+
+    def test_metrics_contains_starlette_http_counters(
+        self, http_client: TestClient
+    ) -> None:
+        http_client.get("/metrics")  # generate at least one request first
+        resp = http_client.get("/metrics")
+        assert "starlette_requests_total" in resp.text
+
+
 class TestServeHTTPValidation:
     def test_missing_rucio_cfg_exits_nonzero(self, tmp_path: Path) -> None:
         with pytest.raises(SystemExit) as exc_info:

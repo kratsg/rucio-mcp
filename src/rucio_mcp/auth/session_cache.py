@@ -40,6 +40,12 @@ class SessionCache:
         with self._lock:
             self._data[session_id] = (client, expires_at)
 
+    def size(self) -> int:
+        """Return the number of unexpired entries currently in the cache."""
+        now = time.time()
+        with self._lock:
+            return sum(1 for _, exp in self._data.values() if exp >= now)
+
     def close(self) -> None:
         """Evict all cached clients."""
         with self._lock:

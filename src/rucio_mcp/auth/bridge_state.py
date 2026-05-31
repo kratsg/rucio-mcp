@@ -98,6 +98,15 @@ class BridgeStateStore:
             s.status = "error"
             s.error_message = message
 
+    def session_counts(self) -> dict[str, int]:
+        """Return a count of live sessions keyed by status (``pending``, ``done``, ``error``)."""
+        with self._lock:
+            self._evict_locked()
+            counts: dict[str, int] = {}
+            for s in self._by_session.values():
+                counts[s.status] = counts.get(s.status, 0) + 1
+            return counts
+
     # ------------------------------------------------------------------
     # Internal helpers (must be called with _lock held)
     # ------------------------------------------------------------------

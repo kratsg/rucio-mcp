@@ -21,6 +21,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import AnyHttpUrl
 from rucio.client import Client
 from starlette.applications import Starlette
+from starlette.middleware import Middleware
 from starlette.responses import Response
 from starlette.routing import BaseRoute, Mount, Route
 
@@ -30,6 +31,7 @@ from rucio_mcp.auth.factory import BearerTokenClientFactory, EnvBasedClientFacto
 from rucio_mcp.auth.rucio_cfg import RucioCfg
 from rucio_mcp.auth.rucio_oidc_poller import RucioOidcPoller
 from rucio_mcp.auth.session_cache import SessionCache
+from rucio_mcp.metrics import PrometheusMiddleware, metrics_handler
 from rucio_mcp.nomenclature import ATLAS_NOMENCLATURE
 from rucio_mcp.presets import PRESETS
 from rucio_mcp.resources import register as register_resources
@@ -187,11 +189,14 @@ def _make_site_mcp(
     host: str,
     port: int,
     poll_timeout: float = 180.0,
-) -> FastMCP:
+) -> tuple[FastMCP, RucioBridgeProvider, SessionCache]:
     """Build a single-site FastMCP for HTTP transport.
 
     The *resource_url* must already include the ``/site/{name}`` prefix so that
     OAuth metadata advertises the correct per-site endpoints.
+
+    Returns ``(mcp, provider, cache)`` so callers can register the session store
+    and client cache with the metrics collector.
     """
     poller = RucioOidcPoller(
         auth_host=cfg.auth_host,
@@ -233,7 +238,7 @@ def _make_site_mcp(
     for _module in [ping, dids, replicas, scopes, rses, rules, account, proxy]:
         _module.register(mcp)
     register_resources(mcp)
-    return mcp
+    return mcp, provider, cache
 
 
 def _make_well_known_proxy_route(
@@ -305,6 +310,7 @@ def _make_http_app(
 ) -> Starlette:
     """Build a parent Starlette app with one FastMCP per site under /site/{name}/."""
     site_mcps: list[tuple[str, FastMCP]] = []
+    bridge_stores: dict[str, Any] = {}
     for site_name in sites:
         cfg_path = (rucio_cfg_overrides or {}).get(site_name) or _bundled_cfg_path(
             site_name
@@ -324,7 +330,7 @@ def _make_http_app(
             )
             sys.exit(1)
         site_url = resource_url.rstrip("/") + f"/site/{site_name}"
-        mcp = _make_site_mcp(
+        mcp, provider, cache = _make_site_mcp(
             site_name=site_name,
             cfg=cfg,
             resource_url=site_url,
@@ -334,6 +340,7 @@ def _make_http_app(
             poll_timeout=poll_timeout,
         )
         site_mcps.append((site_name, mcp))
+        bridge_stores[site_name] = (provider.store, cache)
 
     # Initialise session managers by calling streamable_http_app() on each.
     # The returned sub-Starletttes are mounted under /site/{name}; their own
@@ -397,7 +404,14 @@ def _make_http_app(
                 "/token", _first_sub, "/token", methods=["POST"]
             )
         )
-    return Starlette(routes=routes, lifespan=_combined_lifespan)
+    routes.append(Route("/metrics", endpoint=metrics_handler, methods=["GET"]))
+    app = Starlette(
+        routes=routes,
+        lifespan=_combined_lifespan,
+        middleware=[Middleware(PrometheusMiddleware)],
+    )
+    app.state.bridge_stores = bridge_stores
+    return app
 
 
 def serve(

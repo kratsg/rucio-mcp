@@ -35,6 +35,22 @@ class TestSessionCache:
         assert cache.get("a") is None
         assert cache.get("b") is None
 
+    def test_size_empty(self) -> None:
+        cache = SessionCache()
+        assert cache.size() == 0
+
+    def test_size_counts_live_entries(self) -> None:
+        cache = SessionCache()
+        cache.put("a", MagicMock(), time.time() + 3600)
+        cache.put("b", MagicMock(), time.time() + 3600)
+        assert cache.size() == 2
+
+    def test_size_excludes_expired_entries(self) -> None:
+        cache = SessionCache()
+        cache.put("fresh", MagicMock(), time.time() + 3600)
+        cache.put("stale", MagicMock(), time.time() - 1)
+        assert cache.size() == 1
+
     def test_concurrent_access_does_not_corrupt(self) -> None:
         cache = SessionCache()
         errors: list[Exception] = []

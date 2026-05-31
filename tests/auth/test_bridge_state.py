@@ -114,3 +114,33 @@ class TestBridgeStateStore:
     def test_mark_error_on_unknown_session_is_noop(self) -> None:
         store = BridgeStateStore()
         store.mark_error("ghost", "oops")  # must not raise
+
+    def test_session_counts_empty_store(self) -> None:
+        store = BridgeStateStore()
+        assert sum(store.session_counts().values()) == 0
+
+    def test_session_counts_all_pending(self) -> None:
+        store = BridgeStateStore()
+        store.put(_make_session("s1"))
+        store.put(_make_session("s2"))
+        counts = store.session_counts()
+        assert counts.get("pending", 0) == 2
+
+    def test_session_counts_mixed_statuses(self) -> None:
+        store = BridgeStateStore()
+        store.put(_make_session("s1"))
+        store.put(_make_session("s2"))
+        store.put(_make_session("s3"))
+        store.mark_done("s1", rucio_token="tok", auth_code="code-1")
+        store.mark_error("s2", "timeout")
+        counts = store.session_counts()
+        assert counts.get("pending", 0) == 1
+        assert counts.get("done", 0) == 1
+        assert counts.get("error", 0) == 1
+
+    def test_session_counts_excludes_expired(self) -> None:
+        store = BridgeStateStore()
+        store.put(_make_session("live", expires_at=time.time() + 300))
+        store.put(_make_session("dead", expires_at=time.time() - 1))
+        counts = store.session_counts()
+        assert counts.get("pending", 0) == 1
