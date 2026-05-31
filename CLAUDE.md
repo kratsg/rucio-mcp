@@ -120,18 +120,26 @@ src/rucio_mcp/
     ├── _helpers.py  # parse_did(), format_dict(), format_list(), check_write_allowed(),
     │                # human_bytes(), paginate_iter(), build_hints(), classify_error(),
     │                # get_rucio_client()  ← use this in all tools
-    ├── ping.py      # rucio_ping, rucio_whoami
-    ├── dids.py      # rucio_list_dids, rucio_stat, rucio_list_content,
-    │                # rucio_list_files, rucio_get_metadata, rucio_list_parent_dids
-    ├── replicas.py  # rucio_list_file_replicas, rucio_list_dataset_replicas
-    ├── scopes.py    # rucio_list_scopes
-    ├── rses.py      # rucio_list_rses, rucio_list_rse_attributes, rucio_list_rse_usage
-    ├── rules.py     # rucio_list_rules, rucio_list_replication_rules, rucio_rule_info, rucio_list_rule_history,
-    │                # rucio_add_rule, rucio_delete_rule, rucio_update_rule,
-    │                # rucio_reduce_rule, rucio_move_rule, rucio_approve_rule,
-    │                # rucio_deny_rule
-    ├── account.py   # rucio_list_account_usage, rucio_list_account_limits
-    └── proxy.py     # rucio_voms_proxy_info (shells out to voms-proxy-info)
+    ├── ping.py             # rucio_ping, rucio_whoami
+    ├── dids.py             # rucio_list_dids, rucio_get_did, rucio_list_content,
+    │                       # rucio_list_files, rucio_get_metadata, rucio_list_parent_dids
+    ├── replicas.py         # rucio_list_replicas, rucio_list_dataset_replicas,
+    │                       # rucio_list_container_replicas
+    ├── scopes.py           # rucio_list_scopes, rucio_list_scopes_for_account
+    ├── rses.py             # rucio_list_rses, rucio_list_rse_attributes, rucio_get_rse_usage,
+    │                       # rucio_get_rse, rucio_get_rse_limits, rucio_get_rse_protocols,
+    │                       # rucio_get_distance, rucio_list_transfer_limits
+    ├── rules.py            # rucio_list_did_rules, rucio_list_replication_rules,
+    │                       # rucio_get_replication_rule, rucio_list_rule_history,
+    │                       # rucio_add_rule, rucio_delete_rule, rucio_update_rule,
+    │                       # rucio_reduce_rule, rucio_move_rule, rucio_approve_rule,
+    │                       # rucio_deny_rule
+    ├── account.py          # rucio_get_local_account_usage, rucio_get_local_account_limits,
+    │                       # rucio_list_accounts, rucio_get_account, rucio_list_account_rules
+    ├── rucio_requests.py   # rucio_list_requests, rucio_list_requests_history
+    ├── subscriptions.py    # rucio_list_subscriptions, rucio_list_subscription_rules
+    ├── locks.py            # rucio_get_dataset_locks, rucio_get_dataset_locks_by_rse
+    └── proxy.py            # rucio_voms_proxy_info (shells out to voms-proxy-info)
 tests/
 ├── conftest.py               # mock_rucio_client, mock_ctx (EnvBasedClientFactory), mock_ctx_readonly
 ├── test_cli.py
@@ -144,6 +152,9 @@ tests/
 ├── test_tools_replicas.py
 ├── test_tools_rules.py
 ├── test_tools_account.py
+├── test_tools_requests.py
+├── test_tools_subscriptions.py
+├── test_tools_locks.py
 ├── test_tools_proxy.py
 ├── auth/
 │   ├── test_factory.py          # EnvBasedClientFactory, BearerTokenClientFactory, _extract_request_auth
@@ -251,6 +262,8 @@ sub-clients. Key methods by category (source in `rucio/lib/rucio/client/`):
 - `client.list_files(scope, name, long)` → iterator of dicts
 - `client.get_metadata(scope, name, plugin)` → dict
 - `client.list_parent_dids(scope, name)` → iterator of dicts
+- `client.list_did_rules(scope, name)` → iterator of dicts (note: on didclient,
+  not ruleclient)
 
 **Replicas** (`replicaclient.py`):
 
@@ -262,7 +275,6 @@ sub-clients. Key methods by category (source in `rucio/lib/rucio/client/`):
 
 **Rules** (`ruleclient.py`):
 
-- `client.list_did_rules(scope, name)` → iterator of dicts
 - `client.list_replication_rules(filters)` → iterator of dicts (global, filter
   by scope/account)
 - `client.get_replication_rule(rule_id)` → dict
@@ -283,17 +295,46 @@ sub-clients. Key methods by category (source in `rucio/lib/rucio/client/`):
 - `client.list_rses(rse_expression)` → iterator of `{"rse": name}` dicts
 - `client.list_rse_attributes(rse)` → dict
 - `client.get_rse_usage(rse)` → iterator of dicts
+- `client.get_rse(rse)` → dict
+- `client.get_rse_limits(rse)` → iterator of dicts
+- `client.get_protocols(rse, protocol_domain, operation, default, scheme)` →
+  dict/Any
+- `client.get_distance(source, destination)` → list of dicts
+
+**Requests / transfers** (`requestclient.py`):
+
+- `client.list_requests(src_rse, dst_rse, request_states)` → iterator of dicts
+- `client.list_requests_history(src_rse, dst_rse, request_states, offset, limit)`
+  → iterator of dicts
+- `client.list_transfer_limits()` → iterator of dicts
 
 **Account** (`accountclient.py`):
 
 - `client.whoami()` → dict
+- `client.list_accounts(account_type, identity, filters)` → iterator of dicts
+- `client.get_account(account)` → dict
 - `client.get_local_account_usage(account, rse)` → iterator of dicts
 - `client.get_account_limits(account, rse_expression, locality)` → dict
+- `client.get_local_account_limits(account)` → dict
+
+**Subscriptions** (`subscriptionclient.py`):
+
+- `client.list_subscriptions(name, account)` → iterator of dicts
+- `client.list_subscription_rules(account, name)` → iterator of dicts
+
+**Locks** (`lockclient.py`):
+
+- `client.get_dataset_locks(scope, name)` → iterator of dicts
+- `client.get_dataset_locks_by_rse(rse)` → iterator of dicts
+
+**Scopes** (`scopeclient.py`):
+
+- `client.list_scopes()` → list of scope strings
+- `client.list_scopes_for_account(account)` → list of scope strings
 
 **Other**:
 
 - `client.ping()` → dict (e.g. `{"version": "35.6.0"}`)
-- `client.list_scopes()` → list of scope strings
 
 Authentication is configured via environment variables:
 

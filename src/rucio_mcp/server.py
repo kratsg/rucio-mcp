@@ -35,7 +35,19 @@ from rucio_mcp.metrics import PrometheusMiddleware, metrics_handler
 from rucio_mcp.nomenclature import ATLAS_NOMENCLATURE
 from rucio_mcp.presets import PRESETS
 from rucio_mcp.resources import register as register_resources
-from rucio_mcp.tools import account, dids, ping, proxy, replicas, rses, rules, scopes
+from rucio_mcp.tools import (
+    account,
+    dids,
+    locks,
+    ping,
+    proxy,
+    replicas,
+    rses,
+    rucio_requests,
+    rules,
+    scopes,
+    subscriptions,
+)
 
 _INSTRUCTIONS = (
     "MCP server for ATLAS Rucio data management. "
@@ -173,7 +185,19 @@ def _make_stdio_mcp(read_only: bool = False) -> FastMCP:
 
     mcp = FastMCP("rucio-mcp", lifespan=_lifespan, instructions=_INSTRUCTIONS)
 
-    for _module in [ping, dids, replicas, scopes, rses, rules, account, proxy]:
+    for _module in [
+        ping,
+        dids,
+        replicas,
+        scopes,
+        rses,
+        rules,
+        account,
+        proxy,
+        locks,
+        rucio_requests,
+        subscriptions,
+    ]:
         _module.register(mcp)
 
     register_resources(mcp)
@@ -235,7 +259,19 @@ def _make_site_mcp(
     )
 
     register_bridge_routes(mcp, provider)
-    for _module in [ping, dids, replicas, scopes, rses, rules, account, proxy]:
+    for _module in [
+        ping,
+        dids,
+        replicas,
+        scopes,
+        rses,
+        rules,
+        account,
+        proxy,
+        locks,
+        rucio_requests,
+        subscriptions,
+    ]:
         _module.register(mcp)
     register_resources(mcp)
     return mcp, provider, cache

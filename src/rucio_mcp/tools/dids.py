@@ -90,15 +90,15 @@ def register(mcp: FastMCP) -> None:
         )
         hints = build_hints(
             [
-                "Use `rucio_stat <scope:name>` to inspect a specific DID",
+                "Use `rucio_get_did <scope:name>` to inspect a specific DID",
                 "Use `rucio_list_dataset_replicas <scope:name>` to find where it is stored",
-                "Use `rucio_list_rules <scope:name>` to see replication rules",
+                "Use `rucio_list_did_rules <scope:name>` to see replication rules",
             ]
         )
         return lines + footer + hints
 
     @mcp.tool()
-    async def rucio_stat(
+    async def rucio_get_did(
         did: str,
         *,
         ctx: Context[Any, Any],
@@ -127,22 +127,22 @@ def register(mcp: FastMCP) -> None:
             hints = build_hints(
                 [
                     f"Use `rucio_list_container_replicas {did}` to find where it is stored",
-                    f"Use `rucio_list_rules {did}` to see replication rules",
+                    f"Use `rucio_list_did_rules {did}` to see replication rules",
                 ]
             )
         elif did_type == "DATASET":
             hints = build_hints(
                 [
                     f"Use `rucio_list_dataset_replicas {did}` for a summary view per RSE",
-                    f"Use `rucio_list_file_replicas {did}` for per-file PFN details",
-                    f"Use `rucio_list_rules {did}` to see replication rules",
+                    f"Use `rucio_list_replicas {did}` for per-file PFN details",
+                    f"Use `rucio_list_did_rules {did}` to see replication rules",
                 ]
             )
         else:
             hints = build_hints(
                 [
                     f"Use `rucio_list_parent_dids {did}` to find parent datasets",
-                    f"Use `rucio_list_file_replicas {did}` to find replica locations",
+                    f"Use `rucio_list_replicas {did}` to find replica locations",
                 ]
             )
 
@@ -181,7 +181,9 @@ def register(mcp: FastMCP) -> None:
             return "No contents found."
 
         page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
-        hints = build_hints(["Use `rucio_stat <scope:name>` to inspect any child DID"])
+        hints = build_hints(
+            ["Use `rucio_get_did <scope:name>` to inspect any child DID"]
+        )
         return format_list(page, include_keys=_CONTENT_KEYS) + footer + hints
 
     @mcp.tool()
@@ -217,7 +219,7 @@ def register(mcp: FastMCP) -> None:
 
         page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
         hints = build_hints(
-            [f"Use `rucio_list_file_replicas {did}` to find where files are stored"]
+            [f"Use `rucio_list_replicas {did}` to find where files are stored"]
         )
         if long:
             return format_list(page) + footer + hints
@@ -255,7 +257,7 @@ def register(mcp: FastMCP) -> None:
             return classify_error(exc)
 
         hints = build_hints(
-            [f"Use `rucio_stat {did}` for structure and size information"]
+            [f"Use `rucio_get_did {did}` for structure and size information"]
         )
         return format_dict(result) + hints
 
@@ -291,5 +293,7 @@ def register(mcp: FastMCP) -> None:
             return "No parent DIDs found."
 
         page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
-        hints = build_hints(["Use `rucio_stat <scope:name>` to inspect any parent DID"])
+        hints = build_hints(
+            ["Use `rucio_get_did <scope:name>` to inspect any parent DID"]
+        )
         return format_list(page) + footer + hints

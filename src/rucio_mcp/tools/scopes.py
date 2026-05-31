@@ -58,3 +58,44 @@ def register(mcp: FastMCP) -> None:
             ["Use `rucio_list_dids <scope>:*` to search for DIDs within a scope"]
         )
         return "\n".join(f"- {s}" for s in page) + footer + hints
+
+    @mcp.tool()
+    async def rucio_list_scopes_for_account(
+        account: str = "",
+        pattern: str = "",
+        limit: int = 100,
+        offset: int = 0,
+        *,
+        ctx: Context[Any, Any],
+    ) -> str:
+        """List all scopes owned by a Rucio account.
+
+        Returns the scopes that the given account is allowed to write DIDs into.
+        Defaults to the authenticated account if none is specified.
+
+        Args:
+            account: Rucio account name. Defaults to the authenticated account.
+            pattern: Optional wildcard pattern to filter scopes (e.g.
+                ``user.*``, ``group.phys*``). Uses Unix shell-style matching.
+            limit: Maximum number of scopes to return (default 100).
+            offset: Number of scopes to skip for pagination.
+        """
+        client = get_rucio_client(ctx)
+        effective_account = account or client.account
+        try:
+            scopes = client.list_scopes_for_account(effective_account)
+        except Exception as exc:  # noqa: BLE001
+            return classify_error(exc)
+
+        if pattern:
+            scopes = [s for s in scopes if fnmatch.fnmatch(s, pattern)]
+
+        if not scopes:
+            return "No scopes found."
+
+        sorted_scopes = sorted(scopes)
+        page, footer = paginate_iter(iter(sorted_scopes), limit=limit, offset=offset)
+        hints = build_hints(
+            ["Use `rucio_list_dids <scope>:*` to search for DIDs within a scope"]
+        )
+        return "\n".join(f"- {s}" for s in page) + footer + hints

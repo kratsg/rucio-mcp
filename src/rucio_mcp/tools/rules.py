@@ -54,7 +54,7 @@ def register(mcp: FastMCP) -> None:
     """Register replication rule tools with the MCP server."""
 
     @mcp.tool()
-    async def rucio_list_rules(
+    async def rucio_list_did_rules(
         did: str,
         *,
         ctx: Context[Any, Any],
@@ -83,7 +83,9 @@ def register(mcp: FastMCP) -> None:
             return "No replication rules found."
 
         hints = build_hints(
-            ["Use `rucio_rule_info <rule_id>` to see full details of a specific rule"]
+            [
+                "Use `rucio_get_replication_rule <rule_id>` to see full details of a specific rule"
+            ]
         )
         return (
             format_list(
@@ -93,7 +95,7 @@ def register(mcp: FastMCP) -> None:
         )
 
     @mcp.tool()
-    async def rucio_rule_info(
+    async def rucio_get_replication_rule(
         rule_id: str,
         *,
         ctx: Context[Any, Any],
@@ -119,14 +121,14 @@ def register(mcp: FastMCP) -> None:
             hints = build_hints(
                 [
                     "Rule is STUCK. Check if the destination RSE has capacity: "
-                    f"`rucio_list_rse_usage {result.get('rse_expression', '<rse>')}`",
+                    f"`rucio_get_rse_usage {result.get('rse_expression', '<rse>')}`",
                     "Check the `error` field above for the specific failure reason",
                 ]
             )
         elif state == "REPLICATING":
             hints = build_hints(
                 [
-                    f"Rule is still transferring. Check again with `rucio_rule_info {rule_id}`",
+                    f"Rule is still transferring. Check again with `rucio_get_replication_rule {rule_id}`",
                     f"Use `rucio_list_dataset_replicas {did}` to see per-RSE progress",
                 ]
             )
@@ -138,7 +140,7 @@ def register(mcp: FastMCP) -> None:
             )
         else:
             hints = build_hints(
-                [f"Use `rucio_list_rules {did}` to see all rules for this DID"]
+                [f"Use `rucio_list_did_rules {did}` to see all rules for this DID"]
             )
 
         return (
@@ -182,7 +184,7 @@ def register(mcp: FastMCP) -> None:
         page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
         hints = build_hints(
             [
-                f"Use `rucio_list_rules {did}` to see the current active rules for this DID"
+                f"Use `rucio_list_did_rules {did}` to see the current active rules for this DID"
             ]
         )
         return format_list(page) + footer + hints
@@ -198,7 +200,7 @@ def register(mcp: FastMCP) -> None:
     ) -> str:
         """List replication rules across all DIDs, optionally filtered.
 
-        Unlike ``rucio_list_rules`` (which lists rules for a specific DID),
+        Unlike ``rucio_list_did_rules`` (which lists rules for a specific DID),
         this tool queries rules globally and can filter by scope or account.
         Useful for finding all rules owned by an account, or all rules for a
         given scope.
@@ -228,7 +230,9 @@ def register(mcp: FastMCP) -> None:
             return "No replication rules found."
 
         hints = build_hints(
-            ["Use `rucio_rule_info <rule_id>` to see full details of a specific rule"]
+            [
+                "Use `rucio_get_replication_rule <rule_id>` to see full details of a specific rule"
+            ]
         )
         return (
             format_list(
@@ -334,7 +338,7 @@ def register(mcp: FastMCP) -> None:
         rule_list = "\n".join(f"- `{rid}`" for rid in rule_ids)
         hints = build_hints(
             [
-                f"Use `rucio_rule_info {rule_ids[0]}` to check rule status"
+                f"Use `rucio_get_replication_rule {rule_ids[0]}` to check rule status"
                 if rule_ids
                 else "Use `rucio_list_replication_rules` to find your rules"
             ]
@@ -368,7 +372,7 @@ def register(mcp: FastMCP) -> None:
             return classify_error(exc)
 
         hints = build_hints(
-            ["Use `rucio_list_rules <scope:name>` to verify the rule is gone"]
+            ["Use `rucio_list_did_rules <scope:name>` to verify the rule is gone"]
         )
         return f"Rule {rule_id} deleted." + hints
 
@@ -413,7 +417,9 @@ def register(mcp: FastMCP) -> None:
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
-        hints = build_hints([f"Use `rucio_rule_info {rule_id}` to verify the change"])
+        hints = build_hints(
+            [f"Use `rucio_get_replication_rule {rule_id}` to verify the change"]
+        )
         return f"Rule {rule_id} updated." + hints
 
     @mcp.tool()
@@ -448,7 +454,9 @@ def register(mcp: FastMCP) -> None:
             return classify_error(exc)
 
         hints = build_hints(
-            [f"Use `rucio_rule_info {new_rule_id}` to check the new rule status"]
+            [
+                f"Use `rucio_get_replication_rule {new_rule_id}` to check the new rule status"
+            ]
         )
         return f"Rule reduced. New rule ID: {new_rule_id}" + hints
 
@@ -480,7 +488,9 @@ def register(mcp: FastMCP) -> None:
             return classify_error(exc)
 
         hints = build_hints(
-            [f"Use `rucio_rule_info {new_rule_id}` to check the new rule status"]
+            [
+                f"Use `rucio_get_replication_rule {new_rule_id}` to check the new rule status"
+            ]
         )
         return f"Rule moved. New rule ID: {new_rule_id}" + hints
 
@@ -508,7 +518,7 @@ def register(mcp: FastMCP) -> None:
             return classify_error(exc)
 
         hints = build_hints(
-            [f"Use `rucio_rule_info {rule_id}` to see updated rule status"]
+            [f"Use `rucio_get_replication_rule {rule_id}` to see updated rule status"]
         )
         return f"Rule {rule_id} approved." + hints
 
@@ -535,6 +545,6 @@ def register(mcp: FastMCP) -> None:
             return classify_error(exc)
 
         hints = build_hints(
-            [f"Use `rucio_rule_info {rule_id}` to see updated rule status"]
+            [f"Use `rucio_get_replication_rule {rule_id}` to see updated rule status"]
         )
         return f"Rule {rule_id} denied." + hints

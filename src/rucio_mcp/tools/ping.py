@@ -49,8 +49,8 @@ def register(mcp: FastMCP) -> None:
 
         hints = build_hints(
             [
-                "Use `rucio_list_account_usage` to check your storage consumption",
-                "Use `rucio_list_account_limits` to see your storage quotas",
+                "Use `rucio_get_local_account_usage` to check your storage consumption",
+                "Use `rucio_get_local_account_limits` to see your storage quotas",
             ]
         )
         return format_dict(result) + hints

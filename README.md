@@ -317,7 +317,7 @@ accidentally create rules or modify existing ones.
 | Tool                     | Description                                        |
 | ------------------------ | -------------------------------------------------- |
 | `rucio_list_dids`        | Search for datasets/containers by wildcard pattern |
-| `rucio_stat`             | Get type, size, and timestamps for a DID           |
+| `rucio_get_did`          | Get type, size, and timestamps for a DID           |
 | `rucio_list_content`     | List immediate contents of a container or dataset  |
 | `rucio_list_files`       | List all files within a DID                        |
 | `rucio_get_metadata`     | Retrieve metadata key-value pairs for a DID        |
@@ -325,18 +325,19 @@ accidentally create rules or modify existing ones.
 
 ### Replicas
 
-| Tool                          | Description                                 |
-| ----------------------------- | ------------------------------------------- |
-| `rucio_list_file_replicas`    | Physical replica locations (PFNs) for files |
-| `rucio_list_dataset_replicas` | Dataset availability summary across RSEs    |
+| Tool                            | Description                                           |
+| ------------------------------- | ----------------------------------------------------- |
+| `rucio_list_replicas`           | Physical replica locations (PFNs) for files           |
+| `rucio_list_dataset_replicas`   | Dataset availability summary across RSEs              |
+| `rucio_list_container_replicas` | Dataset replica summary aggregated across a container |
 
 ### Replication rules
 
 | Tool                           | Write? | Description                                     |
 | ------------------------------ | ------ | ----------------------------------------------- |
-| `rucio_list_rules`             | —      | List all rules for a DID                        |
+| `rucio_list_did_rules`         | —      | List all rules for a specific DID               |
 | `rucio_list_replication_rules` | —      | List rules globally, filtered by scope/account  |
-| `rucio_rule_info`              | —      | Detailed info for a specific rule               |
+| `rucio_get_replication_rule`   | —      | Detailed info for a specific rule               |
 | `rucio_list_rule_history`      | —      | Full state history of rules for a DID           |
 | `rucio_add_rule`               | ✓      | Create a new replication rule                   |
 | `rucio_delete_rule`            | ✓      | Delete a rule (optionally purge replicas)       |
@@ -348,19 +349,54 @@ accidentally create rules or modify existing ones.
 
 ### RSEs and storage
 
-| Tool                        | Description                             |
-| --------------------------- | --------------------------------------- |
-| `rucio_list_rses`           | List RSEs matching an expression        |
-| `rucio_list_rse_attributes` | Key-value attributes for an RSE         |
-| `rucio_list_rse_usage`      | Total, used, and free storage at an RSE |
+| Tool                        | Description                                     |
+| --------------------------- | ----------------------------------------------- |
+| `rucio_list_rses`           | List RSEs matching an expression                |
+| `rucio_get_rse`             | Detailed configuration info for an RSE          |
+| `rucio_list_rse_attributes` | Key-value attributes for an RSE                 |
+| `rucio_get_rse_usage`       | Total, used, and free storage at an RSE         |
+| `rucio_get_rse_limits`      | Configured space limits for an RSE              |
+| `rucio_get_rse_protocols`   | Transfer protocols supported by an RSE          |
+| `rucio_get_distance`        | Network distance (ranking) between two RSEs     |
+| `rucio_list_transfer_limits`| Global transfer limit policies by activity/RSE  |
 
-### Account
+### Requests and transfers
 
-| Tool                        | Description                         |
-| --------------------------- | ----------------------------------- |
-| `rucio_list_scopes`         | List all available scopes           |
-| `rucio_list_account_usage`  | Storage used per RSE for an account |
-| `rucio_list_account_limits` | Storage quota limits for an account |
+| Tool                          | Description                                        |
+| ----------------------------- | -------------------------------------------------- |
+| `rucio_list_requests`         | Current transfer requests between two RSEs         |
+| `rucio_list_requests_history` | Historical transfer requests between two RSEs      |
+
+### Accounts and quotas
+
+| Tool                            | Description                             |
+| ------------------------------- | --------------------------------------- |
+| `rucio_list_accounts`           | List accounts, optionally filtered      |
+| `rucio_get_account`             | Detailed info for a specific account    |
+| `rucio_get_local_account_usage` | Storage used per RSE for an account     |
+| `rucio_get_local_account_limits`| Storage quota limits for an account     |
+| `rucio_list_account_rules`      | All replication rules owned by account  |
+
+### Subscriptions
+
+| Tool                            | Description                                         |
+| ------------------------------- | --------------------------------------------------- |
+| `rucio_list_subscriptions`      | List subscriptions, optionally filtered             |
+| `rucio_list_subscription_rules` | Rules generated by a specific subscription          |
+
+### Locks
+
+| Tool                              | Description                              |
+| --------------------------------- | ---------------------------------------- |
+| `rucio_get_dataset_locks`         | Locks on a specific dataset DID          |
+| `rucio_get_dataset_locks_by_rse`  | All dataset locks at a specific RSE      |
+
+### Scopes
+
+| Tool                           | Description                                  |
+| ------------------------------ | -------------------------------------------- |
+| `rucio_list_scopes`            | List all available scopes                    |
+| `rucio_list_scopes_for_account`| Scopes owned by a specific account           |
 
 <!-- --8<-- [end:tools] -->
 

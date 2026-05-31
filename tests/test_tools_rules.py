@@ -21,7 +21,7 @@ def registered_tools() -> dict[str, Callable[..., Awaitable[str]]]:
     return {tool.name: tool.fn for tool in mcp._tool_manager.list_tools()}
 
 
-class TestRucioListRules:
+class TestRucioListDidRules:
     async def test_returns_rules(
         self,
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
@@ -39,7 +39,7 @@ class TestRucioListRules:
                 }
             ]
         )
-        fn = registered_tools["rucio_list_rules"]
+        fn = registered_tools["rucio_list_did_rules"]
         result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
         assert "abc123" in result
         assert "CERN-PROD_DATADISK" in result
@@ -51,7 +51,7 @@ class TestRucioListRules:
         mock_rucio_client: MagicMock,
     ) -> None:
         mock_rucio_client.list_did_rules.return_value = iter([])
-        fn = registered_tools["rucio_list_rules"]
+        fn = registered_tools["rucio_list_did_rules"]
         await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
         mock_rucio_client.list_did_rules.assert_called_once_with(
             "mc16_13TeV", "some.dataset"
@@ -64,7 +64,7 @@ class TestRucioListRules:
         mock_rucio_client: MagicMock,
     ) -> None:
         mock_rucio_client.list_did_rules.return_value = iter([])
-        fn = registered_tools["rucio_list_rules"]
+        fn = registered_tools["rucio_list_did_rules"]
         result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
         assert "No replication rules" in result
 
@@ -73,7 +73,7 @@ class TestRucioListRules:
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
         mock_ctx: MagicMock,
     ) -> None:
-        fn = registered_tools["rucio_list_rules"]
+        fn = registered_tools["rucio_list_did_rules"]
         result = await fn("nodidformat", ctx=mock_ctx)
         assert "scope:name" in result
 
@@ -84,12 +84,12 @@ class TestRucioListRules:
         mock_rucio_client: MagicMock,
     ) -> None:
         mock_rucio_client.list_did_rules.side_effect = RuntimeError("server error")
-        fn = registered_tools["rucio_list_rules"]
+        fn = registered_tools["rucio_list_did_rules"]
         result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
         assert "Error" in result
 
 
-class TestRucioRuleInfo:
+class TestRucioGetReplicationRule:
     async def test_returns_rule_info(
         self,
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
@@ -103,7 +103,7 @@ class TestRucioRuleInfo:
             "locks_ok_cnt": 0,
             "locks_replicating_cnt": 5,
         }
-        fn = registered_tools["rucio_rule_info"]
+        fn = registered_tools["rucio_get_replication_rule"]
         result = await fn("abc123", ctx=mock_ctx)
         assert "REPLICATING" in result
         assert "BNL-OSG2_DATADISK" in result
@@ -115,7 +115,7 @@ class TestRucioRuleInfo:
         mock_rucio_client: MagicMock,
     ) -> None:
         mock_rucio_client.get_replication_rule.side_effect = RuntimeError("not found")
-        fn = registered_tools["rucio_rule_info"]
+        fn = registered_tools["rucio_get_replication_rule"]
         result = await fn("bad-uuid", ctx=mock_ctx)
         assert "Error" in result
 
@@ -172,7 +172,7 @@ class TestRucioListRuleHistory:
         )
         fn = registered_tools["rucio_list_rule_history"]
         result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
-        assert "rucio_list_rules" in result
+        assert "rucio_list_did_rules" in result
 
 
 class TestRucioAddRule:
@@ -326,7 +326,7 @@ class TestRucioDeleteRule:
     ) -> None:
         fn = registered_tools["rucio_delete_rule"]
         result = await fn("abc123", ctx=mock_ctx)
-        assert "rucio_list_rules" in result
+        assert "rucio_list_did_rules" in result
 
 
 class TestRucioUpdateRule:

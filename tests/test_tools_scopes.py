@@ -107,3 +107,83 @@ class TestRucioListScopes:
         fn = registered_tools["rucio_list_scopes"]
         result = await fn(ctx=mock_ctx)
         assert result.startswith("Error:")
+
+
+class TestRucioListScopesForAccount:
+    async def test_returns_scopes(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.account = "gstark"
+        mock_rucio_client.list_scopes_for_account.return_value = [
+            "user.gstark",
+            "user.gstark.test",
+        ]
+        fn = registered_tools["rucio_list_scopes_for_account"]
+        result = await fn(ctx=mock_ctx)
+        assert "user.gstark" in result
+
+    async def test_uses_client_account_when_empty(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.account = "gstark"
+        mock_rucio_client.list_scopes_for_account.return_value = []
+        fn = registered_tools["rucio_list_scopes_for_account"]
+        await fn(ctx=mock_ctx)
+        mock_rucio_client.list_scopes_for_account.assert_called_once_with("gstark")
+
+    async def test_uses_provided_account(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_scopes_for_account.return_value = ["user.otheruser"]
+        fn = registered_tools["rucio_list_scopes_for_account"]
+        await fn(account="otheruser", ctx=mock_ctx)
+        mock_rucio_client.list_scopes_for_account.assert_called_once_with("otheruser")
+
+    async def test_pattern_filters_scopes(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.account = "gstark"
+        mock_rucio_client.list_scopes_for_account.return_value = [
+            "user.gstark",
+            "user.gstark.test",
+        ]
+        fn = registered_tools["rucio_list_scopes_for_account"]
+        result = await fn(pattern="*.test", ctx=mock_ctx)
+        assert "user.gstark.test" in result
+        assert "- user.gstark\n" not in result
+
+    async def test_no_scopes(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.account = "gstark"
+        mock_rucio_client.list_scopes_for_account.return_value = []
+        fn = registered_tools["rucio_list_scopes_for_account"]
+        result = await fn(ctx=mock_ctx)
+        assert "No scopes" in result
+
+    async def test_error_on_exception(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.account = "gstark"
+        mock_rucio_client.list_scopes_for_account.side_effect = RuntimeError("denied")
+        fn = registered_tools["rucio_list_scopes_for_account"]
+        result = await fn(ctx=mock_ctx)
+        assert result.startswith("Error:")
