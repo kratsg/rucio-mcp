@@ -7,9 +7,27 @@ can run inside an asyncio event loop without blocking the server.
 from __future__ import annotations
 
 import asyncio
+import os
+import ssl
 from dataclasses import dataclass
+from pathlib import Path
 
 import httpx
+
+
+def _ssl_context() -> ssl.SSLContext | bool:
+    """Return an SSL context using X509_CERT_DIR if set, otherwise True (system CAs).
+
+    Rucio auth servers at CERN use a certificate chain that is not in the
+    standard system CA bundle.  The rucio client resolves this via X509_CERT_DIR;
+    we do the same so the httpx poller can verify those certificates.
+    """
+    cert_dir = os.environ.get("X509_CERT_DIR")
+    if cert_dir and Path(cert_dir).is_dir():
+        ctx = ssl.create_default_context()
+        ctx.load_verify_locations(capath=cert_dir)
+        return ctx
+    return True
 
 
 @dataclass
@@ -47,7 +65,9 @@ class RucioOidcPoller:
 
     async def request_auth_url(self) -> str:
         """GET /auth/oidc and return the polling URL from the response header."""
-        async with httpx.AsyncClient(base_url=self.auth_host, timeout=30.0) as client:
+        async with httpx.AsyncClient(
+            base_url=self.auth_host, timeout=30.0, verify=_ssl_context()
+        ) as client:
             response = await client.get("/auth/oidc", headers=self._base_headers())
             response.raise_for_status()
             url = response.headers.get("X-Rucio-OIDC-Auth-URL")
@@ -73,7 +93,7 @@ class RucioOidcPoller:
         headers = {**self._base_headers(), "X-Rucio-Client-Fetch-Token": "True"}
 
         async def _loop() -> str:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=30.0, verify=_ssl_context()) as client:
                 while True:
                     response = await client.get(polling_url, headers=headers)
                     token = response.headers.get("X-Rucio-Auth-Token")

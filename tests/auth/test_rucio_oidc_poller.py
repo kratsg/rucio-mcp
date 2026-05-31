@@ -3,14 +3,35 @@
 from __future__ import annotations
 
 import asyncio
+import ssl
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from rucio_mcp.auth.rucio_oidc_poller import RucioOidcPoller
+from rucio_mcp.auth.rucio_oidc_poller import RucioOidcPoller, _ssl_context
 
 _MODULE = "rucio_mcp.auth.rucio_oidc_poller"
+
+
+class TestSslContext:
+    def test_returns_true_when_cert_dir_not_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("X509_CERT_DIR", raising=False)
+        assert _ssl_context() is True
+
+    def test_returns_true_when_cert_dir_does_not_exist(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("X509_CERT_DIR", str(tmp_path / "nonexistent"))
+        assert _ssl_context() is True
+
+    def test_returns_ssl_context_when_cert_dir_is_valid(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.setenv("X509_CERT_DIR", str(tmp_path))
+        result = _ssl_context()
+        assert isinstance(result, ssl.SSLContext)
 
 
 @pytest.fixture
