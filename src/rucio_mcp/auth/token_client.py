@@ -16,14 +16,23 @@ class TokenInjectedClient(Client):
     client must re-acquire a token and reconnect.
     """
 
-    def __init__(self, *, bearer_token: str, account: str, **kwargs: object) -> None:
+    def __init__(
+        self,
+        *,
+        bearer_token: str,
+        account: str,
+        rucio_host: str | None = None,
+        auth_host: str | None = None,
+        auth_type: str = "oidc",
+    ) -> None:
         """Store the bearer token before super().__init__ triggers authentication."""
         self._injected_bearer = bearer_token
         super().__init__(
-            auth_type="oidc",
+            rucio_host=rucio_host,
+            auth_host=auth_host,
+            auth_type=auth_type,
             account=account,
             creds={"oidc_auto": False},
-            **kwargs,
         )
 
     def _BaseClient__authenticate(self) -> None:  # pylint: disable=invalid-name

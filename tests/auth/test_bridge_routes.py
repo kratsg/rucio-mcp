@@ -76,7 +76,7 @@ class TestBridgePage:
         store.put(_make_session("abc"))
         client = TestClient(_make_app(store), raise_server_exceptions=True)
         resp = client.get("/bridge?session=abc")
-        assert "/bridge/status" in resp.text
+        assert "bridge/status" in resp.text  # relative URL works under any mount prefix
         assert "abc" in resp.text  # session id embedded in JS
 
 

@@ -11,6 +11,7 @@ from rucio_mcp.auth.token_client import TokenInjectedClient
 if TYPE_CHECKING:
     from rucio.client import Client
 
+    from rucio_mcp.auth.rucio_cfg import RucioCfg
     from rucio_mcp.auth.session_cache import SessionCache
 
 
@@ -61,22 +62,32 @@ def _extract_request_auth(
 
 
 class BearerTokenClientFactory(RucioClientFactory):
-    """HTTP-mode factory: builds and caches one TokenInjectedClient per MCP session."""
+    """HTTP-mode factory: builds and caches one TokenInjectedClient per MCP session.
 
-    def __init__(self, cache: SessionCache, default_account: str = "") -> None:
-        """Store the session cache and the fallback Rucio account name."""
+    Site-bound: one factory per site, with cfg providing rucio_host, auth_host,
+    auth_type, and the default account. The bearer token is extracted per-request.
+    """
+
+    def __init__(self, cache: SessionCache, cfg: RucioCfg) -> None:
+        """Store the session cache and the site configuration."""
         self._cache = cache
-        self._default_account = default_account
+        self._cfg = cfg
 
     def get_client(self, ctx: Any) -> Client:
         """Return a cached or newly built TokenInjectedClient for this session."""
         session_id, bearer, account = _extract_request_auth(
-            ctx, default_account=self._default_account
+            ctx, default_account=self._cfg.account
         )
         cached = self._cache.get(session_id)
         if cached is not None:
             return cached
-        client = TokenInjectedClient(bearer_token=bearer, account=account)
+        client = TokenInjectedClient(
+            bearer_token=bearer,
+            account=account,
+            rucio_host=self._cfg.rucio_host,
+            auth_host=self._cfg.auth_host,
+            auth_type=self._cfg.auth_type,
+        )
         self._cache.put(session_id, client, time.time() + 300)
         return client
 

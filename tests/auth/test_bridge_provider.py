@@ -18,7 +18,7 @@ from mcp.server.auth.provider import (
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from pydantic import AnyUrl
 
-from rucio_mcp.auth.bridge_provider import RucioBridgeProvider
+from rucio_mcp.auth.bridge_provider import BridgePoller, RucioBridgeProvider
 from rucio_mcp.auth.bridge_state import BridgeSession
 from rucio_mcp.auth.rucio_cfg import RucioCfg
 
@@ -31,6 +31,7 @@ def cfg() -> RucioCfg:
         rucio_host="https://rucio.example.com",
         auth_host="https://rucio-auth.example.com",
         account="alice",
+        auth_type="oidc",
         oidc_audience="rucio",
         oidc_scope="openid profile",
         oidc_issuer="escape",
@@ -38,8 +39,15 @@ def cfg() -> RucioCfg:
 
 
 @pytest.fixture
-def provider(cfg: RucioCfg) -> RucioBridgeProvider:
-    return RucioBridgeProvider(rucio_cfg=cfg, resource_url="http://localhost:8000")
+def mock_poller() -> AsyncMock:
+    poller = AsyncMock(spec=BridgePoller)
+    poller.auth_host = "https://rucio-auth.example.com"
+    return poller
+
+
+@pytest.fixture
+def provider(mock_poller: AsyncMock) -> RucioBridgeProvider:
+    return RucioBridgeProvider(poller=mock_poller, resource_url="http://localhost:8000")
 
 
 @pytest.fixture
@@ -97,37 +105,30 @@ class TestAuthorize:
     async def test_returns_bridge_url(
         self,
         provider: RucioBridgeProvider,
+        mock_poller: AsyncMock,
         client_info: OAuthClientInformationFull,
         auth_params: AuthorizationParams,
     ) -> None:
-        with patch.object(
-            provider._poller,
-            "request_auth_url",
-            new=AsyncMock(
-                return_value="https://idp.example.com/login?state=xyz_polling"
-            ),
-        ):
-            url = await provider.authorize(client_info, auth_params)
-
+        mock_poller.request_auth_url.return_value = (
+            "https://idp.example.com/login?state=xyz_polling"
+        )
+        url = await provider.authorize(client_info, auth_params)
         assert url.startswith("http://localhost:8000/bridge?session=")
 
     async def test_authorize_creates_pending_session(
         self,
         provider: RucioBridgeProvider,
+        mock_poller: AsyncMock,
         client_info: OAuthClientInformationFull,
         auth_params: AuthorizationParams,
     ) -> None:
-        with patch.object(
-            provider._poller,
-            "request_auth_url",
-            new=AsyncMock(
-                return_value="https://idp.example.com/login?state=xyz_polling"
-            ),
-        ):
-            url = await provider.authorize(client_info, auth_params)
+        mock_poller.request_auth_url.return_value = (
+            "https://idp.example.com/login?state=xyz_polling"
+        )
+        url = await provider.authorize(client_info, auth_params)
 
         session_id = url.split("session=")[1]
-        session = provider._store.get_by_session_id(session_id)
+        session = provider.store.get_by_session_id(session_id)
         assert session is not None
         assert session.status == "pending"
         assert session.polling_url == "https://idp.example.com/login?state=xyz_polling"
@@ -136,58 +137,43 @@ class TestAuthorize:
     async def test_authorize_starts_bg_task(
         self,
         provider: RucioBridgeProvider,
+        mock_poller: AsyncMock,
         client_info: OAuthClientInformationFull,
         auth_params: AuthorizationParams,
     ) -> None:
+        mock_poller.request_auth_url.return_value = "https://idp.example.com/login"
         mock_bg = AsyncMock()
-        with (
-            patch.object(
-                provider._poller,
-                "request_auth_url",
-                new=AsyncMock(return_value="https://idp.example.com/login"),
-            ),
-            patch.object(provider, "_bg_poll", mock_bg),
-        ):
+        with patch.object(provider, "_bg_poll", mock_bg):
             await provider.authorize(client_info, auth_params)
-            await asyncio.sleep(0)  # let the task scheduler run
+            await asyncio.sleep(0)
 
         mock_bg.assert_called_once()
 
 
 class TestBgPoll:
     async def test_bg_poll_marks_done_on_success(
-        self, provider: RucioBridgeProvider
+        self, provider: RucioBridgeProvider, mock_poller: AsyncMock
     ) -> None:
         session = _make_session("s1")
-        provider._store.put(session)
+        provider.store.put(session)
+        mock_poller.poll_for_token.return_value = "rucio-session-token-xyz"
+        await provider._bg_poll("s1")
 
-        with patch.object(
-            provider._poller,
-            "poll_for_token",
-            new=AsyncMock(return_value="rucio-session-token-xyz"),
-        ):
-            await provider._bg_poll("s1")
-
-        s = provider._store.get_by_session_id("s1")
+        s = provider.store.get_by_session_id("s1")
         assert s is not None
         assert s.status == "done"
         assert s.rucio_token == "rucio-session-token-xyz"
         assert s.auth_code is not None
 
     async def test_bg_poll_marks_error_on_timeout(
-        self, provider: RucioBridgeProvider
+        self, provider: RucioBridgeProvider, mock_poller: AsyncMock
     ) -> None:
         session = _make_session("s2")
-        provider._store.put(session)
+        provider.store.put(session)
+        mock_poller.poll_for_token.side_effect = asyncio.TimeoutError
+        await provider._bg_poll("s2")
 
-        with patch.object(
-            provider._poller,
-            "poll_for_token",
-            new=AsyncMock(side_effect=asyncio.TimeoutError),
-        ):
-            await provider._bg_poll("s2")
-
-        s = provider._store.get_by_session_id("s2")
+        s = provider.store.get_by_session_id("s2")
         assert s is not None
         assert s.status == "error"
         assert s.error_message is not None
@@ -210,10 +196,10 @@ class TestLoadAuthorizationCode:
         self, provider: RucioBridgeProvider, client_info: OAuthClientInformationFull
     ) -> None:
         session = _make_session("s1")
-        provider._store.put(session)
-        provider._store.mark_done("s1", rucio_token="tok", auth_code="code-abc")
+        provider.store.put(session)
+        provider.store.mark_done("s1", rucio_token="tok", auth_code="code-abc")
         # Manually reset to pending to simulate race
-        s = provider._store.get_by_session_id("s1")
+        s = provider.store.get_by_session_id("s1")
         assert s is not None
         s.status = "pending"
 
@@ -224,8 +210,8 @@ class TestLoadAuthorizationCode:
         self, provider: RucioBridgeProvider, client_info: OAuthClientInformationFull
     ) -> None:
         session = _make_session("s1")
-        provider._store.put(session)
-        provider._store.mark_done("s1", rucio_token="tok", auth_code="code-abc")
+        provider.store.put(session)
+        provider.store.mark_done("s1", rucio_token="tok", auth_code="code-abc")
 
         result = await provider.load_authorization_code(client_info, "code-abc")
         assert result is not None
@@ -240,8 +226,8 @@ class TestExchangeAuthorizationCode:
         self, provider: RucioBridgeProvider, client_info: OAuthClientInformationFull
     ) -> None:
         session = _make_session("s1")
-        provider._store.put(session)
-        provider._store.mark_done(
+        provider.store.put(session)
+        provider.store.mark_done(
             "s1", rucio_token="rucio-session-tok", auth_code="code-abc"
         )
 

@@ -74,6 +74,31 @@ class TestRucioCfgFromPath:
         with pytest.raises(KeyError):
             RucioCfg.from_path(p)
 
+    def test_auth_type_read_from_cfg(self, tmp_path: Path) -> None:
+        p = tmp_path / "rucio.cfg"
+        p.write_text(
+            textwrap.dedent("""\
+                [client]
+                rucio_host = https://rucio.example.com
+                auth_host = https://rucio-auth.example.com
+                auth_type = oidc
+            """)
+        )
+        cfg = RucioCfg.from_path(p)
+        assert cfg.auth_type == "oidc"
+
+    def test_auth_type_defaults_to_x509_proxy(self, tmp_path: Path) -> None:
+        p = tmp_path / "rucio.cfg"
+        p.write_text(
+            textwrap.dedent("""\
+                [client]
+                rucio_host = https://rucio.example.com
+                auth_host = https://rucio-auth.example.com
+            """)
+        )
+        cfg = RucioCfg.from_path(p)
+        assert cfg.auth_type == "x509_proxy"
+
     def test_frozen_dataclass(self, tmp_path: Path) -> None:
         p = tmp_path / "rucio.cfg"
         p.write_text(

@@ -1,4 +1,4 @@
-"""Per-session rucio client cache with JWT exp-based TTL eviction."""
+"""Per-session rucio client cache with fixed-TTL eviction."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ if TYPE_CHECKING:
 class SessionCache:
     """Thread-safe cache of rucio Clients keyed by MCP session ID.
 
-    Each entry expires at the JWT exp epoch of the access token used to
-    create it, so a new TokenInjectedClient is built once per session and
-    evicted when the token expires.
+    Each entry expires at a caller-supplied absolute epoch (typically
+    300 s from creation), so a new TokenInjectedClient is built once
+    per session and evicted after the fixed TTL.
     """
 
     def __init__(self) -> None:

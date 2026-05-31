@@ -20,7 +20,7 @@ import logging
 import secrets
 import threading
 import time
-from typing import TYPE_CHECKING
+from typing import Protocol, runtime_checkable
 
 from mcp.server.auth.provider import (
     AccessToken,
@@ -32,30 +32,39 @@ from mcp.server.auth.provider import (
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 
 from rucio_mcp.auth.bridge_state import BridgeSession, BridgeStateStore
-from rucio_mcp.auth.rucio_oidc_poller import RucioOidcPoller
-
-if TYPE_CHECKING:
-    from rucio_mcp.auth.rucio_cfg import RucioCfg
 
 _log = logging.getLogger(__name__)
+
+
+@runtime_checkable
+class BridgePoller(Protocol):
+    """Structural protocol for rucio auth-polling back-ends.
+
+    Both ``request_auth_url`` and ``poll_for_token`` are async; the concrete
+    implementation today is :class:`~rucio_mcp.auth.rucio_oidc_poller.RucioOidcPoller`.
+    """
+
+    auth_host: str
+
+    async def request_auth_url(self) -> str:
+        """Initiate the auth flow and return the URL the user must open."""
+
+    async def poll_for_token(self, polling_url: str) -> str:
+        """Poll until a rucio session token is available and return it."""
 
 
 class RucioBridgeProvider:
     """Implements :class:`OAuthAuthorizationServerProvider` via rucio's polling flow.
 
-    One instance per server process; shared state is in ``_store`` and ``_clients``.
+    One instance per site; shared state is in :attr:`store` and ``_clients``.
+    The caller constructs the :class:`BridgePoller` (e.g. :class:`RucioOidcPoller`)
+    and passes it in; the provider is auth-back-end agnostic.
     """
 
-    def __init__(self, *, rucio_cfg: RucioCfg, resource_url: str) -> None:
+    def __init__(self, *, poller: BridgePoller, resource_url: str) -> None:
         self._resource_url = resource_url.rstrip("/")
-        self._poller = RucioOidcPoller(
-            auth_host=rucio_cfg.auth_host,
-            account=rucio_cfg.account,
-            oidc_audience=rucio_cfg.oidc_audience,
-            oidc_scope=rucio_cfg.oidc_scope,
-            oidc_issuer=rucio_cfg.oidc_issuer,
-        )
-        self._store = BridgeStateStore()
+        self._poller = poller
+        self.store = BridgeStateStore()
         self._clients: dict[str, OAuthClientInformationFull] = {}
         self._clients_lock = threading.Lock()
         self._bg_tasks: set[asyncio.Task[None]] = set()
@@ -105,7 +114,7 @@ class RucioBridgeProvider:
             state=params.state,
             expires_at=time.time() + 300,
         )
-        self._store.put(session)
+        self.store.put(session)
         _log.info(
             "Bridge session %s started for client %s", session_id[:8], client.client_id
         )
@@ -116,23 +125,23 @@ class RucioBridgeProvider:
 
     async def _bg_poll(self, session_id: str) -> None:
         """Background task: poll rucio for the session token, then mark done/error."""
-        session = self._store.get_by_session_id(session_id)
+        session = self.store.get_by_session_id(session_id)
         if session is None:
             return
         try:
             token = await self._poller.poll_for_token(session.polling_url)
             auth_code = secrets.token_urlsafe(32)
-            self._store.mark_done(session_id, rucio_token=token, auth_code=auth_code)
+            self.store.mark_done(session_id, rucio_token=token, auth_code=auth_code)
             _log.info("Bridge session %s: authentication complete", session_id[:8])
         except Exception as exc:  # noqa: BLE001
             _log.error("Bridge session %s: polling failed: %s", session_id[:8], exc)
-            self._store.mark_error(session_id, str(exc))
+            self.store.mark_error(session_id, str(exc))
 
     async def load_authorization_code(
         self, _client: OAuthClientInformationFull, authorization_code: str
     ) -> AuthorizationCode | None:
         """Return an :class:`AuthorizationCode` if *authorization_code* maps to a done session."""
-        session = self._store.get_by_auth_code(authorization_code)
+        session = self.store.get_by_auth_code(authorization_code)
         if session is None or session.status != "done":
             return None
         return AuthorizationCode(
@@ -150,7 +159,7 @@ class RucioBridgeProvider:
         self, _client: OAuthClientInformationFull, authorization_code: AuthorizationCode
     ) -> OAuthToken:
         """Return the rucio session token verbatim as the OAuth access_token."""
-        session = self._store.get_by_auth_code(authorization_code.code)
+        session = self.store.get_by_auth_code(authorization_code.code)
         if session is None or session.rucio_token is None:
             raise TokenError(
                 error="invalid_grant",

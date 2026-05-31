@@ -54,3 +54,23 @@ class TestTokenInjectedClientMethods:
             client = TokenInjectedClient(bearer_token="secret", account="alice")
 
         assert client._injected_bearer == "secret"
+
+    def test_explicit_host_args_forwarded_to_super(self) -> None:
+        """rucio_host, auth_host, auth_type are forwarded to the super().__init__ call."""
+        captured: dict[str, Any] = {}
+
+        def fake_init(_self: Any, **kw: Any) -> None:
+            captured.update(kw)
+
+        with patch.object(Client, "__init__", fake_init):
+            TokenInjectedClient(
+                bearer_token="tok",
+                account="bob",
+                rucio_host="https://rucio.example.com",
+                auth_host="https://auth.example.com",
+                auth_type="oidc",
+            )
+
+        assert captured["rucio_host"] == "https://rucio.example.com"
+        assert captured["auth_host"] == "https://auth.example.com"
+        assert captured["auth_type"] == "oidc"

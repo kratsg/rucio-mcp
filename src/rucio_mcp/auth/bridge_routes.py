@@ -79,7 +79,7 @@ def make_bridge_handlers(
 
 def register_bridge_routes(mcp: FastMCP, provider: RucioBridgeProvider) -> None:
     """Register /bridge and /bridge/status on *mcp* using the provider's session store."""
-    bridge_page, bridge_status = make_bridge_handlers(provider._store)
+    bridge_page, bridge_status = make_bridge_handlers(provider.store)
     mcp.custom_route("/bridge", methods=["GET"])(bridge_page)
     mcp.custom_route("/bridge/status", methods=["GET"])(bridge_status)
 
@@ -106,7 +106,7 @@ def _build_bridge_html(*, session_id: str, polling_url: str) -> str:
     const SESSION = "{session_id}";
     async function poll() {{
       try {{
-        const r = await fetch("/bridge/status?session=" + SESSION);
+        const r = await fetch("bridge/status?session=" + SESSION);
         const d = await r.json();
         if (d.status === "done") {{
           const url = new URL(d.redirect_uri);
