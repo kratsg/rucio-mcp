@@ -7,12 +7,15 @@ can run inside an asyncio event loop without blocking the server.
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import ssl
 from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
+
+_log = logging.getLogger(__name__)
 
 
 def _ssl_context() -> ssl.SSLContext | bool:
@@ -65,6 +68,7 @@ class RucioOidcPoller:
 
     async def request_auth_url(self) -> str:
         """GET /auth/oidc and return the polling URL from the response header."""
+        _log.info("Requesting OIDC auth URL from %s for account %s", self.auth_host, self.account)
         async with httpx.AsyncClient(
             base_url=self.auth_host, timeout=30.0, verify=_ssl_context()
         ) as client:
@@ -75,6 +79,7 @@ class RucioOidcPoller:
                 raise RuntimeError(
                     "Rucio auth server returned no X-Rucio-OIDC-Auth-URL"
                 )
+            _log.info("Got OIDC auth URL (polling suffix expected): %s", url)
             return url
 
     async def poll_for_token(
@@ -92,13 +97,19 @@ class RucioOidcPoller:
         """
         headers = {**self._base_headers(), "X-Rucio-Client-Fetch-Token": "True"}
 
+        _log.info("Starting token poll (timeout=%.0fs, interval=%.1fs)", timeout, interval)
+
         async def _loop() -> str:
+            attempt = 0
             async with httpx.AsyncClient(timeout=30.0, verify=_ssl_context()) as client:
                 while True:
+                    attempt += 1
                     response = await client.get(polling_url, headers=headers)
                     token = response.headers.get("X-Rucio-Auth-Token")
                     if response.status_code == 200 and token:
+                        _log.info("Rucio session token received after %d poll(s)", attempt)
                         return token
+                    _log.debug("Poll %d: no token yet (status=%d)", attempt, response.status_code)
                     await asyncio.sleep(interval)
 
         return await asyncio.wait_for(_loop(), timeout=timeout)

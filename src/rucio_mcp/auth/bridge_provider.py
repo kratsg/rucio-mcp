@@ -16,10 +16,13 @@ Flow:
 from __future__ import annotations
 
 import asyncio
+import logging
 import secrets
 import threading
 import time
 from typing import TYPE_CHECKING
+
+_log = logging.getLogger(__name__)
 
 from mcp.server.auth.provider import (
     AccessToken,
@@ -78,7 +81,16 @@ class RucioBridgeProvider:
         self, client: OAuthClientInformationFull, params: AuthorizationParams
     ) -> str:
         """Start the rucio OIDC polling flow and return the interstitial /bridge URL."""
-        polling_url = await self._poller.request_auth_url()
+        try:
+            polling_url = await self._poller.request_auth_url()
+        except Exception as exc:
+            _log.error(
+                "Failed to reach Rucio auth server (%s): %s — "
+                "check auth_host in rucio.cfg and that X509_CERT_DIR is set",
+                self._poller.auth_host,
+                exc,
+            )
+            raise
         session_id = secrets.token_urlsafe(32)
         session = BridgeSession(
             session_id=session_id,
@@ -93,6 +105,7 @@ class RucioBridgeProvider:
             expires_at=time.time() + 300,
         )
         self._store.put(session)
+        _log.info("Bridge session %s started for client %s", session_id[:8], client.client_id)
         asyncio.create_task(self._bg_poll(session_id))
         return f"{self._resource_url}/bridge?session={session_id}"
 
@@ -105,7 +118,9 @@ class RucioBridgeProvider:
             token = await self._poller.poll_for_token(session.polling_url)
             auth_code = secrets.token_urlsafe(32)
             self._store.mark_done(session_id, rucio_token=token, auth_code=auth_code)
+            _log.info("Bridge session %s: authentication complete", session_id[:8])
         except Exception as exc:  # noqa: BLE001
+            _log.error("Bridge session %s: polling failed: %s", session_id[:8], exc)
             self._store.mark_error(session_id, str(exc))
 
     async def load_authorization_code(
