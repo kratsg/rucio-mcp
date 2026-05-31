@@ -22,8 +22,6 @@ import threading
 import time
 from typing import TYPE_CHECKING
 
-_log = logging.getLogger(__name__)
-
 from mcp.server.auth.provider import (
     AccessToken,
     AuthorizationCode,
@@ -38,6 +36,8 @@ from rucio_mcp.auth.rucio_oidc_poller import RucioOidcPoller
 
 if TYPE_CHECKING:
     from rucio_mcp.auth.rucio_cfg import RucioCfg
+
+_log = logging.getLogger(__name__)
 
 
 class RucioBridgeProvider:
@@ -58,6 +58,7 @@ class RucioBridgeProvider:
         self._store = BridgeStateStore()
         self._clients: dict[str, OAuthClientInformationFull] = {}
         self._clients_lock = threading.Lock()
+        self._bg_tasks: set[asyncio.Task[None]] = set()
 
     # ------------------------------------------------------------------
     # Client registry (in-memory DCR)
@@ -105,8 +106,12 @@ class RucioBridgeProvider:
             expires_at=time.time() + 300,
         )
         self._store.put(session)
-        _log.info("Bridge session %s started for client %s", session_id[:8], client.client_id)
-        asyncio.create_task(self._bg_poll(session_id))
+        _log.info(
+            "Bridge session %s started for client %s", session_id[:8], client.client_id
+        )
+        task = asyncio.create_task(self._bg_poll(session_id))
+        self._bg_tasks.add(task)
+        task.add_done_callback(self._bg_tasks.discard)
         return f"{self._resource_url}/bridge?session={session_id}"
 
     async def _bg_poll(self, session_id: str) -> None:
@@ -124,7 +129,7 @@ class RucioBridgeProvider:
             self._store.mark_error(session_id, str(exc))
 
     async def load_authorization_code(
-        self, client: OAuthClientInformationFull, authorization_code: str
+        self, _client: OAuthClientInformationFull, authorization_code: str
     ) -> AuthorizationCode | None:
         """Return an :class:`AuthorizationCode` if *authorization_code* maps to a done session."""
         session = self._store.get_by_auth_code(authorization_code)
@@ -142,7 +147,7 @@ class RucioBridgeProvider:
         )
 
     async def exchange_authorization_code(
-        self, client: OAuthClientInformationFull, authorization_code: AuthorizationCode
+        self, _client: OAuthClientInformationFull, authorization_code: AuthorizationCode
     ) -> OAuthToken:
         """Return the rucio session token verbatim as the OAuth access_token."""
         session = self._store.get_by_auth_code(authorization_code.code)
@@ -176,16 +181,16 @@ class RucioBridgeProvider:
         )
 
     async def load_refresh_token(
-        self, client: OAuthClientInformationFull, refresh_token: str
+        self, _client: OAuthClientInformationFull, _refresh_token: str
     ) -> RefreshToken | None:
         """Refresh tokens are not issued in v1; always returns None."""
         return None
 
     async def exchange_refresh_token(
         self,
-        client: OAuthClientInformationFull,
-        refresh_token: RefreshToken,
-        scopes: list[str],
+        _client: OAuthClientInformationFull,
+        _refresh_token: RefreshToken,
+        _scopes: list[str],
     ) -> OAuthToken:
         """Refresh tokens are not supported; always raises."""
         raise TokenError(

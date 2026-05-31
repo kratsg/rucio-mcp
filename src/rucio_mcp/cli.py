@@ -111,7 +111,7 @@ def main() -> None:
             transport=args.transport,
             host=args.host,
             port=args.port,
-            site=args.site,
+            _site=args.site,
             resource_url=args.resource_url,
             rucio_cfg=args.rucio_cfg,
         )

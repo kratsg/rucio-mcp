@@ -209,7 +209,7 @@ class TestServeHTTP:
             serve(
                 transport="http",
                 resource_url="http://localhost:8000",
-                site="atlas",
+                _site="atlas",
             )
         mock_check.assert_not_called()
 

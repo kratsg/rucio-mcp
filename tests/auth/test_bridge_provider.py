@@ -8,7 +8,13 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from mcp.server.auth.provider import AuthorizationCode, AuthorizationParams
+from mcp.server.auth.provider import (
+    AccessToken,
+    AuthorizationCode,
+    AuthorizationParams,
+    RefreshToken,
+    TokenError,
+)
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from pydantic import AnyUrl
 
@@ -257,8 +263,6 @@ class TestExchangeAuthorizationCode:
     async def test_raises_on_missing_session(
         self, provider: RucioBridgeProvider, client_info: OAuthClientInformationFull
     ) -> None:
-        from mcp.server.auth.provider import TokenError
-
         auth_code = AuthorizationCode(
             code="nonexistent",
             scopes=[],
@@ -276,8 +280,6 @@ class TestLoadAccessToken:
     async def test_returns_synthetic_access_token(
         self, provider: RucioBridgeProvider
     ) -> None:
-        from mcp.server.auth.provider import AccessToken
-
         result = await provider.load_access_token("rucio-bearer-xyz")
         assert result is not None
         assert isinstance(result, AccessToken)
@@ -300,16 +302,10 @@ class TestRefreshAndRevoke:
     async def test_exchange_refresh_token_raises(
         self, provider: RucioBridgeProvider, client_info: OAuthClientInformationFull
     ) -> None:
-        from mcp.server.auth.provider import RefreshToken, TokenError
-
         rt = RefreshToken(token="rt", client_id="c", scopes=[])
         with pytest.raises(TokenError):
             await provider.exchange_refresh_token(client_info, rt, [])
 
-    async def test_revoke_token_is_noop(
-        self, provider: RucioBridgeProvider, client_info: OAuthClientInformationFull
-    ) -> None:
-        from mcp.server.auth.provider import AccessToken
-
+    async def test_revoke_token_is_noop(self, provider: RucioBridgeProvider) -> None:
         token = AccessToken(token="tok", client_id="c", scopes=[])
         await provider.revoke_token(token)  # must not raise

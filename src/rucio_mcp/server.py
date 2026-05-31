@@ -210,7 +210,7 @@ def serve(
     transport: str = "stdio",
     host: str = "127.0.0.1",
     port: int = 8000,
-    site: str = "atlas",
+    _site: str = "atlas",
     resource_url: str | None = None,
     rucio_cfg: Path | None = None,
 ) -> None:

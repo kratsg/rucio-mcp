@@ -4,19 +4,24 @@ from __future__ import annotations
 
 import asyncio
 import ssl
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from rucio_mcp.auth.rucio_oidc_poller import RucioOidcPoller, _ssl_context
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 _MODULE = "rucio_mcp.auth.rucio_oidc_poller"
 
 
 class TestSslContext:
-    def test_returns_true_when_cert_dir_not_set(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_returns_true_when_cert_dir_not_set(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("X509_CERT_DIR", raising=False)
         assert _ssl_context() is True
 
@@ -124,26 +129,26 @@ class TestRequestAuthUrl:
     async def test_raises_when_header_absent(self, poller: RucioOidcPoller) -> None:
         mock = _mock_client(get_side_effect=[_response(200)])
 
-        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
-            with pytest.raises(RuntimeError, match="X-Rucio-OIDC-Auth-URL"):
-                await poller.request_auth_url()
+        with (
+            patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock),
+            pytest.raises(RuntimeError, match="X-Rucio-OIDC-Auth-URL"),
+        ):
+            await poller.request_auth_url()
 
     async def test_raises_on_http_error(self, poller: RucioOidcPoller) -> None:
-        mock = _mock_client(get_side_effect=[_response(401)])
-        # raise_for_status on a 401 response should raise
         bad_resp = _response(401)
-        import httpx as _httpx
-
         bad_resp.raise_for_status = MagicMock(
-            side_effect=_httpx.HTTPStatusError(
+            side_effect=httpx.HTTPStatusError(
                 "401", request=MagicMock(), response=MagicMock()
             )
         )
-        mock2 = _mock_client(get_side_effect=[bad_resp])
+        mock = _mock_client(get_side_effect=[bad_resp])
 
-        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock2):
-            with pytest.raises(Exception):
-                await poller.request_auth_url()
+        with (
+            patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock),
+            pytest.raises(httpx.HTTPStatusError),
+        ):
+            await poller.request_auth_url()
 
 
 class TestPollForToken:
@@ -170,7 +175,7 @@ class TestPollForToken:
     async def test_times_out_when_token_never_arrives(
         self, poller: RucioOidcPoller
     ) -> None:
-        async def _always_pending(*args: Any, **kwargs: Any) -> MagicMock:
+        async def _always_pending(*_args: Any, **_kwargs: Any) -> MagicMock:
             return _response(200)
 
         mock = AsyncMock()
@@ -178,18 +183,20 @@ class TestPollForToken:
         mock.__aexit__.return_value = False
         mock.get = _always_pending
 
-        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
-            with pytest.raises(asyncio.TimeoutError):
-                await poller.poll_for_token(
-                    "https://rucio-auth.example.com/auth/oidc_redirect?state=xyz_polling",
-                    timeout=0.05,
-                    interval=0.01,
-                )
+        with (
+            patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock),
+            pytest.raises(asyncio.TimeoutError),
+        ):
+            await poller.poll_for_token(
+                "https://rucio-auth.example.com/auth/oidc_redirect?state=xyz_polling",
+                timeout=0.05,
+                interval=0.01,
+            )
 
     async def test_fetch_token_header_sent(self, poller: RucioOidcPoller) -> None:
         seen_kwargs: list[dict[str, Any]] = []
 
-        async def _capture(*args: Any, **kwargs: Any) -> MagicMock:
+        async def _capture(*_args: Any, **kwargs: Any) -> MagicMock:
             seen_kwargs.append(kwargs)
             return _response(200, {"X-Rucio-Auth-Token": "tok"})
 

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import textwrap
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from rucio_mcp.auth.rucio_cfg import RucioCfg
 
@@ -81,5 +84,5 @@ class TestRucioCfgFromPath:
             """)
         )
         cfg = RucioCfg.from_path(p)
-        with pytest.raises(Exception):
+        with pytest.raises(AttributeError):
             cfg.account = "changed"  # type: ignore[misc]

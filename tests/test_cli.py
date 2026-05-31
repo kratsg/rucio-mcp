@@ -100,7 +100,7 @@ class TestCLIServe:
         assert captured["transport"] == "http"
         assert captured["host"] == "0.0.0.0"
         assert captured["port"] == 8001
-        assert captured["site"] == "atlas"
+        assert captured["_site"] == "atlas"
         assert captured["resource_url"] == "http://localhost:8001"
 
 

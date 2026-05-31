@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import textwrap
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 from starlette.testclient import TestClient
 
-from rucio_mcp.server import _make_http_mcp
+from rucio_mcp.server import _make_http_mcp, serve
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.fixture
@@ -117,8 +120,6 @@ class TestBridgeRoutesRegistered:
 
 class TestServeHTTPWithCfg:
     def test_missing_rucio_cfg_exits_nonzero(self, tmp_path: Path) -> None:
-        from rucio_mcp.server import serve
-
         with pytest.raises(SystemExit) as exc_info:
             serve(
                 transport="http",
@@ -130,8 +131,6 @@ class TestServeHTTPWithCfg:
     def test_rucio_cfg_error_message_mentions_init(
         self, tmp_path: Path, capsys
     ) -> None:
-        from rucio_mcp.server import serve
-
         with pytest.raises(SystemExit):
             serve(
                 transport="http",

@@ -68,17 +68,20 @@ class RucioOidcPoller:
 
     async def request_auth_url(self) -> str:
         """GET /auth/oidc and return the polling URL from the response header."""
-        _log.info("Requesting OIDC auth URL from %s for account %s", self.auth_host, self.account)
+        _log.info(
+            "Requesting OIDC auth URL from %s for account %s",
+            self.auth_host,
+            self.account,
+        )
         async with httpx.AsyncClient(
             base_url=self.auth_host, timeout=30.0, verify=_ssl_context()
         ) as client:
             response = await client.get("/auth/oidc", headers=self._base_headers())
             response.raise_for_status()
-            url = response.headers.get("X-Rucio-OIDC-Auth-URL")
+            url: str | None = response.headers.get("X-Rucio-OIDC-Auth-URL")
             if not url:
-                raise RuntimeError(
-                    "Rucio auth server returned no X-Rucio-OIDC-Auth-URL"
-                )
+                msg = "Rucio auth server returned no X-Rucio-OIDC-Auth-URL"
+                raise RuntimeError(msg)
             _log.info("Got OIDC auth URL (polling suffix expected): %s", url)
             return url
 
@@ -97,7 +100,9 @@ class RucioOidcPoller:
         """
         headers = {**self._base_headers(), "X-Rucio-Client-Fetch-Token": "True"}
 
-        _log.info("Starting token poll (timeout=%.0fs, interval=%.1fs)", timeout, interval)
+        _log.info(
+            "Starting token poll (timeout=%.0fs, interval=%.1fs)", timeout, interval
+        )
 
         async def _loop() -> str:
             attempt = 0
@@ -105,11 +110,17 @@ class RucioOidcPoller:
                 while True:
                     attempt += 1
                     response = await client.get(polling_url, headers=headers)
-                    token = response.headers.get("X-Rucio-Auth-Token")
+                    token: str | None = response.headers.get("X-Rucio-Auth-Token")
                     if response.status_code == 200 and token:
-                        _log.info("Rucio session token received after %d poll(s)", attempt)
+                        _log.info(
+                            "Rucio session token received after %d poll(s)", attempt
+                        )
                         return token
-                    _log.debug("Poll %d: no token yet (status=%d)", attempt, response.status_code)
+                    _log.debug(
+                        "Poll %d: no token yet (status=%d)",
+                        attempt,
+                        response.status_code,
+                    )
                     await asyncio.sleep(interval)
 
         return await asyncio.wait_for(_loop(), timeout=timeout)

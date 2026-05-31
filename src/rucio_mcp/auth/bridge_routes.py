@@ -16,14 +16,15 @@ GET /bridge/status?session=<sid>
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import TYPE_CHECKING
 
-from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, Response
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from mcp.server.fastmcp import FastMCP
+    from starlette.requests import Request
 
     from rucio_mcp.auth.bridge_provider import RucioBridgeProvider
     from rucio_mcp.auth.bridge_state import BridgeStateStore
