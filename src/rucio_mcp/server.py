@@ -408,7 +408,7 @@ def _make_http_app(
     app = Starlette(
         routes=routes,
         lifespan=_combined_lifespan,
-        middleware=[Middleware(PrometheusMiddleware)],
+        middleware=[Middleware(PrometheusMiddleware, filter_unhandled_paths=True)],
     )
     app.state.bridge_stores = bridge_stores
     return app

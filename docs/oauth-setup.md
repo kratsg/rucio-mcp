@@ -162,6 +162,34 @@ curl -X POST https://rucio-mcp.example.com/site/escape/ \
 See [rucio-oauth-bridge.md](rucio-oauth-bridge.md) for the full sequence diagram
 and architecture description.
 
+### Monitoring
+
+The HTTP server exposes Prometheus metrics at `/metrics`:
+
+```bash
+curl http://localhost:8000/metrics
+```
+
+Standard Starlette HTTP counters are exported for every matched route:
+
+| Metric                                       | Type      | Description                                      |
+| -------------------------------------------- | --------- | ------------------------------------------------ |
+| `starlette_requests_total`                   | counter   | Total requests by method and path template       |
+| `starlette_responses_total`                  | counter   | Total responses by method, path, and status code |
+| `starlette_requests_processing_time_seconds` | histogram | Request latency by method and path               |
+| `starlette_exceptions_total`                 | counter   | Unhandled exceptions by type                     |
+| `starlette_requests_in_progress`             | gauge     | Requests currently being processed               |
+
+rucio-mcp adds two gauges that are refreshed on every scrape:
+
+| Metric                      | Labels           | Description                                                |
+| --------------------------- | ---------------- | ---------------------------------------------------------- |
+| `rucio_mcp_bridge_sessions` | `site`, `status` | In-flight OAuth bridge sessions (`pending`/`done`/`error`) |
+| `rucio_mcp_cached_clients`  | `site`           | Cached Rucio client instances (one per active MCP session) |
+
+Requests to paths that do not match any registered route are not tracked, so
+probe traffic from scanners does not cause unbounded label cardinality.
+
 ### What the server does NOT do
 
 - Does **not** require operator or end-user IAM registration
