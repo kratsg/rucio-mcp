@@ -231,6 +231,44 @@ or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
 
 <!-- --8<-- [end:quick-start] -->
 
+<!-- --8<-- [start:http-mode] -->
+
+## HTTP mode (multi-user, OIDC)
+
+For sites that support OIDC (e.g. the ESCAPE Virtual Research Environment),
+rucio-mcp can run as a hosted OAuth 2.1 Authorization Server proxy — one server
+for many users with no IAM registration required:
+
+```bash
+rucio-mcp serve \
+  --transport http \
+  --site escape \
+  --resource-url https://rucio-mcp.example.com \
+  --host 0.0.0.0 \
+  --port 8000
+```
+
+Each site is mounted under `{resource-url}/site/{name}/`. Configure your MCP
+client with the site URL:
+
+```json
+{
+  "mcpServers": {
+    "rucio-escape": {
+      "type": "http",
+      "url": "https://rucio-mcp.example.com/site/escape"
+    }
+  }
+}
+```
+
+See [docs/oauth-setup.md](docs/oauth-setup.md) for the full setup guide.
+
+> **Note:** ATLAS uses x509 proxy auth. HTTP mode is not yet supported for ATLAS
+> because Rucio does not currently offer OIDC for ATLAS end-users.
+
+<!-- --8<-- [end:http-mode] -->
+
 <!-- --8<-- [start:read-only] -->
 
 ## Read-only mode

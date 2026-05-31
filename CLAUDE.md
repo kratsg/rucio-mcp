@@ -5,28 +5,121 @@ LLMs.
 
 ## Architecture
 
+Two transport modes:
+
 ```
+# stdio (local, single-user)
 LLM <--MCP/stdio--> rucio-mcp serve <--HTTPS (rucio.client)--> Rucio server
                               |
                               +--subprocess--> voms-proxy-info
+
+# http (hosted, multi-user)
+MCP client  <--auth-code+PKCE-->  rucio-mcp (OAuth AS proxy)  <--polling-->  Rucio auth server  <--IdP-->
+                                         |                                          |
+                                  BridgeProvider mints                   /auth/oidc + /auth/oidc_redirect
+                                  auth codes; bearer = rucio token       (Rucio session token)
 ```
 
-The server uses the **rucio Python client library directly**
-(`rucio.client.Client`), not the `rucio` CLI. Authentication (x509_proxy, OIDC,
-userpass) is handled by the rucio client reading environment variables and
-`rucio.cfg` automatically.
+**Stdio mode:** one `rucio.client.Client` built at server startup from env vars;
+reused for all tool calls. All rucio auth types supported.
+
+**HTTP mode:** rucio-mcp acts as an **OAuth 2.1 Authorization Server proxy**
+(RFC 8414 + RFC 7591 DCR + auth-code+PKCE). It bridges MCP client auth to
+Rucio's custom OIDC polling flow (`/auth/oidc` → `/auth/oidc_redirect`). The
+resulting Rucio session token is returned verbatim as the MCP `access_token`. No
+IAM registration is required by operators or end-users.
+
+### HTTP mode auth flow
+
+1. MCP client does DCR (`POST /register`) → gets a `client_id`
+2. MCP client hits `/authorize` → `RucioBridgeProvider.authorize()` calls Rucio
+   `/auth/oidc`, stores a `BridgeSession`, starts a background async polling
+   task, and returns `302 /bridge?session=<id>`
+3. User opens the rucio polling URL in their browser and logs in via their IdP
+4. Background task polls `/auth/oidc_redirect`; when the Rucio session token
+   arrives, the session is marked done and an MCP auth code is minted
+5. JS in `/bridge` polls `/bridge/status`; when done, redirects to
+   `redirect_uri?code=…&state=…`
+6. MCP client exchanges the code at `/token` → gets
+   `{access_token: <rucio token>}`
+7. All subsequent MCP requests carry `Authorization: Bearer <rucio token>`;
+   `BearerTokenClientFactory` injects it via `TokenInjectedClient`
+
+### Client factory pattern
+
+All tools obtain the rucio client via `get_rucio_client(ctx)` from
+`tools/_helpers.py`, which reads
+`ctx.request_context.lifespan_context["client_factory"]` and calls
+`factory.get_client(ctx)`. This is the **canonical** way to get a client in a
+tool — never access `lifespan_context["rucio_client"]` directly.
+
+- **`EnvBasedClientFactory`** (stdio): wraps a single pre-built `Client`
+- **`BearerTokenClientFactory`** (http): extracts bearer from `Authorization`
+  header, builds `TokenInjectedClient`, caches by `mcp-session-id` with a fixed
+  300 s TTL (rucio rejects stale tokens with 401)
+
+### `TokenInjectedClient`
+
+Subclass of `rucio.client.Client` that overrides the two name-mangled auth
+hooks:
+
+- `_BaseClient__authenticate`: injects the bearer into `self.auth_token` and
+  `self.headers["X-Rucio-Auth-Token"]` without any auth-server round-trip
+- `_BaseClient__get_token`: raises `CannotAuthenticate` on 401 (no silent
+  re-auth)
+
+### HTTP mode key components
+
+- **`auth/rucio_cfg.py`** — reads `[client]` section from rucio.cfg; provides
+  auth_type + OIDC config (auth_host, oidc_audience, oidc_scope, oidc_issuer,
+  account); `auth_type` used by server to validate site supports HTTP mode
+- **`auth/rucio_oidc_poller.py`** — async httpx wrapper for Rucio's two-step
+  OIDC flow: `request_auth_url()` → polling URL; `poll_for_token()` → rucio
+  session token (or asyncio.TimeoutError)
+- **`auth/bridge_state.py`** — thread-safe `BridgeStateStore` with 5-min TTL;
+  indexed by session_id and auth_code
+- **`auth/bridge_provider.py`** — `BridgePoller` Protocol +
+  `RucioBridgeProvider` implementing `OAuthAuthorizationServerProvider`;
+  in-memory DCR client registry; delegates polling to any `BridgePoller` (today:
+  `RucioOidcPoller`); passthrough `load_access_token` (no JWT validation — rucio
+  rejects bad tokens with 401); state exposed via `provider.store` (public)
+- **`auth/bridge_routes.py`** — `GET /bridge` (HTML interstitial + JS poller)
+  and `GET /bridge/status` (JSON pending/done/error); registered via
+  `mcp.custom_route()`; JS fetch uses a relative URL (`bridge/status`) so the
+  page works correctly under any `/site/{name}/` mount prefix
+
+### Preset extension
+
+Available presets: `atlas` (x509 proxy, stdio only) and `escape` (OIDC, stdio
+and HTTP). To add a new site: create `src/rucio_mcp/data/<site>.cfg` and add a
+`Preset` entry to `src/rucio_mcp/presets.py`.
 
 ## Project layout
 
 ```
 src/rucio_mcp/
-├── cli.py          # argparse entry point: `rucio-mcp serve [--read-only]`
-├── server.py       # FastMCP setup, _preflight_check, _make_mcp factory, lifespan
+├── cli.py          # argparse: `rucio-mcp serve [--transport {stdio,http}] [--site SITE] ...`
+├── server.py       # FastMCP setup; _make_stdio_mcp / _make_site_mcp / _make_http_app; serve()
 ├── nomenclature.py # ATLAS dataset naming constants embedded in server instructions
 ├── resources.py    # MCP resources (static docs); register(mcp) wired in server.py
+├── presets.py      # Preset dataclass; PRESETS dict (atlas, escape → *.cfg)
+├── auth/
+│   ├── factory.py            # RucioClientFactory ABC, EnvBasedClientFactory,
+│   │                         # BearerTokenClientFactory, _extract_request_auth
+│   ├── token_client.py       # TokenInjectedClient (bearer injection, no auth-server)
+│   ├── session_cache.py      # SessionCache (thread-safe, fixed-TTL)
+│   ├── rucio_cfg.py          # RucioCfg dataclass — reads [client] from rucio.cfg (incl. auth_type)
+│   ├── rucio_oidc_poller.py  # RucioOidcPoller — async /auth/oidc + /auth/oidc_redirect
+│   ├── bridge_state.py       # BridgeSession + BridgeStateStore (in-memory, 5-min TTL)
+│   ├── bridge_provider.py    # BridgePoller Protocol + RucioBridgeProvider
+│   └── bridge_routes.py      # GET /bridge (HTML) + GET /bridge/status (JSON)
+├── data/
+│   ├── atlas.cfg             # ATLAS rucio.cfg preset (x509_proxy, stdio only)
+│   └── escape.cfg            # ESCAPE VRE rucio.cfg preset (oidc, stdio + HTTP)
 └── tools/
     ├── _helpers.py  # parse_did(), format_dict(), format_list(), check_write_allowed(),
-    │                # human_bytes(), paginate_iter(), build_hints(), classify_error()
+    │                # human_bytes(), paginate_iter(), build_hints(), classify_error(),
+    │                # get_rucio_client()  ← use this in all tools
     ├── ping.py      # rucio_ping, rucio_whoami
     ├── dids.py      # rucio_list_dids, rucio_stat, rucio_list_content,
     │                # rucio_list_files, rucio_get_metadata, rucio_list_parent_dids
@@ -40,9 +133,11 @@ src/rucio_mcp/
     ├── account.py   # rucio_list_account_usage, rucio_list_account_limits
     └── proxy.py     # rucio_voms_proxy_info (shells out to voms-proxy-info)
 tests/
-├── conftest.py               # mock_rucio_client, mock_ctx, mock_ctx_readonly fixtures
+├── conftest.py               # mock_rucio_client, mock_ctx (EnvBasedClientFactory), mock_ctx_readonly
 ├── test_cli.py
 ├── test_server.py
+├── test_helpers.py
+├── test_http_transport.py    # HTTP mode: AS metadata, 401, bridge routes, serve() cfg check
 ├── test_resources.py
 ├── test_tools_ping.py
 ├── test_tools_dids.py
@@ -50,6 +145,15 @@ tests/
 ├── test_tools_rules.py
 ├── test_tools_account.py
 ├── test_tools_proxy.py
+├── auth/
+│   ├── test_factory.py          # EnvBasedClientFactory, BearerTokenClientFactory, _extract_request_auth
+│   ├── test_rucio_cfg.py        # RucioCfg.from_path()
+│   ├── test_rucio_oidc_poller.py # RucioOidcPoller (httpx mocks, no network)
+│   ├── test_bridge_state.py     # BridgeStateStore TTL + state transitions
+│   ├── test_bridge_provider.py  # RucioBridgeProvider (mocked poller)
+│   ├── test_bridge_routes.py    # /bridge + /bridge/status (Starlette TestClient)
+│   ├── test_session_cache.py    # SessionCache (TTL eviction, thread safety)
+│   └── test_token_client.py     # TokenInjectedClient method overrides
 └── integration/test_live.py  # requires live rucio access, run with --runslow
 ```
 
@@ -64,7 +168,7 @@ are defined as closures inside `register()` using the `@mcp.tool()` decorator.
 from mcp.server.fastmcp import Context, FastMCP
 from typing import Any
 
-from rucio_mcp.tools._helpers import build_hints, classify_error
+from rucio_mcp.tools._helpers import build_hints, classify_error, get_rucio_client
 
 
 def register(mcp: FastMCP) -> None:
@@ -73,7 +177,7 @@ def register(mcp: FastMCP) -> None:
         param: str, limit: int = 50, offset: int = 0, *, ctx: Context[Any, Any]
     ) -> str:
         """Tool description — shown to the LLM as the tool's purpose."""
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)  # works in both stdio and http transport
         try:
             result = client.some_method(param)
         except Exception as exc:  # noqa: BLE001

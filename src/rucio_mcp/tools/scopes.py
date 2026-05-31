@@ -7,7 +7,12 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
-from rucio_mcp.tools._helpers import build_hints, classify_error, paginate_iter
+from rucio_mcp.tools._helpers import (
+    build_hints,
+    classify_error,
+    get_rucio_client,
+    paginate_iter,
+)
 
 
 def register(mcp: FastMCP) -> None:
@@ -35,7 +40,7 @@ def register(mcp: FastMCP) -> None:
             limit: Maximum number of scopes to return (default 100).
             offset: Number of scopes to skip for pagination.
         """
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             scopes = client.list_scopes()
         except Exception as exc:  # noqa: BLE001

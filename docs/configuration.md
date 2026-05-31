@@ -6,41 +6,35 @@ icon: lucide/settings
 
 ## Quick setup
 
-The easiest way to configure `rucio-mcp` is the `init` subcommand, which writes
-a preset `rucio.cfg` to `~/.config/rucio-mcp/rucio.cfg` so the server finds it
-automatically — no extra environment variables required.
-
-```bash
-rucio-mcp init atlas        # write the ATLAS preset
-rucio-mcp init --list       # show all available presets
-```
-
-Then set your account and renew your proxy:
+Select a bundled site preset with `--site`. The server resolves directly to the
+bundled `rucio.cfg` — no prior setup step required.
 
 ```bash
 export RUCIO_ACCOUNT=<your-atlas-account>
-pixi exec --with rucio-mcp voms-proxy-init -voms atlas
-rucio-mcp serve
+voms-proxy-init -voms atlas
+rucio-mcp serve --site atlas        # atlas is also the default
 ```
 
+Available presets: `atlas` (x509 proxy, stdio only), `escape` (OIDC, stdio and
+HTTP).
+
 !!! tip "Site-managed Rucio clients (UChicago AF, CERN lxplus, CVMFS)" If your
-site already provides a Rucio client installation, set `RUCIO_CONFIG` to point
-directly at the site's `rucio.cfg` — `init` is not needed and `RUCIO_CONFIG`
-takes full priority. See [Site-managed deployments](#site-managed-deployments)
-below.
+site already provides a Rucio client installation, point `--rucio-cfg` at the
+site's `rucio.cfg` directly — no preset needed. See
+[Site-managed deployments](#site-managed-deployments) below.
 
 ## Environment variables
 
 All authentication configuration is passed via environment variables, which are
 read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 
-| Variable          | Required               | Description                                                                                              |
-| ----------------- | ---------------------- | -------------------------------------------------------------------------------------------------------- |
-| `RUCIO_CONFIG`    | No (if `init` was run) | Direct path to a `rucio.cfg` file. Takes highest priority when set.                                      |
-| `RUCIO_AUTH_TYPE` | No                     | Authentication method: `x509_proxy`, `userpass`, `oidc`, `x509`. Defaults to `x509_proxy`.               |
-| `RUCIO_ACCOUNT`   | Yes                    | Your Rucio account name                                                                                  |
-| `X509_USER_PROXY` | x509                   | Path to your VOMS proxy certificate. Defaults to `/tmp/x509up_u<uid>`.                                   |
-| `X509_CERT_DIR`   | x509                   | Directory of CA certificates for SSL verification. Set automatically by `ca-policy-lcg` when using pixi. |
+| Variable          | Required | Description                                                                                              |
+| ----------------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| `RUCIO_CONFIG`    | No       | Direct path to a `rucio.cfg` file. Set automatically from `--site` or `--rucio-cfg`.                     |
+| `RUCIO_AUTH_TYPE` | No       | Authentication method: `x509_proxy`, `userpass`, `oidc`, `x509`. Defaults to `x509_proxy`.               |
+| `RUCIO_ACCOUNT`   | Yes      | Your Rucio account name                                                                                  |
+| `X509_USER_PROXY` | x509     | Path to your VOMS proxy certificate. Defaults to `/tmp/x509up_u<uid>`.                                   |
+| `X509_CERT_DIR`   | x509     | Directory of CA certificates for SSL verification. Set automatically by `ca-policy-lcg` when using pixi. |
 
 ## Authentication methods
 
@@ -54,10 +48,9 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
     need:
 
     ```bash
-    rucio-mcp init atlas
     export RUCIO_ACCOUNT=<your_atlas_account>
     pixi exec --with rucio-mcp voms-proxy-init -voms atlas
-    rucio-mcp serve
+    rucio-mcp serve --site atlas
     ```
 
     **Without pixi — on CVMFS-based facilities (UChicago AF, CERN lxplus, etc.):**
@@ -106,20 +99,24 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 
 === "OIDC"
 
-    OpenID Connect authentication. Set up via `rucio.cfg` or:
+    OpenID Connect authentication. Use the `escape` preset or point at a custom
+    `rucio.cfg` with `auth_type = oidc`:
 
     ```bash
-    export RUCIO_AUTH_TYPE=oidc
     export RUCIO_ACCOUNT=<your_account>
+    rucio-mcp serve --site escape
     ```
 
-    Then authenticate interactively with `rucio login` before starting the server.
+    For OIDC with a custom cfg and an explicit auth-type override:
+
+    ```bash
+    rucio-mcp serve --rucio-cfg /path/to/rucio.cfg --auth-type oidc
+    ```
 
 ## Rucio configuration presets
 
-`rucio-mcp init <preset>` copies a bundled `rucio.cfg` to
-`~/.config/rucio-mcp/rucio.cfg`. The file is a starting point — edit it after
-running `init` if your site uses non-standard endpoints.
+Bundled presets ship inside the package and are resolved at runtime — no copy
+step is needed. Use `--site <name>` to select one.
 
 === "ATLAS"
 
@@ -127,37 +124,39 @@ running `init` if your site uses non-standard endpoints.
     --8<-- "src/rucio_mcp/data/atlas.cfg"
     ```
 
+    > x509 proxy auth only. HTTP mode is not yet supported for ATLAS because
+    > Rucio does not currently offer OIDC for ATLAS end-users.
+
+=== "ESCAPE"
+
+    ```ini
+    --8<-- "src/rucio_mcp/data/escape.cfg"
+    ```
+
+    > OIDC auth. Supports both stdio and HTTP transport modes.
+
 ## Config resolution order
 
 When `rucio-mcp serve` starts, it looks for `rucio.cfg` in this order:
 
-1. **`$RUCIO_CONFIG`** — used when `RUCIO_CONFIG` is explicitly set to a file
-   path. Never overridden.
-2. **`~/.config/rucio-mcp/rucio.cfg`** — used when `RUCIO_CONFIG` is unset and
-   this file exists (created by `rucio-mcp init`). `RUCIO_CONFIG` is set to this
-   path for the lifetime of the process.
-3. Neither found → startup fails with a clear error pointing to
-   `rucio-mcp init`.
-
-`XDG_CONFIG_HOME` is respected: if set, step 2 looks in
-`$XDG_CONFIG_HOME/rucio-mcp/rucio.cfg` instead.
+1. **`--rucio-cfg <path>`** — explicit override, always used when provided.
+2. **`--site <name>`** — resolves to the bundled preset for that site name.
+3. **`$RUCIO_CONFIG`** — used when neither flag is given and the env var is set.
+4. None found → startup fails with a clear error.
 
 ## Startup preflight checks
 
 `rucio-mcp serve` runs preflight checks before starting and exits with a clear
 error message if required configuration is missing.
 
-**No config found:**
+**Config file not found:**
 
 ```
 [rucio-mcp] Cannot start: configuration is incomplete.
 
-  (1) RUCIO_CONFIG is not set and no managed config was found.
-      Run one of the following to get started:
-        rucio-mcp init atlas
-        rucio-mcp init --list
-      Or set RUCIO_CONFIG manually:
-        export RUCIO_CONFIG=/path/to/rucio.cfg
+  (1) rucio.cfg not found at /path/to/rucio.cfg.
+      Use --site <name> to select a bundled preset, or
+      --rucio-cfg <path> to point at a custom config file.
 ```
 
 **Missing `X509_CERT_DIR` (warning, does not prevent startup):**
@@ -184,16 +183,20 @@ it also validates that your proxy and certificates are working.
 ## Site-managed deployments
 
 If your facility provides a Rucio client installation (CVMFS, module system,
-container image), point `RUCIO_CONFIG` directly at the site's config file and
-skip `init`:
+container image), point `--rucio-cfg` directly at the site's config file:
+
+```bash
+export RUCIO_ACCOUNT=<your_atlas_account>
+voms-proxy-init -voms atlas
+rucio-mcp serve \
+  --rucio-cfg /cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0/etc/rucio.cfg
+```
+
+Or set `RUCIO_CONFIG` before calling serve (without `--site`):
 
 ```bash
 export RUCIO_CONFIG=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0/etc/rucio.cfg
-export RUCIO_ACCOUNT=<your_atlas_account>
-voms-proxy-init -voms atlas
 rucio-mcp serve
 ```
-
-`RUCIO_CONFIG` always takes priority over the managed config location.
 
 --8<-- "README.md:read-only"

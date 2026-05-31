@@ -12,6 +12,7 @@ from rucio_mcp.tools._helpers import (
     classify_error,
     format_dict,
     format_list,
+    get_rucio_client,
     paginate_iter,
     parse_did,
 )
@@ -72,7 +73,7 @@ def register(mcp: FastMCP) -> None:
         except ValueError as exc:
             return str(exc)
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             results = list(client.list_did_rules(scope, name))
         except Exception as exc:  # noqa: BLE001
@@ -106,7 +107,7 @@ def register(mcp: FastMCP) -> None:
             rule_id: The replication rule UUID
                 (e.g. ``a1b2c3d4-e5f6-...``).
         """
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             result = client.get_replication_rule(rule_id)
         except Exception as exc:  # noqa: BLE001
@@ -169,7 +170,7 @@ def register(mcp: FastMCP) -> None:
         except ValueError as exc:
             return str(exc)
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             results = list(client.list_replication_rule_full_history(scope, name))
         except Exception as exc:  # noqa: BLE001
@@ -216,7 +217,7 @@ def register(mcp: FastMCP) -> None:
         if account:
             filters["account"] = account
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             it = client.list_replication_rules(filters=filters)
             results, footer = paginate_iter(it, limit=limit, offset=offset)
@@ -322,7 +323,7 @@ def register(mcp: FastMCP) -> None:
         if weight:
             kwargs["weight"] = weight
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             rule_ids = client.add_replication_rule(
                 parsed, copies, rse_expression, **kwargs
@@ -360,7 +361,7 @@ def register(mcp: FastMCP) -> None:
         if err := check_write_allowed(ctx.request_context.lifespan_context):
             return err
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             client.delete_replication_rule(rule_id, purge_replicas=purge_replicas)
         except Exception as exc:  # noqa: BLE001
@@ -406,7 +407,7 @@ def register(mcp: FastMCP) -> None:
         if activity:
             options["activity"] = activity
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             client.update_replication_rule(rule_id, options)
         except Exception as exc:  # noqa: BLE001
@@ -438,7 +439,7 @@ def register(mcp: FastMCP) -> None:
         if err := check_write_allowed(ctx.request_context.lifespan_context):
             return err
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             new_rule_id = client.reduce_replication_rule(
                 rule_id, copies, exclude_expression=exclude_expression or None
@@ -470,7 +471,7 @@ def register(mcp: FastMCP) -> None:
         if err := check_write_allowed(ctx.request_context.lifespan_context):
             return err
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             new_rule_id = client.move_replication_rule(
                 rule_id, rse_expression, override={}
@@ -500,7 +501,7 @@ def register(mcp: FastMCP) -> None:
         if err := check_write_allowed(ctx.request_context.lifespan_context):
             return err
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             client.approve_replication_rule(rule_id)
         except Exception as exc:  # noqa: BLE001
@@ -527,7 +528,7 @@ def register(mcp: FastMCP) -> None:
         if err := check_write_allowed(ctx.request_context.lifespan_context):
             return err
 
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             client.deny_replication_rule(rule_id, reason=reason or None)
         except Exception as exc:  # noqa: BLE001

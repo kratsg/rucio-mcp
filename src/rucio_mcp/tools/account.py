@@ -11,6 +11,7 @@ from rucio_mcp.tools._helpers import (
     classify_error,
     format_dict,
     format_list,
+    get_rucio_client,
     human_bytes,
     paginate_iter,
 )
@@ -48,7 +49,7 @@ def register(mcp: FastMCP) -> None:
             limit: Maximum number of RSEs to return (default 50).
             offset: Number of RSEs to skip for pagination.
         """
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         effective_account = account or client.account
         try:
             rse_filter = rse or None
@@ -95,7 +96,7 @@ def register(mcp: FastMCP) -> None:
             rse_expression: RSE expression to filter limits. If empty, all
                 limits are returned.
         """
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         effective_account = account or client.account
         try:
             if rse_expression:

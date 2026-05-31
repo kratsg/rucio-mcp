@@ -5,6 +5,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from rucio_mcp.auth.factory import EnvBasedClientFactory
+
 
 @pytest.fixture
 def mock_rucio_client() -> MagicMock:
@@ -14,10 +16,10 @@ def mock_rucio_client() -> MagicMock:
 
 @pytest.fixture
 def mock_ctx(mock_rucio_client: MagicMock) -> MagicMock:
-    """Return a mock FastMCP Context with a rucio_client in lifespan context."""
+    """Return a mock FastMCP Context with a factory-wrapped rucio_client."""
     ctx: MagicMock = MagicMock()
     ctx.request_context.lifespan_context = {
-        "rucio_client": mock_rucio_client,
+        "client_factory": EnvBasedClientFactory(client=mock_rucio_client),
         "read_only": False,
     }
     return ctx
@@ -28,7 +30,7 @@ def mock_ctx_readonly(mock_rucio_client: MagicMock) -> MagicMock:
     """Return a mock FastMCP Context with read_only=True."""
     ctx: MagicMock = MagicMock()
     ctx.request_context.lifespan_context = {
-        "rucio_client": mock_rucio_client,
+        "client_factory": EnvBasedClientFactory(client=mock_rucio_client),
         "read_only": True,
     }
     return ctx

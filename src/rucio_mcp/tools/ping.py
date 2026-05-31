@@ -6,7 +6,12 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
-from rucio_mcp.tools._helpers import build_hints, classify_error, format_dict
+from rucio_mcp.tools._helpers import (
+    build_hints,
+    classify_error,
+    format_dict,
+    get_rucio_client,
+)
 
 
 def register(mcp: FastMCP) -> None:
@@ -19,7 +24,7 @@ def register(mcp: FastMCP) -> None:
         Use this tool to verify that the Rucio server is reachable and to
         check which server version is running.
         """
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             result = client.ping()
         except Exception as exc:  # noqa: BLE001
@@ -36,7 +41,7 @@ def register(mcp: FastMCP) -> None:
         Shows account name, type, email, status, and creation date.
         Use this to confirm that authentication is working correctly.
         """
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             result = client.whoami()
         except Exception as exc:  # noqa: BLE001

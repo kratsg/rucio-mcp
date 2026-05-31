@@ -30,7 +30,9 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-  "mcp>=1.0",
+  "httpx>=0.27",
+  "mcp>=1.10",
+  "prometheus-client>=0.20",
 ]
 
 [project.scripts]
@@ -113,8 +115,13 @@ disallow_untyped_defs = true
 disallow_incomplete_defs = true
 
 [[tool.mypy.overrides]]
-module = ["rucio.*"]
+module = ["rucio.*", "prometheus_client"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# rucio.client.Client has no stubs so mypy sees it as Any; subclassing Any is valid here
+module = ["rucio_mcp.auth.token_client"]
+disallow_subclassing_any = false
 
 
 [tool.ruff]
@@ -183,5 +190,7 @@ messages_control.disable = [
   "line-too-long",
   "missing-module-docstring",
   "missing-function-docstring",
+  "wrong-import-order",
+  "ungrouped-imports",
   "wrong-import-position",
 ]
