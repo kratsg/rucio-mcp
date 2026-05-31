@@ -141,7 +141,9 @@ class TestRucioListRequestsHistory:
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
-        mock_rucio_client.list_requests_history.side_effect = RuntimeError("server error")
+        mock_rucio_client.list_requests_history.side_effect = RuntimeError(
+            "server error"
+        )
         fn = registered_tools["rucio_list_requests_history"]
         result = await fn("SRC", "DST", "DONE", ctx=mock_ctx)
         assert result.startswith("Error:")
