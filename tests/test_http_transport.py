@@ -75,9 +75,18 @@ class TestOAuthMetadataEndpoints:
         ).json()
         assert data["issuer"].rstrip("/") == "http://localhost:8000/site/escape"
 
-    def test_root_metadata_path_is_404(self, http_client: TestClient) -> None:
+    def test_root_metadata_proxies_to_first_site(self, http_client: TestClient) -> None:
+        # TypeScript MCP SDK constructs well-known URL from AS URL origin (not path),
+        # so root-level AS metadata must work for single-site setups.
         resp = http_client.get("/.well-known/oauth-authorization-server")
-        assert resp.status_code == 404
+        assert resp.status_code == 200
+
+    def test_root_metadata_content_has_required_fields(
+        self, http_client: TestClient
+    ) -> None:
+        data = http_client.get("/.well-known/oauth-authorization-server").json()
+        assert "issuer" in data
+        assert "registration_endpoint" in data
 
     def test_rfc8414_well_known_path_returns_metadata(
         self, http_client: TestClient
@@ -113,6 +122,28 @@ class TestOAuthMetadataEndpoints:
             "/.well-known/oauth-protected-resource/site/escape"
         ).json()
         assert "authorization_servers" in data or "resource" in data
+
+
+class TestRootOAuthEndpointFallback:
+    """Root-level OAuth endpoint proxies for TypeScript MCP SDK compatibility.
+
+    The TypeScript MCP SDK constructs OAuth endpoints using
+    ``new URL('/endpoint', asUrl)`` with a leading slash, which makes the
+    path origin-relative (strips the /site/name path from asUrl). These tests
+    verify that root-level endpoints proxy to the first site's sub-app.
+    """
+
+    def test_root_register_proxies_not_404(self, http_client: TestClient) -> None:
+        resp = http_client.post("/register", json={})
+        assert resp.status_code != 404
+
+    def test_root_token_proxies_not_404(self, http_client: TestClient) -> None:
+        resp = http_client.post("/token", json={})
+        assert resp.status_code != 404
+
+    def test_root_authorize_proxies_not_404(self, http_client: TestClient) -> None:
+        resp = http_client.get("/authorize")
+        assert resp.status_code != 404
 
 
 class TestUnauthenticatedAccess:

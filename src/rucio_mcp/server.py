@@ -234,29 +234,34 @@ def _make_site_mcp(
 
 
 def _make_well_known_proxy_route(
-    parent_path: str, sub_app: Starlette, sub_app_path: str
+    parent_path: str,
+    sub_app: Starlette,
+    sub_app_path: str,
+    methods: list[str] | None = None,
 ) -> Route:
     """Return a Route at *parent_path* that ASGI-proxies to *sub_app_path* in *sub_app*.
 
-    Used to register RFC-compliant well-known discovery endpoints on the parent
-    Starlette app when the mcp library registers them at different paths inside
-    the mounted sub-app:
+    Used to bridge the path-prefix gap between what the mcp library registers
+    inside the mounted sub-app and what RFC-compliant clients expect:
 
-    - RFC 8414 §3: issuer ``http://host/site/name`` → client looks for AS metadata
-      at ``http://host/.well-known/oauth-authorization-server/site/name``;
+    - RFC 8414 §3: client looks for AS metadata at ``/.well-known/oauth-authorization-server/site/name``;
       mcp registers it at ``/.well-known/oauth-authorization-server`` in the sub-app.
-    - RFC 9728: resource ``http://host/site/name`` → client looks for protected
-      resource metadata at ``http://host/.well-known/oauth-protected-resource/site/name``;
+    - RFC 9728: client looks for ``/.well-known/oauth-protected-resource/site/name``;
       mcp registers it at ``/.well-known/oauth-protected-resource/site/name`` in the sub-app.
+    - TypeScript SDK origin-fallback: client constructs OAuth endpoints (``/register``,
+      ``/authorize``, ``/token``) relative to the AS URL's *origin*, stripping the
+      ``/site/name`` path. Root-level routes proxy to the first site's sub-app.
     """
     _raw = sub_app_path.encode()
+    _methods = methods or ["GET"]
 
     async def handler(request: Request) -> Response:
+        body = b"" if request.method in ("GET", "HEAD") else await request.body()
         scope: dict[str, Any] = {
             **request.scope,
             "path": sub_app_path,
             "raw_path": _raw,
-            "query_string": b"",
+            # query_string preserved from scope so /authorize params pass through
         }
         scope.pop("path_params", None)
 
@@ -265,7 +270,7 @@ def _make_well_known_proxy_route(
         chunks: list[bytes] = []
 
         async def receive() -> dict[str, Any]:
-            return {"type": "http.request", "body": b"", "more_body": False}
+            return {"type": "http.request", "body": body, "more_body": False}
 
         async def send(message: MutableMapping[str, Any]) -> None:
             if message["type"] == "http.response.start":
@@ -282,7 +287,7 @@ def _make_well_known_proxy_route(
             headers=headers,
         )
 
-    return Route(parent_path, endpoint=handler, methods=["GET"])
+    return Route(parent_path, endpoint=handler, methods=_methods)
 
 
 def _make_http_app(
@@ -358,8 +363,32 @@ def _make_http_app(
         )
         for name, sub in sub_apps
     ]
+    # Root-level OAuth fallback for the TypeScript MCP SDK: it constructs
+    # OAuth endpoints using new URL('/path', asUrl), which strips the /site/name
+    # path (leading slash makes it origin-relative). Proxy root-level endpoints
+    # to the first site. For multi-site deployments, only the first site's OAuth
+    # endpoints are exposed at root; additional sites need a patched SDK.
+    root_oauth_routes: list[Mount | Route] = []
+    if sub_apps:
+        _first_sub = sub_apps[0][1]
+        root_oauth_routes = [
+            _make_well_known_proxy_route(
+                "/.well-known/oauth-authorization-server",
+                _first_sub,
+                "/.well-known/oauth-authorization-server",
+            ),
+            _make_well_known_proxy_route(
+                "/register", _first_sub, "/register", methods=["POST"]
+            ),
+            _make_well_known_proxy_route(
+                "/authorize", _first_sub, "/authorize", methods=["GET"]
+            ),
+            _make_well_known_proxy_route(
+                "/token", _first_sub, "/token", methods=["POST"]
+            ),
+        ]
     return Starlette(
-        routes=mount_routes + well_known_routes,
+        routes=mount_routes + well_known_routes + root_oauth_routes,
         lifespan=_combined_lifespan,
     )
 
