@@ -1,5 +1,11 @@
 """Starlette route handlers for the OAuth bridge interstitial pages.
 
+The "bridge" is the mechanism that bridges MCP's standard auth-code+PKCE flow
+to Rucio's custom server-side OIDC polling flow. These pages sit in the middle:
+the user opens the Rucio IdP URL here, the JS poller waits for the background
+poll to succeed, and then redirects the MCP client to complete the OAuth code
+exchange.
+
 Two routes are registered on the FastMCP server:
 
 GET /bridge?session=<sid>

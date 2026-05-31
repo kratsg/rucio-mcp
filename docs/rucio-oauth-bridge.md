@@ -16,43 +16,48 @@ token as the MCP `access_token`.
 
 ## Sequence diagram
 
-```
-MCP client            rucio-mcp (HTTP)              Rucio auth server         IdP
-   │                       │                              │                    │
-   │── POST /register ─────►│  (Dynamic Client Reg)        │                    │
-   │◄─ {client_id} ─────────│                              │                    │
-   │                       │                              │                    │
-   │── GET /authorize ─────►│                              │                    │
-   │                       │── GET /auth/oidc ────────────►│                    │
-   │                       │◄─ X-Rucio-OIDC-Auth-URL ──────│                    │
-   │                       │  (starts bg polling task)     │                    │
-   │◄─ 302 /bridge?s=… ────│                              │                    │
-   │                       │                              │                    │
-   │── GET /bridge?s=… ───►│ HTML page + JS poller        │                    │
-   │◄─ HTML ────────────────│                              │                    │
-   │                       │                              │                    │
-   │  (user opens           │                              │                    │
-   │   polling URL          │                              │                    │
-   │   in browser) ─────────────────────────────────────►│── 302 to IdP ─────►│
-   │                       │                              │                    │
-   │                       │                              │         user logs in│
-   │                       │                              │◄─ /auth/oidc_code ──│
-   │                       │                              │  (mints rucio tok)  │
-   │                       │                              │                    │
-   │                       │── bg task GET /auth/oidc_redirect ────────────────►│
-   │                       │◄─ X-Rucio-Auth-Token ─────────│                    │
-   │                       │  (session.status = done)      │                    │
-   │                       │  (mints local auth code)      │                    │
-   │                       │                              │                    │
-   │── GET /bridge/status ►│                              │                    │
-   │◄─ {done, code, state} ─│                              │                    │
-   │   JS: location = redirect_uri?code=…&state=…         │                    │
-   │                       │                              │                    │
-   │── POST /token ─────────►│ (PKCE verification)          │                    │
-   │◄─ {access_token=<rucio session token>} ───────────────│                    │
-   │                       │                              │                    │
-   │── MCP req w/ Bearer ──►│── X-Rucio-Auth-Token ───────►│                    │
-   │                       │   (TokenInjectedClient)       │                    │
+```mermaid
+sequenceDiagram
+    participant C as MCP client
+    participant M as rucio-mcp (HTTP)
+    participant R as Rucio auth server
+    participant I as IdP
+
+    C->>M: (1) POST /register (Dynamic Client Registration)
+    M-->>C: {client_id}
+
+    C->>M: (2) GET /authorize?code_challenge=…&redirect_uri=…
+    M->>R: (3) GET /auth/oidc (request polling URL)
+    R-->>M: (4) X-Rucio-OIDC-Auth-URL (polling URL for user)
+    note over M: starts background polling task
+    M-->>C: (5) 302 → /bridge?session=…
+
+    C->>M: (6) GET /bridge?session=… (HTML interstitial page)
+    M-->>C: HTML + JS poller
+
+    note over C: user opens the polling URL in browser
+    C->>R: (7) GET <polling URL>
+    R-->>I: (8) 302 → IdP login page
+    note over I: user logs in
+    I->>R: /auth/oidc_code (IdP callback, mints Rucio token)
+
+    loop background polling
+        M->>R: (9) GET /auth/oidc_redirect (poll for token)
+        R-->>M: X-Rucio-Auth-Token (once login is complete)
+    end
+    note over M: session.status = done, mints local auth code
+
+    C->>M: (10) GET /bridge/status (JS poller)
+    M-->>C: {status: "done", code: …, state: …}
+    note over C: JS redirects to redirect_uri?code=…&state=…
+
+    C->>M: (11) POST /token (PKCE verification + code exchange)
+    M-->>C: {access_token: <Rucio session token>}
+
+    C->>M: (12) MCP request with Bearer token
+    M->>R: X-Rucio-Auth-Token (via TokenInjectedClient)
+    R-->>M: response
+    M-->>C: MCP response
 ```
 
 ---
@@ -80,6 +85,8 @@ Rucio supports three ways to deliver session tokens after IdP login:
 
 Server-side polling (`X-Rucio-Client-Authorize-Polling: True`) is the only
 approach that works cross-domain and requires no user action beyond logging in.
+See [rucio/rucio#8568](https://github.com/rucio/rucio/discussions/8568) for the
+upstream discussion on this flow.
 
 ### In-memory state only
 

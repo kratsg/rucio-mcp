@@ -21,20 +21,21 @@ from typing import TYPE_CHECKING
 
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
+    REGISTRY,
     Counter,
     Gauge,
     Histogram,
-    REGISTRY,
     generate_latest,
 )
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import Match
 from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
-from starlette.types import ASGIApp
 
 if TYPE_CHECKING:
+    from starlette.requests import Request
+    from starlette.types import ASGIApp
+
     from rucio_mcp.auth.bridge_state import BridgeStateStore
     from rucio_mcp.auth.session_cache import SessionCache
 
@@ -97,7 +98,9 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.filter_unhandled_paths = filter_unhandled_paths
 
-    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
         """Instrument the request and delegate to *call_next*."""
         method = request.method
         path_template, is_handled = self._path_template(request)

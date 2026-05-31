@@ -56,8 +56,9 @@ MCP client as the bearer token.
 **Neither operators nor end-users need to register with any IAM system.**
 rucio-mcp reads OIDC configuration directly from your `rucio.cfg`.
 
-**HTTP mode requires `auth_type = oidc` in the site's rucio.cfg.** The only
-bundled preset that supports HTTP mode today is `escape`.
+**HTTP mode requires `auth_type = oidc` in the site's rucio.cfg.** See
+`src/rucio_mcp/data/` for the bundled site configurations and which ones support
+HTTP mode.
 
 ### Prerequisites
 
@@ -116,6 +117,7 @@ CLI flags:
 | `--auth-type`    | —                        | from cfg    | Override RUCIO_AUTH_TYPE (stdio mode only)         |
 | `--host`         | —                        | `127.0.0.1` | Bind address                                       |
 | `--port`         | —                        | `8000`      | Bind port                                          |
+| `--poll-timeout` | —                        | `180`       | Seconds to wait for OIDC login to complete (http)  |
 | `--read-only`    | —                        | false       | Disable write tools (add/delete/update rules)      |
 
 ### MCP client configuration
@@ -154,13 +156,6 @@ curl -X POST https://rucio-mcp.example.com/site/escape/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
 ```
-
-### Account selection
-
-The server determines your Rucio account using this priority:
-
-1. `X-Rucio-Account` request header (explicit override)
-2. `account` from the site's `rucio.cfg` `[client]` section
 
 ### How the bridge flow works
 
