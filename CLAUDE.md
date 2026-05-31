@@ -77,43 +77,44 @@ hooks:
   session token (or asyncio.TimeoutError)
 - **`auth/bridge_state.py`** — thread-safe `BridgeStateStore` with 5-min TTL;
   indexed by session_id and auth_code
-- **`auth/bridge_provider.py`** — `RucioBridgeProvider` implementing
-  `OAuthAuthorizationServerProvider`; in-memory DCR client registry; delegates
-  polling to `RucioOidcPoller`; passthrough `load_access_token` (no JWT
-  validation — rucio rejects bad tokens with 401)
+- **`auth/bridge_provider.py`** — `BridgePoller` Protocol +
+  `RucioBridgeProvider` implementing `OAuthAuthorizationServerProvider`;
+  in-memory DCR client registry; delegates polling to any `BridgePoller` (today:
+  `RucioOidcPoller`); passthrough `load_access_token` (no JWT validation — rucio
+  rejects bad tokens with 401); state exposed via `provider.store` (public)
 - **`auth/bridge_routes.py`** — `GET /bridge` (HTML interstitial + JS poller)
   and `GET /bridge/status` (JSON pending/done/error); registered via
-  `mcp.custom_route()`
+  `mcp.custom_route()`; JS fetch uses a relative URL (`bridge/status`) so the
+  page works correctly under any `/site/{name}/` mount prefix
 
 ### Preset extension
 
-Each site preset (`rucio-mcp init atlas`) installs `rucio.cfg` only. To add a
-new site: create `src/rucio_mcp/data/<site>.cfg` and add a `Preset` entry to
-`src/rucio_mcp/presets.py`.
+Available presets: `atlas` (x509 proxy, stdio only) and `escape` (OIDC, stdio
+and HTTP). To add a new site: create `src/rucio_mcp/data/<site>.cfg` and add a
+`Preset` entry to `src/rucio_mcp/presets.py`.
 
 ## Project layout
 
 ```
 src/rucio_mcp/
-├── cli.py          # argparse: `rucio-mcp serve [--transport {stdio,http}] [--rucio-cfg PATH] ...`
-├── server.py       # FastMCP setup; _make_stdio_mcp / _make_http_mcp; serve()
+├── cli.py          # argparse: `rucio-mcp serve [--transport {stdio,http}] [--site SITE] ...`
+├── server.py       # FastMCP setup; _make_stdio_mcp / _make_site_mcp / _make_http_app; serve()
 ├── nomenclature.py # ATLAS dataset naming constants embedded in server instructions
 ├── resources.py    # MCP resources (static docs); register(mcp) wired in server.py
-├── presets.py      # Preset dataclass; PRESETS dict (atlas → atlas.cfg)
-├── init.py         # `rucio-mcp init <preset>` — installs rucio.cfg
-├── config_paths.py # managed_rucio_config() → ~/.config/rucio-mcp/rucio.cfg
+├── presets.py      # Preset dataclass; PRESETS dict (atlas, escape → *.cfg)
 ├── auth/
 │   ├── factory.py            # RucioClientFactory ABC, EnvBasedClientFactory,
 │   │                         # BearerTokenClientFactory, _extract_request_auth
 │   ├── token_client.py       # TokenInjectedClient (bearer injection, no auth-server)
 │   ├── session_cache.py      # SessionCache (thread-safe, fixed-TTL)
-│   ├── rucio_cfg.py          # RucioCfg dataclass — reads [client] from rucio.cfg
+│   ├── rucio_cfg.py          # RucioCfg dataclass — reads [client] from rucio.cfg (incl. auth_type)
 │   ├── rucio_oidc_poller.py  # RucioOidcPoller — async /auth/oidc + /auth/oidc_redirect
 │   ├── bridge_state.py       # BridgeSession + BridgeStateStore (in-memory, 5-min TTL)
-│   ├── bridge_provider.py    # RucioBridgeProvider (OAuthAuthorizationServerProvider)
+│   ├── bridge_provider.py    # BridgePoller Protocol + RucioBridgeProvider
 │   └── bridge_routes.py      # GET /bridge (HTML) + GET /bridge/status (JSON)
 ├── data/
-│   └── atlas.cfg             # ATLAS rucio.cfg preset
+│   ├── atlas.cfg             # ATLAS rucio.cfg preset (x509_proxy, stdio only)
+│   └── escape.cfg            # ESCAPE VRE rucio.cfg preset (oidc, stdio + HTTP)
 └── tools/
     ├── _helpers.py  # parse_did(), format_dict(), format_list(), check_write_allowed(),
     │                # human_bytes(), paginate_iter(), build_hints(), classify_error(),
@@ -135,9 +136,8 @@ tests/
 ├── test_cli.py
 ├── test_server.py
 ├── test_helpers.py
-├── test_http_transport.py    # HTTP mode: AS/PRM metadata, 401, bridge routes, serve() cfg check
+├── test_http_transport.py    # HTTP mode: AS metadata, 401, bridge routes, serve() cfg check
 ├── test_resources.py
-├── test_init.py
 ├── test_tools_ping.py
 ├── test_tools_dids.py
 ├── test_tools_replicas.py
