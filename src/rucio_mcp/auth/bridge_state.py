@@ -48,6 +48,7 @@ class BridgeStateStore:
     _TTL: float = 300.0  # seconds — matches rucio's OAuthRequest.expired_at
 
     def __init__(self) -> None:
+        """Initialize thread-safe in-memory store."""
         self._lock = threading.Lock()
         self._by_session: dict[str, BridgeSession] = {}
         self._by_code: dict[str, str] = {}  # auth_code → session_id

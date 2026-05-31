@@ -62,6 +62,7 @@ class RucioBridgeProvider:
     """
 
     def __init__(self, *, poller: BridgePoller, resource_url: str) -> None:
+        """Initialize rucio bridge provider."""
         self._resource_url = resource_url.rstrip("/")
         self._poller = poller
         self.store = BridgeStateStore()
