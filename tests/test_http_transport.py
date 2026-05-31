@@ -98,6 +98,22 @@ class TestOAuthMetadataEndpoints:
         ).json()
         assert rfc8414 == site
 
+    def test_rfc9728_protected_resource_path_returns_metadata(
+        self, http_client: TestClient
+    ) -> None:
+        # RFC 9728: for resource http://host/path, well-known URL is
+        # http://host/.well-known/oauth-protected-resource/path
+        resp = http_client.get("/.well-known/oauth-protected-resource/site/escape")
+        assert resp.status_code == 200
+
+    def test_rfc9728_protected_resource_has_authorization_servers(
+        self, http_client: TestClient
+    ) -> None:
+        data = http_client.get(
+            "/.well-known/oauth-protected-resource/site/escape"
+        ).json()
+        assert "authorization_servers" in data or "resource" in data
+
 
 class TestUnauthenticatedAccess:
     def test_mcp_post_without_auth_returns_401(self, http_client: TestClient) -> None:

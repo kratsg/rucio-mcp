@@ -233,22 +233,29 @@ def _make_site_mcp(
     return mcp
 
 
-def _make_rfc8414_route(site_name: str, sub_app: Starlette) -> Route:
-    """Return a Route at RFC 8414 §3 well-known path that forwards to *sub_app*.
+def _make_well_known_proxy_route(
+    parent_path: str, sub_app: Starlette, sub_app_path: str
+) -> Route:
+    """Return a Route at *parent_path* that ASGI-proxies to *sub_app_path* in *sub_app*.
 
-    RFC 8414 §3: for issuer ``https://host/path``, the AS metadata URL is
-    ``https://host/.well-known/oauth-authorization-server/path``, not
-    ``https://host/path/.well-known/oauth-authorization-server``.
-    The mcp library registers the latter form, so this route bridges the gap.
+    Used to register RFC-compliant well-known discovery endpoints on the parent
+    Starlette app when the mcp library registers them at different paths inside
+    the mounted sub-app:
+
+    - RFC 8414 §3: issuer ``http://host/site/name`` → client looks for AS metadata
+      at ``http://host/.well-known/oauth-authorization-server/site/name``;
+      mcp registers it at ``/.well-known/oauth-authorization-server`` in the sub-app.
+    - RFC 9728: resource ``http://host/site/name`` → client looks for protected
+      resource metadata at ``http://host/.well-known/oauth-protected-resource/site/name``;
+      mcp registers it at ``/.well-known/oauth-protected-resource/site/name`` in the sub-app.
     """
-    _wk_path = "/.well-known/oauth-authorization-server"
-    _wk_raw = _wk_path.encode()
+    _raw = sub_app_path.encode()
 
     async def handler(request: Request) -> Response:
         scope: dict[str, Any] = {
             **request.scope,
-            "path": _wk_path,
-            "raw_path": _wk_raw,
+            "path": sub_app_path,
+            "raw_path": _raw,
             "query_string": b"",
         }
         scope.pop("path_params", None)
@@ -275,11 +282,7 @@ def _make_rfc8414_route(site_name: str, sub_app: Starlette) -> Route:
             headers=headers,
         )
 
-    return Route(
-        f"/.well-known/oauth-authorization-server/site/{site_name}",
-        endpoint=handler,
-        methods=["GET"],
-    )
+    return Route(parent_path, endpoint=handler, methods=["GET"])
 
 
 def _make_http_app(
@@ -338,11 +341,25 @@ def _make_http_app(
     mount_routes: list[Mount | Route] = [
         Mount(f"/site/{name}", app=sub) for name, sub in sub_apps
     ]
-    rfc8414_routes: list[Mount | Route] = [
-        _make_rfc8414_route(name, sub) for name, sub in sub_apps
+    # RFC 8414 §3: AS metadata at /.well-known/oauth-authorization-server/site/{name}
+    # RFC 9728: protected resource metadata at /.well-known/oauth-protected-resource/site/{name}
+    well_known_routes: list[Mount | Route] = [
+        _make_well_known_proxy_route(
+            f"/.well-known/oauth-authorization-server/site/{name}",
+            sub,
+            "/.well-known/oauth-authorization-server",
+        )
+        for name, sub in sub_apps
+    ] + [
+        _make_well_known_proxy_route(
+            f"/.well-known/oauth-protected-resource/site/{name}",
+            sub,
+            f"/.well-known/oauth-protected-resource/site/{name}",
+        )
+        for name, sub in sub_apps
     ]
     return Starlette(
-        routes=mount_routes + rfc8414_routes,
+        routes=mount_routes + well_known_routes,
         lifespan=_combined_lifespan,
     )
 
