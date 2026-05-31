@@ -50,6 +50,8 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
+from rucio_mcp.tools._helpers import build_hints, classify_error, get_rucio_client
+
 
 def register(mcp: FastMCP) -> None:
     """Register my tools with the MCP server."""
@@ -64,19 +66,26 @@ def register(mcp: FastMCP) -> None:
         Args:
             param: Description of the parameter.
         """
-        client = ctx.request_context.lifespan_context["rucio_client"]
+        client = get_rucio_client(ctx)
         try:
             result = client.some_method(param)
-            return str(result)
         except Exception as exc:  # noqa: BLE001
-            return f"Error: {exc}"
+            return classify_error(exc)
+        hints = build_hints(["Use `rucio_other_tool` to do the next thing"])
+        return str(result) + hints
 ```
 
 Key conventions:
 
 - Tool names are prefixed with `rucio_` to avoid collisions
 - `ctx` is keyword-only (after `*`)
-- Errors are returned as strings (`"Error: ..."`) — never raised as exceptions
+- Get the client via `get_rucio_client(ctx)` — never access `lifespan_context`
+  directly
+- Errors are returned via `classify_error(exc)` — never raised, never bare
+  `f"Error: {exc}"`
+- Append `build_hints([...])` to guide the LLM on next steps
+- Use `format_dict` / `format_list` / `paginate_iter` from `_helpers.py` for
+  output formatting
 - Write tools must check `check_write_allowed()` from `_helpers.py`
 
 To wire a new module into the server, add it to the import and loop in
