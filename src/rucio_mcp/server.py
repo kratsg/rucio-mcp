@@ -12,14 +12,17 @@ from typing import TYPE_CHECKING, Any
 import uvicorn
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, MutableMapping
+
+    from starlette.requests import Request
 
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.server.fastmcp import FastMCP
 from pydantic import AnyHttpUrl
 from rucio.client import Client
 from starlette.applications import Starlette
-from starlette.routing import Mount
+from starlette.responses import Response
+from starlette.routing import Mount, Route
 
 from rucio_mcp.auth.bridge_provider import RucioBridgeProvider
 from rucio_mcp.auth.bridge_routes import register_bridge_routes
@@ -230,6 +233,55 @@ def _make_site_mcp(
     return mcp
 
 
+def _make_rfc8414_route(site_name: str, sub_app: Starlette) -> Route:
+    """Return a Route at RFC 8414 §3 well-known path that forwards to *sub_app*.
+
+    RFC 8414 §3: for issuer ``https://host/path``, the AS metadata URL is
+    ``https://host/.well-known/oauth-authorization-server/path``, not
+    ``https://host/path/.well-known/oauth-authorization-server``.
+    The mcp library registers the latter form, so this route bridges the gap.
+    """
+    _wk_path = "/.well-known/oauth-authorization-server"
+    _wk_raw = _wk_path.encode()
+
+    async def handler(request: Request) -> Response:
+        scope: dict[str, Any] = {
+            **request.scope,
+            "path": _wk_path,
+            "raw_path": _wk_raw,
+            "query_string": b"",
+        }
+        scope.pop("path_params", None)
+
+        status: list[int] = []
+        resp_headers: list[tuple[bytes, bytes]] = []
+        chunks: list[bytes] = []
+
+        async def receive() -> dict[str, Any]:
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        async def send(message: MutableMapping[str, Any]) -> None:
+            if message["type"] == "http.response.start":
+                status.append(message["status"])
+                resp_headers.extend(message.get("headers", []))
+            elif message["type"] == "http.response.body":
+                chunks.append(message.get("body", b""))
+
+        await sub_app(scope, receive, send)
+        headers = {k.decode("latin-1"): v.decode("latin-1") for k, v in resp_headers}
+        return Response(
+            b"".join(chunks),
+            status_code=status[0] if status else 500,
+            headers=headers,
+        )
+
+    return Route(
+        f"/.well-known/oauth-authorization-server/site/{site_name}",
+        endpoint=handler,
+        methods=["GET"],
+    )
+
+
 def _make_http_app(
     *,
     sites: list[str],
@@ -283,8 +335,14 @@ def _make_http_app(
                 await stack.enter_async_context(mcp.session_manager.run())
             yield
 
+    mount_routes: list[Mount | Route] = [
+        Mount(f"/site/{name}", app=sub) for name, sub in sub_apps
+    ]
+    rfc8414_routes: list[Mount | Route] = [
+        _make_rfc8414_route(name, sub) for name, sub in sub_apps
+    ]
     return Starlette(
-        routes=[Mount(f"/site/{name}", app=sub) for name, sub in sub_apps],
+        routes=mount_routes + rfc8414_routes,
         lifespan=_combined_lifespan,
     )
 

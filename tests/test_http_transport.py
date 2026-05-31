@@ -79,6 +79,25 @@ class TestOAuthMetadataEndpoints:
         resp = http_client.get("/.well-known/oauth-authorization-server")
         assert resp.status_code == 404
 
+    def test_rfc8414_well_known_path_returns_metadata(
+        self, http_client: TestClient
+    ) -> None:
+        # RFC 8414 §3: for issuer http://host/path, well-known URL is
+        # http://host/.well-known/oauth-authorization-server/path
+        resp = http_client.get("/.well-known/oauth-authorization-server/site/escape")
+        assert resp.status_code == 200
+
+    def test_rfc8414_metadata_content_matches_site_metadata(
+        self, http_client: TestClient
+    ) -> None:
+        site = http_client.get(
+            "/site/escape/.well-known/oauth-authorization-server"
+        ).json()
+        rfc8414 = http_client.get(
+            "/.well-known/oauth-authorization-server/site/escape"
+        ).json()
+        assert rfc8414 == site
+
 
 class TestUnauthenticatedAccess:
     def test_mcp_post_without_auth_returns_401(self, http_client: TestClient) -> None:
