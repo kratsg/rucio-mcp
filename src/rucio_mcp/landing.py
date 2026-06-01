@@ -14,8 +14,12 @@ _FAVICON_DATA_URI = (
     + base64.b64encode((_media / "favicon.ico").read_bytes()).decode()
 )
 
-# Rucio logo — inlined as raw SVG markup for perfect scaling and CSS control
-_LOGO_SVG = (_media / "rucio_logo.svg").read_text(encoding="utf-8")
+# Rucio logo — inlined as raw SVG markup; viewBox cropped to the wordmark only
+_LOGO_SVG = (
+    (_media / "rucio_logo.svg")
+    .read_text(encoding="utf-8")
+    .replace('viewBox="0 110 595.28 200"', 'viewBox="75 160 450 100"')
+)
 
 _GITHUB_ICON = (
     '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
@@ -177,7 +181,6 @@ def make_landing_html(
       justify-content: space-between;
       background: var(--surface);
     }}
-    .logo {{ font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }}
     .version {{
       font-family: var(--mono);
       font-size: 11px;
@@ -196,17 +199,15 @@ def make_landing_html(
       padding: 72px 48px 56px;
       width: 100%;
     }}
-    /* ── rucio logo ── */
+    /* ── rucio logo (header) ── */
     .rucio-logo-link {{
-      display: block;
-      width: fit-content;
-      margin: 0 auto 40px;
-      opacity: 0.88;
+      display: flex;
+      align-items: center;
+      opacity: 0.85;
       transition: opacity 200ms ease;
     }}
     .rucio-logo-link:hover {{ opacity: 1; }}
-    .rucio-logo {{ height: 48px; width: auto; display: block; }}
-    .rucio-logo svg {{ height: 48px; width: auto; }}
+    .rucio-logo svg {{ height: 28px; width: auto; display: block; }}
 
     .hero-label {{
       font-size: 11px;
@@ -429,7 +430,9 @@ def make_landing_html(
 </head>
 <body>
   <header>
-    <span class="logo">rucio-mcp</span>
+    <a href="https://rucio.cern.ch/" class="rucio-logo-link" target="_blank" rel="noopener noreferrer" aria-label="Rucio">
+      <span class="rucio-logo">{_LOGO_SVG}</span>
+    </a>
     <div style="display:flex;align-items:center;gap:8px;">
       {mode_badge}
       <span class="version">{version}</span>
@@ -437,10 +440,7 @@ def make_landing_html(
   </header>
 
   <main>
-    <a href="https://rucio.cern.ch/" class="rucio-logo-link fade-in" target="_blank" rel="noopener noreferrer" aria-label="Rucio">
-      <span class="rucio-logo">{_LOGO_SVG}</span>
-    </a>
-    <p class="hero-label fade-in d1">MCP server</p>
+    <p class="hero-label fade-in">MCP server</p>
     <h1 class="fade-in d1">Rucio data management<br>for AI assistants.</h1>
     <p class="subtitle fade-in d2">
       Exposes Rucio data management operations as tools for language models.
