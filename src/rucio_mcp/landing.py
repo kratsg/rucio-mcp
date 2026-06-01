@@ -443,7 +443,7 @@ def make_landing_html(
 
   <footer>
     <span class="footer-text">rucio-mcp &mdash; MCP server for Rucio</span>
-    <span class="footer-text">&copy; Giordon Stark</span>
+    <span class="footer-text">&copy; <a href="https://giordonstark.com/" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:underline;text-underline-offset:3px;">Giordon Stark</a></span>
   </footer>
 
   <script>
