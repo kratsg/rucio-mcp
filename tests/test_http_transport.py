@@ -251,6 +251,30 @@ class TestRootLandingPage:
         resp = http_client.get("/")
         assert "rucio-mcp" in resp.text
 
+    def test_root_does_not_mention_atlas(self, http_client: TestClient) -> None:
+        # The server is generic Rucio, not ATLAS-specific
+        resp = http_client.get("/")
+        assert "ATLAS" not in resp.text
+
+    def test_root_shows_read_write_mode_by_default(
+        self, http_client: TestClient
+    ) -> None:
+        resp = http_client.get("/")
+        assert "read-write" in resp.text.lower() or "read/write" in resp.text.lower()
+
+    def test_root_shows_read_only_when_configured(self, oidc_rucio_cfg: Path) -> None:
+        app = _make_http_app(
+            sites=["escape"],
+            resource_url="http://localhost:8000",
+            read_only=True,
+            host="127.0.0.1",
+            port=8000,
+            rucio_cfg_overrides={"escape": oidc_rucio_cfg},
+        )
+        client = TestClient(app, raise_server_exceptions=True)
+        resp = client.get("/")
+        assert "read-only" in resp.text.lower() or "read only" in resp.text.lower()
+
 
 class TestServeHTTPValidation:
     def test_missing_rucio_cfg_exits_nonzero(self, tmp_path: Path) -> None:

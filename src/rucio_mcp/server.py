@@ -449,6 +449,7 @@ def _make_http_app(
             sites=request.app.state.sites,
             resource_url=request.app.state.resource_url,
             version=_version,
+            read_only=request.app.state.read_only,
         )
         return Response(html, media_type="text/html")
 
@@ -467,6 +468,7 @@ def _make_http_app(
     app.state.bridge_stores = bridge_stores
     app.state.sites = sites
     app.state.resource_url = resource_url
+    app.state.read_only = read_only
     return app
 
 

@@ -51,9 +51,15 @@ def _site_row(site: str, base_url: str) -> str:
       </div>"""
 
 
-def make_landing_html(sites: list[str], resource_url: str, version: str) -> str:
+def make_landing_html(
+    sites: list[str], resource_url: str, version: str, read_only: bool = False
+) -> str:
     """Return the HTML landing page for the given server configuration."""
     site_rows = "\n".join(_site_row(s, resource_url) for s in sites)
+    if read_only:
+        mode_badge = '<span class="mode-badge mode-readonly">read-only</span>'
+    else:
+        mode_badge = '<span class="mode-badge mode-readwrite">read/write</span>'
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -69,6 +75,8 @@ def make_landing_html(sites: list[str], resource_url: str, version: str) -> str:
       --muted:     #787774;
       --badge-bg:  #EDF3EC;
       --badge-fg:  #346538;
+      --ro-bg:     #FBF3DB;
+      --ro-fg:     #956400;
       --sans: 'SF Pro Display', 'Helvetica Neue', system-ui, sans-serif;
       --mono: 'SF Mono', 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
     }}
@@ -193,6 +201,18 @@ def make_landing_html(sites: list[str], resource_url: str, version: str) -> str:
     .copy-btn svg {{ width: 14px; height: 14px; }}
     .copy-btn.copied {{ color: var(--badge-fg); border-color: var(--badge-bg); }}
 
+    /* ── mode badge ── */
+    .mode-badge {{
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 9999px;
+    }}
+    .mode-readwrite {{ background: var(--badge-bg); color: var(--badge-fg); }}
+    .mode-readonly  {{ background: var(--ro-bg);    color: var(--ro-fg); }}
+
     /* ── links ── */
     .links-row {{
       display: grid;
@@ -251,14 +271,17 @@ def make_landing_html(sites: list[str], resource_url: str, version: str) -> str:
 <body>
   <header>
     <span class="logo">rucio-mcp</span>
-    <span class="version">{version}</span>
+    <div style="display:flex;align-items:center;gap:8px;">
+      {mode_badge}
+      <span class="version">{version}</span>
+    </div>
   </header>
 
   <main>
     <p class="hero-label fade-in">MCP server</p>
     <h1 class="fade-in d1">Rucio data management<br>for AI assistants.</h1>
     <p class="subtitle fade-in d2">
-      Exposes ATLAS Rucio operations as tools for language models.
+      Exposes Rucio data management operations as tools for language models.
       Connect your MCP client to a site below.
     </p>
 
