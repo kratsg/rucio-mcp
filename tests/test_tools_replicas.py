@@ -21,7 +21,7 @@ def registered_tools() -> dict[str, Callable[..., Awaitable[str]]]:
     return {tool.name: tool.fn for tool in mcp._tool_manager.list_tools()}
 
 
-class TestRucioListFileReplicas:
+class TestRucioListReplicas:
     async def test_returns_replicas(
         self,
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
@@ -42,7 +42,7 @@ class TestRucioListFileReplicas:
                 }
             ]
         )
-        fn = registered_tools["rucio_list_file_replicas"]
+        fn = registered_tools["rucio_list_replicas"]
         result = await fn("mc16_13TeV:file1.pool.root", ctx=mock_ctx)
         assert "CERN-PROD_DATADISK" in result
         assert "eosatlas.cern.ch" in result
@@ -54,7 +54,7 @@ class TestRucioListFileReplicas:
         mock_rucio_client: MagicMock,
     ) -> None:
         mock_rucio_client.list_replicas.return_value = iter([])
-        fn = registered_tools["rucio_list_file_replicas"]
+        fn = registered_tools["rucio_list_replicas"]
         await fn("mc16_13TeV:file1.pool.root mc16_13TeV:file2.pool.root", ctx=mock_ctx)
         call_args = mock_rucio_client.list_replicas.call_args[0][0]
         assert len(call_args) == 2
@@ -67,7 +67,7 @@ class TestRucioListFileReplicas:
         mock_rucio_client: MagicMock,
     ) -> None:
         mock_rucio_client.list_replicas.return_value = iter([])
-        fn = registered_tools["rucio_list_file_replicas"]
+        fn = registered_tools["rucio_list_replicas"]
         await fn("mc16_13TeV:file1", protocols="root,https", ctx=mock_ctx)
         kwargs = mock_rucio_client.list_replicas.call_args[1]
         assert kwargs["schemes"] == ["root", "https"]
@@ -77,7 +77,7 @@ class TestRucioListFileReplicas:
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
         mock_ctx: MagicMock,
     ) -> None:
-        fn = registered_tools["rucio_list_file_replicas"]
+        fn = registered_tools["rucio_list_replicas"]
         result = await fn("nodidformat", ctx=mock_ctx)
         assert "scope:name" in result
 
@@ -88,7 +88,7 @@ class TestRucioListFileReplicas:
         mock_rucio_client: MagicMock,
     ) -> None:
         mock_rucio_client.list_replicas.return_value = iter([])
-        fn = registered_tools["rucio_list_file_replicas"]
+        fn = registered_tools["rucio_list_replicas"]
         result = await fn("mc16_13TeV:file1", ctx=mock_ctx)
         assert "No replicas" in result
 
@@ -112,7 +112,7 @@ class TestRucioListFileReplicas:
                 }
             ]
         )
-        fn = registered_tools["rucio_list_file_replicas"]
+        fn = registered_tools["rucio_list_replicas"]
         result = await fn("mc16_13TeV:file1.pool.root", ctx=mock_ctx)
         assert "### `mc16_13TeV:file1.pool.root`" in result
         assert "- **CERN-PROD_DATADISK:**" in result
@@ -262,4 +262,4 @@ class TestRucioListContainerReplicas:
         )
         fn = registered_tools["rucio_list_container_replicas"]
         result = await fn("mc16_13TeV:some.container", ctx=mock_ctx)
-        assert "rucio_list_rules" in result
+        assert "rucio_list_did_rules" in result

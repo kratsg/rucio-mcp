@@ -47,7 +47,7 @@ def register(mcp: FastMCP) -> None:
     """Register replica tools with the MCP server."""
 
     @mcp.tool()
-    async def rucio_list_file_replicas(
+    async def rucio_list_replicas(
         dids: str,
         protocols: str = "",
         rse_expression: str = "",
@@ -159,8 +159,8 @@ def register(mcp: FastMCP) -> None:
         page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
         hints = build_hints(
             [
-                f"Use `rucio_list_file_replicas {did}` for per-file PFN details",
-                f"Use `rucio_list_rules {did}` to see replication rules",
+                f"Use `rucio_list_replicas {did}` for per-file PFN details",
+                f"Use `rucio_list_did_rules {did}` to see replication rules",
             ]
         )
         return (
@@ -217,8 +217,8 @@ def register(mcp: FastMCP) -> None:
         page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
         hints = build_hints(
             [
-                f"Use `rucio_list_file_replicas {did}` for per-file PFN details",
-                f"Use `rucio_list_rules {did}` to see replication rules",
+                f"Use `rucio_list_replicas {did}` for per-file PFN details",
+                f"Use `rucio_list_did_rules {did}` to see replication rules",
                 f"If results look incomplete and {did} is a container, use "
                 f"`rucio_list_content {did}` to find child datasets and check their replicas individually.",
             ]

@@ -21,7 +21,7 @@ def registered_tools() -> dict[str, Callable[..., Awaitable[str]]]:
     return {tool.name: tool.fn for tool in mcp._tool_manager.list_tools()}
 
 
-class TestRucioListAccountUsage:
+class TestRucioGetLocalAccountUsage:
     async def test_returns_usage(
         self,
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
@@ -39,7 +39,7 @@ class TestRucioListAccountUsage:
                 }
             ]
         )
-        fn = registered_tools["rucio_list_account_usage"]
+        fn = registered_tools["rucio_get_local_account_usage"]
         result = await fn(ctx=mock_ctx)
         assert "CERN-PROD_DATADISK" in result
         assert "976.56 KB" in result
@@ -51,7 +51,7 @@ class TestRucioListAccountUsage:
         mock_rucio_client: MagicMock,
     ) -> None:
         mock_rucio_client.get_local_account_usage.return_value = iter([])
-        fn = registered_tools["rucio_list_account_usage"]
+        fn = registered_tools["rucio_get_local_account_usage"]
         await fn(account="otheruser", ctx=mock_ctx)
         mock_rucio_client.get_local_account_usage.assert_called_once_with(
             "otheruser", rse=None
@@ -65,7 +65,7 @@ class TestRucioListAccountUsage:
     ) -> None:
         mock_rucio_client.account = "gstark"
         mock_rucio_client.get_local_account_usage.return_value = iter([])
-        fn = registered_tools["rucio_list_account_usage"]
+        fn = registered_tools["rucio_get_local_account_usage"]
         await fn(ctx=mock_ctx)
         mock_rucio_client.get_local_account_usage.assert_called_once_with(
             "gstark", rse=None
@@ -79,7 +79,7 @@ class TestRucioListAccountUsage:
     ) -> None:
         mock_rucio_client.account = "gstark"
         mock_rucio_client.get_local_account_usage.return_value = iter([])
-        fn = registered_tools["rucio_list_account_usage"]
+        fn = registered_tools["rucio_get_local_account_usage"]
         await fn(rse="CERN-PROD_DATADISK", ctx=mock_ctx)
         mock_rucio_client.get_local_account_usage.assert_called_once_with(
             "gstark", rse="CERN-PROD_DATADISK"
@@ -93,7 +93,7 @@ class TestRucioListAccountUsage:
     ) -> None:
         mock_rucio_client.account = "gstark"
         mock_rucio_client.get_local_account_usage.return_value = iter([])
-        fn = registered_tools["rucio_list_account_usage"]
+        fn = registered_tools["rucio_get_local_account_usage"]
         result = await fn(ctx=mock_ctx)
         assert "No account usage" in result
 
@@ -105,12 +105,12 @@ class TestRucioListAccountUsage:
     ) -> None:
         mock_rucio_client.account = "gstark"
         mock_rucio_client.get_local_account_usage.side_effect = RuntimeError("denied")
-        fn = registered_tools["rucio_list_account_usage"]
+        fn = registered_tools["rucio_get_local_account_usage"]
         result = await fn(ctx=mock_ctx)
         assert "Error" in result
 
 
-class TestRucioListAccountLimits:
+class TestRucioGetLocalAccountLimits:
     async def test_returns_limits(
         self,
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
@@ -122,7 +122,7 @@ class TestRucioListAccountLimits:
             "CERN-PROD_DATADISK": 10000000000,
             "BNL-OSG2_DATADISK": 5000000000,
         }
-        fn = registered_tools["rucio_list_account_limits"]
+        fn = registered_tools["rucio_get_local_account_limits"]
         result = await fn(ctx=mock_ctx)
         assert "CERN-PROD_DATADISK" in result
         assert "9.31 GB" in result
@@ -135,7 +135,7 @@ class TestRucioListAccountLimits:
     ) -> None:
         mock_rucio_client.account = "gstark"
         mock_rucio_client.get_local_account_limits.return_value = {}
-        fn = registered_tools["rucio_list_account_limits"]
+        fn = registered_tools["rucio_get_local_account_limits"]
         await fn(ctx=mock_ctx)
         mock_rucio_client.get_local_account_limits.assert_called_once_with("gstark")
 
@@ -149,7 +149,7 @@ class TestRucioListAccountLimits:
         mock_rucio_client.get_account_limits.return_value = {
             "BNL-OSG2_DATADISK": 5000000000,
         }
-        fn = registered_tools["rucio_list_account_limits"]
+        fn = registered_tools["rucio_get_local_account_limits"]
         result = await fn(rse_expression="BNL-OSG2_DATADISK", ctx=mock_ctx)
         mock_rucio_client.get_account_limits.assert_called_once_with(
             "gstark", rse_expression="BNL-OSG2_DATADISK", locality="local"
@@ -166,7 +166,7 @@ class TestRucioListAccountLimits:
         mock_rucio_client.get_account_limits.return_value = {
             "BNL-OSG2_DATADISK": None,
         }
-        fn = registered_tools["rucio_list_account_limits"]
+        fn = registered_tools["rucio_get_local_account_limits"]
         result = await fn(rse_expression="BNL-OSG2_DATADISK", ctx=mock_ctx)
         assert "BNL-OSG2_DATADISK" in result
         assert "none" in result
@@ -179,6 +179,176 @@ class TestRucioListAccountLimits:
     ) -> None:
         mock_rucio_client.account = "gstark"
         mock_rucio_client.get_local_account_limits.side_effect = RuntimeError("denied")
-        fn = registered_tools["rucio_list_account_limits"]
+        fn = registered_tools["rucio_get_local_account_limits"]
         result = await fn(ctx=mock_ctx)
         assert "Error" in result
+
+
+class TestRucioListAccounts:
+    async def test_returns_accounts(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_accounts.return_value = iter(
+            [
+                {"account": "gstark", "account_type": "USER", "status": "ACTIVE"},
+                {"account": "atlas", "account_type": "GROUP", "status": "ACTIVE"},
+            ]
+        )
+        fn = registered_tools["rucio_list_accounts"]
+        result = await fn(ctx=mock_ctx)
+        assert "gstark" in result
+        assert "atlas" in result
+
+    async def test_account_type_filter(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_accounts.return_value = iter([])
+        fn = registered_tools["rucio_list_accounts"]
+        await fn(account_type="USER", ctx=mock_ctx)
+        mock_rucio_client.list_accounts.assert_called_once_with(
+            account_type="USER", identity=None
+        )
+
+    async def test_no_accounts(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_accounts.return_value = iter([])
+        fn = registered_tools["rucio_list_accounts"]
+        result = await fn(ctx=mock_ctx)
+        assert "No accounts" in result
+
+    async def test_error_on_exception(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_accounts.side_effect = RuntimeError("server error")
+        fn = registered_tools["rucio_list_accounts"]
+        result = await fn(ctx=mock_ctx)
+        assert result.startswith("Error:")
+
+
+class TestRucioGetAccount:
+    async def test_returns_account_info(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.account = "gstark"
+        mock_rucio_client.get_account.return_value = {
+            "account": "gstark",
+            "account_type": "USER",
+            "status": "ACTIVE",
+            "email": "g@example.com",
+        }
+        fn = registered_tools["rucio_get_account"]
+        result = await fn(ctx=mock_ctx)
+        assert "gstark" in result
+        assert "USER" in result
+
+    async def test_uses_provided_account(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.get_account.return_value = {"account": "otheruser"}
+        fn = registered_tools["rucio_get_account"]
+        await fn(account="otheruser", ctx=mock_ctx)
+        mock_rucio_client.get_account.assert_called_once_with("otheruser")
+
+    async def test_uses_client_account_when_empty(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.account = "gstark"
+        mock_rucio_client.get_account.return_value = {"account": "gstark"}
+        fn = registered_tools["rucio_get_account"]
+        await fn(ctx=mock_ctx)
+        mock_rucio_client.get_account.assert_called_once_with("gstark")
+
+    async def test_error_on_exception(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.account = "gstark"
+        mock_rucio_client.get_account.side_effect = RuntimeError("not found")
+        fn = registered_tools["rucio_get_account"]
+        result = await fn(ctx=mock_ctx)
+        assert result.startswith("Error:")
+
+
+class TestRucioListAccountRules:
+    async def test_returns_rules(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.account = "gstark"
+        mock_rucio_client.list_replication_rules.return_value = iter(
+            [
+                {
+                    "id": "rule-001",
+                    "state": "OK",
+                    "rse_expression": "CERN-PROD_DATADISK",
+                    "account": "gstark",
+                }
+            ]
+        )
+        fn = registered_tools["rucio_list_account_rules"]
+        result = await fn(ctx=mock_ctx)
+        assert "rule-001" in result
+
+    async def test_uses_client_account_when_empty(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.account = "gstark"
+        mock_rucio_client.list_replication_rules.return_value = iter([])
+        fn = registered_tools["rucio_list_account_rules"]
+        await fn(ctx=mock_ctx)
+        mock_rucio_client.list_replication_rules.assert_called_once_with(
+            filters={"account": "gstark"}
+        )
+
+    async def test_no_rules(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.account = "gstark"
+        mock_rucio_client.list_replication_rules.return_value = iter([])
+        fn = registered_tools["rucio_list_account_rules"]
+        result = await fn(ctx=mock_ctx)
+        assert "No replication rules" in result
+
+    async def test_error_on_exception(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.account = "gstark"
+        mock_rucio_client.list_replication_rules.side_effect = RuntimeError("denied")
+        fn = registered_tools["rucio_list_account_rules"]
+        result = await fn(ctx=mock_ctx)
+        assert result.startswith("Error:")

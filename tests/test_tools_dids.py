@@ -117,7 +117,7 @@ class TestRucioListDids:
         assert "- `mc20_13TeV:" in result
 
 
-class TestRucioStat:
+class TestRucioGetDid:
     async def test_returns_stat(
         self,
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
@@ -131,7 +131,7 @@ class TestRucioStat:
             "bytes": 123456789,
             "length": 100,
         }
-        fn = registered_tools["rucio_stat"]
+        fn = registered_tools["rucio_get_did"]
         result = await fn(
             "mc16_13TeV:mc16_13TeV.700320.Sh_2211_Zee.deriv.DAOD_PHYS.e8351_p5855",
             ctx=mock_ctx,
@@ -150,7 +150,7 @@ class TestRucioStat:
             "name": "some.container",
             "type": "CONTAINER",
         }
-        fn = registered_tools["rucio_stat"]
+        fn = registered_tools["rucio_get_did"]
         result = await fn("mc16_13TeV:some.container", ctx=mock_ctx)
         assert "rucio_list_container_replicas" in result
         assert "rucio_list_content" not in result
@@ -167,7 +167,7 @@ class TestRucioStat:
             "name": "some.dataset",
             "type": "DATASET",
         }
-        fn = registered_tools["rucio_stat"]
+        fn = registered_tools["rucio_get_did"]
         result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
         assert "rucio_list_dataset_replicas" in result
         assert "rucio_get_metadata" not in result
@@ -177,7 +177,7 @@ class TestRucioStat:
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
         mock_ctx: MagicMock,
     ) -> None:
-        fn = registered_tools["rucio_stat"]
+        fn = registered_tools["rucio_get_did"]
         result = await fn("invalid", ctx=mock_ctx)
         assert "scope:name" in result
 
@@ -272,7 +272,7 @@ class TestRucioListFiles:
         )
         fn = registered_tools["rucio_list_files"]
         result = await fn("mc16_13TeV:dataset1", ctx=mock_ctx)
-        assert "rucio_list_file_replicas" in result
+        assert "rucio_list_replicas" in result
 
 
 class TestRucioGetMetadata:
@@ -299,4 +299,4 @@ class TestRucioGetMetadata:
         mock_rucio_client.get_metadata.return_value = {"datatype": "DAOD_PHYS"}
         fn = registered_tools["rucio_get_metadata"]
         result = await fn("mc20_13TeV:somename", ctx=mock_ctx)
-        assert "rucio_stat" in result
+        assert "rucio_get_did" in result

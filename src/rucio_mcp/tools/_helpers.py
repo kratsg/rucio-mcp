@@ -163,12 +163,12 @@ def classify_error(exc: Exception) -> str:
     elif "rulenotfound" in type_lower or "rule not found" in msg_lower:
         guidance = (
             "The rule ID does not exist or has been deleted. "
-            "Use `rucio_list_rules <did>` to find valid rule IDs."
+            "Use `rucio_list_did_rules <did>` to find valid rule IDs."
         )
     elif "duplicaterule" in type_lower or "duplicate rule" in msg_lower:
         guidance = (
             "A rule with the same parameters already exists. "
-            "Use `rucio_list_rules <did>` to inspect the existing rule."
+            "Use `rucio_list_did_rules <did>` to inspect the existing rule."
         )
     elif (
         "insufficientaccountlimit" in type_lower
@@ -177,8 +177,8 @@ def classify_error(exc: Exception) -> str:
     ):
         guidance = (
             "Your account has insufficient quota for this operation. "
-            "Use `rucio_list_account_limits` to check your quotas and "
-            "`rucio_list_account_usage` to see current consumption."
+            "Use `rucio_get_local_account_limits` to check your quotas and "
+            "`rucio_get_local_account_usage` to see current consumption."
         )
     elif (
         "accessdenied" in type_lower

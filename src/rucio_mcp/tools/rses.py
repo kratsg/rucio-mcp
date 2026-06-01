@@ -60,7 +60,7 @@ def register(mcp: FastMCP) -> None:
         hints = build_hints(
             [
                 "Use `rucio_list_rse_attributes <rse>` to see RSE properties (type, tier, country)",
-                "Use `rucio_list_rse_usage <rse>` to check storage capacity",
+                "Use `rucio_get_rse_usage <rse>` to check storage capacity",
             ]
         )
         return lines + footer + hints
@@ -86,12 +86,12 @@ def register(mcp: FastMCP) -> None:
             return classify_error(exc)
 
         hints = build_hints(
-            [f"Use `rucio_list_rse_usage {rse}` to check storage capacity"]
+            [f"Use `rucio_get_rse_usage {rse}` to check storage capacity"]
         )
         return format_dict(result) + hints
 
     @mcp.tool()
-    async def rucio_list_rse_usage(
+    async def rucio_get_rse_usage(
         rse: str,
         *,
         ctx: Context[Any, Any],
@@ -118,3 +118,143 @@ def register(mcp: FastMCP) -> None:
             )
             + hints
         )
+
+    @mcp.tool()
+    async def rucio_get_rse(
+        rse: str,
+        *,
+        ctx: Context[Any, Any],
+    ) -> str:
+        """Show detailed information about a specific RSE.
+
+        Returns RSE type, deterministic flag, volatile flag, and other
+        configuration details for the named storage element.
+
+        Args:
+            rse: The exact RSE name (e.g. ``CERN-PROD_DATADISK``).
+        """
+        client = get_rucio_client(ctx)
+        try:
+            result = client.get_rse(rse)
+        except Exception as exc:  # noqa: BLE001
+            return classify_error(exc)
+
+        hints = build_hints(
+            [
+                f"Use `rucio_list_rse_attributes {rse}` to see RSE properties (type, tier, country)",
+                f"Use `rucio_get_rse_usage {rse}` to check storage capacity",
+            ]
+        )
+        return format_dict(result) + hints
+
+    @mcp.tool()
+    async def rucio_get_rse_limits(
+        rse: str,
+        *,
+        ctx: Context[Any, Any],
+    ) -> str:
+        """Show the configured space limits for an RSE.
+
+        Returns limit entries such as ``MaxBeingDeletedFiles`` and
+        ``MinFreeSpace`` set by the site administrators.
+
+        Args:
+            rse: The exact RSE name (e.g. ``CERN-PROD_DATADISK``).
+        """
+        client = get_rucio_client(ctx)
+        try:
+            results = list(client.get_rse_limits(rse))
+        except Exception as exc:  # noqa: BLE001
+            return classify_error(exc)
+
+        if not results:
+            return "No limits configured for this RSE."
+
+        hints = build_hints(
+            [f"Use `rucio_get_rse_usage {rse}` to check current space consumption"]
+        )
+        return format_list(results) + hints
+
+    @mcp.tool()
+    async def rucio_get_rse_protocols(
+        rse: str,
+        *,
+        ctx: Context[Any, Any],
+    ) -> str:
+        """List the transfer protocols supported by an RSE.
+
+        Returns protocol details including scheme (root, https, srm), hostname,
+        port, and prefix for each supported protocol.
+
+        Args:
+            rse: The exact RSE name (e.g. ``CERN-PROD_DATADISK``).
+        """
+        client = get_rucio_client(ctx)
+        try:
+            result = client.get_protocols(rse)
+        except Exception as exc:  # noqa: BLE001
+            return classify_error(exc)
+
+        hints = build_hints(
+            [f"Use `rucio_list_rse_attributes {rse}` to see RSE properties"]
+        )
+        if isinstance(result, dict):
+            return format_dict(result) + hints
+        return str(result) + hints
+
+    @mcp.tool()
+    async def rucio_get_distance(
+        source: str,
+        destination: str,
+        *,
+        ctx: Context[Any, Any],
+    ) -> str:
+        """Show the network distance (ranking) between two RSEs.
+
+        The distance ranking is used by Rucio's transfer scheduler to prefer
+        closer RSEs when choosing a data source. Lower ranking = closer.
+
+        Args:
+            source: The source RSE name (e.g. ``CERN-PROD_DATADISK``).
+            destination: The destination RSE name.
+        """
+        client = get_rucio_client(ctx)
+        try:
+            results = client.get_distance(source, destination)
+        except Exception as exc:  # noqa: BLE001
+            return classify_error(exc)
+
+        if not results:
+            return f"No distance information found between {source} and {destination}."
+
+        hints = build_hints(["Use `rucio_list_rses` to find valid RSE names"])
+        return format_list(results) + hints
+
+    @mcp.tool()
+    async def rucio_list_transfer_limits(
+        limit: int = 100,
+        offset: int = 0,
+        *,
+        ctx: Context[Any, Any],
+    ) -> str:
+        """List global transfer limit policies.
+
+        Returns the transfer limit entries that constrain concurrent transfers
+        by activity and RSE.
+
+        Args:
+            limit: Maximum number of entries to return (default 100).
+            offset: Number of entries to skip for pagination.
+        """
+        client = get_rucio_client(ctx)
+        try:
+            it = client.list_transfer_limits()
+            results, footer = paginate_iter(it, limit=limit, offset=offset)
+        except Exception as exc:  # noqa: BLE001
+            return classify_error(exc)
+
+        if not results:
+            return "No transfer limits configured."
+
+        hints = build_hints(["Use `rucio_list_rses` to look up RSE details"])
+        return format_list(results) + footer + hints
