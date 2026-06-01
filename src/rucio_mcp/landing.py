@@ -192,7 +192,7 @@ def make_landing_html(
       flex: 1;
       max-width: 860px;
       margin: 0 auto;
-      padding: 72px 48px 56px;
+      padding: 24px 48px 56px;
       width: 100%;
     }}
     /* ── rucio logo (header) ── */
