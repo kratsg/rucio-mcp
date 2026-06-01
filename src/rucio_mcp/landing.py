@@ -418,7 +418,7 @@ def make_landing_html(
 
     {_quick_start_section(sites, resource_url)}
 
-    <p class="section-label fade-in d3">Configured sites</p>
+    <p class="section-label fade-in d3">Configured OIDC sites</p>
     <div class="sites-list fade-in d3">
 {site_rows}
     </div>
