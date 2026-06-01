@@ -5,16 +5,17 @@ from __future__ import annotations
 import base64
 from importlib.resources import files as _pkg_files
 
+_media = _pkg_files("rucio_mcp.data") / "media" / "images"
 
-# Rucio assets embedded as base64 data URIs — no static-file route needed.
+# favicon — PNG embedded as data URI (no static-file route needed)
 # Source + license: src/rucio_mcp/data/media/images/README.md
-def _b64_data_uri(filename: str, mime: str) -> str:
-    data = (_pkg_files("rucio_mcp.data") / "media" / "images" / filename).read_bytes()
-    return f"data:{mime};base64,{base64.b64encode(data).decode()}"
+_FAVICON_DATA_URI = (
+    "data:image/png;base64,"
+    + base64.b64encode((_media / "favicon.ico").read_bytes()).decode()
+)
 
-
-_FAVICON_DATA_URI = _b64_data_uri("favicon.ico", "image/png")
-_LOGO_DATA_URI = _b64_data_uri("logo.png", "image/png")
+# Rucio logo — inlined as raw SVG markup for perfect scaling and CSS control
+_LOGO_SVG = (_media / "rucio_logo.svg").read_text(encoding="utf-8")
 
 _GITHUB_ICON = (
     '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
@@ -204,7 +205,8 @@ def make_landing_html(
       transition: opacity 200ms ease;
     }}
     .rucio-logo-link:hover {{ opacity: 1; }}
-    .rucio-logo {{ height: 52px; width: auto; display: block; }}
+    .rucio-logo {{ height: 48px; width: auto; display: block; }}
+    .rucio-logo svg {{ height: 48px; width: auto; }}
 
     .hero-label {{
       font-size: 11px;
@@ -435,8 +437,8 @@ def make_landing_html(
   </header>
 
   <main>
-    <a href="https://rucio.cern.ch/" class="rucio-logo-link fade-in" target="_blank" rel="noopener noreferrer">
-      <img src="{_LOGO_DATA_URI}" alt="Rucio" class="rucio-logo">
+    <a href="https://rucio.cern.ch/" class="rucio-logo-link fade-in" target="_blank" rel="noopener noreferrer" aria-label="Rucio">
+      <span class="rucio-logo">{_LOGO_SVG}</span>
     </a>
     <p class="hero-label fade-in d1">MCP server</p>
     <h1 class="fade-in d1">Rucio data management<br>for AI assistants.</h1>
