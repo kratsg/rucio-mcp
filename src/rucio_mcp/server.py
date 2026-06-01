@@ -446,6 +446,11 @@ def _make_http_app(
         lifespan=_combined_lifespan,
         middleware=[Middleware(PrometheusMiddleware, filter_unhandled_paths=True)],
     )
+    # Prevent 307 redirects for /site/{name} → /site/{name}/. Without this,
+    # nginx ingresses that strip trailing slashes cause an infinite redirect
+    # loop: Starlette redirects POST /site/escape → /site/escape/, nginx strips
+    # the slash, pod sees /site/escape again → repeat forever.
+    app.router.redirect_slashes = False
     app.state.bridge_stores = bridge_stores
     return app
 
