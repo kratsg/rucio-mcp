@@ -1,0 +1,308 @@
+"""HTML landing page for the rucio-mcp HTTP server root."""
+
+from __future__ import annotations
+
+_GITHUB_ICON = (
+    '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
+    '<path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217'
+    ".682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.342-3.369-1.342-.454-1.155"
+    "-1.11-1.462-1.11-1.462-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03"
+    ".892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11"
+    "-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 "
+    ".84-.269 2.75 1.025A9.578 9.578 0 0 1 12 6.836c.85.004 1.705.114 2.504.336 "
+    "1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.202 2.394.1 2.647.64.699 1.028 "
+    "1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 "
+    "0 1.336-.012 2.415-.012 2.743 0 .267.18.579.688.481C19.138 20.163 22 16.418 "
+    '22 12c0-5.523-4.477-10-10-10z"/></svg>'
+)
+
+_BOOK_ICON = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" '
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    '<path d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 '
+    "8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 "
+    "0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25"
+    '"/></svg>'
+)
+
+_COPY_ICON = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" '
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    '<rect x="9" y="9" width="13" height="13" rx="2"/>'
+    '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'
+    "</svg>"
+)
+
+
+def _site_row(site: str, base_url: str) -> str:
+    mcp_url = base_url.rstrip("/") + f"/site/{site}"
+    return f"""
+      <div class="site-card">
+        <div class="site-info">
+          <div class="site-name">{site}</div>
+          <div class="site-url" id="url-{site}">{mcp_url}</div>
+        </div>
+        <div class="site-right">
+          <span class="site-badge">oidc</span>
+          <button class="copy-btn" onclick="copyUrl('{site}')" title="Copy MCP URL">
+            {_COPY_ICON}
+          </button>
+        </div>
+      </div>"""
+
+
+def make_landing_html(sites: list[str], resource_url: str, version: str) -> str:
+    """Return the HTML landing page for the given server configuration."""
+    site_rows = "\n".join(_site_row(s, resource_url) for s in sites)
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>rucio-mcp</title>
+  <style>
+    :root {{
+      --canvas:    #FBFBFA;
+      --surface:   #FFFFFF;
+      --border:    #EAEAEA;
+      --text:      #111111;
+      --muted:     #787774;
+      --badge-bg:  #EDF3EC;
+      --badge-fg:  #346538;
+      --sans: 'SF Pro Display', 'Helvetica Neue', system-ui, sans-serif;
+      --mono: 'SF Mono', 'Geist Mono', 'JetBrains Mono', ui-monospace, monospace;
+    }}
+    *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{
+      font-family: var(--sans);
+      background: var(--canvas);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }}
+    a {{ color: inherit; text-decoration: none; }}
+
+    /* ── header ── */
+    header {{
+      border-bottom: 1px solid var(--border);
+      padding: 20px 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+    }}
+    .logo {{ font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }}
+    .version {{
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      background: var(--canvas);
+      border: 1px solid var(--border);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }}
+
+    /* ── main ── */
+    main {{
+      flex: 1;
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 72px 48px 56px;
+      width: 100%;
+    }}
+    .hero-label {{
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }}
+    h1 {{
+      font-size: 40px;
+      font-weight: 500;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 14px;
+    }}
+    .subtitle {{
+      font-size: 15px;
+      color: var(--muted);
+      max-width: 480px;
+      margin-bottom: 56px;
+    }}
+
+    /* ── sites ── */
+    .section-label {{
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }}
+    .sites-list {{
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 48px;
+    }}
+    .site-card {{
+      background: var(--surface);
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      transition: background 150ms ease;
+    }}
+    .site-card:last-child {{ border-bottom: none; }}
+    .site-card:hover {{ background: var(--canvas); }}
+    .site-name {{ font-size: 14px; font-weight: 500; margin-bottom: 3px; }}
+    .site-url {{
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+    }}
+    .site-right {{ display: flex; align-items: center; gap: 12px; }}
+    .site-badge {{
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      background: var(--badge-bg);
+      color: var(--badge-fg);
+      padding: 3px 10px;
+      border-radius: 9999px;
+    }}
+    .copy-btn {{
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px;
+      cursor: pointer;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      transition: color 150ms ease, border-color 150ms ease;
+      position: relative;
+    }}
+    .copy-btn:hover {{ color: var(--text); border-color: #ccc; }}
+    .copy-btn svg {{ width: 14px; height: 14px; }}
+    .copy-btn.copied {{ color: var(--badge-fg); border-color: var(--badge-bg); }}
+
+    /* ── links ── */
+    .links-row {{
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 0;
+    }}
+    .link-card {{
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      transition: box-shadow 200ms ease, background 150ms ease;
+      cursor: pointer;
+    }}
+    .link-card:hover {{
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      background: var(--surface);
+    }}
+    .link-icon {{
+      width: 20px;
+      height: 20px;
+      color: var(--muted);
+      flex-shrink: 0;
+    }}
+    .link-title {{ font-size: 14px; font-weight: 500; margin-bottom: 2px; }}
+    .link-desc {{ font-size: 12px; color: var(--muted); }}
+
+    /* ── footer ── */
+    footer {{
+      border-top: 1px solid var(--border);
+      padding: 16px 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--surface);
+    }}
+    .footer-text {{ font-size: 12px; color: var(--muted); }}
+
+    /* ── animations ── */
+    .fade-in {{
+      opacity: 0;
+      transform: translateY(10px);
+      animation: fadeUp 500ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }}
+    .site-card {{ --index: 0; }}
+    @keyframes fadeUp {{ to {{ opacity: 1; transform: translateY(0); }} }}
+    .d1 {{ animation-delay: 60ms; }}
+    .d2 {{ animation-delay: 120ms; }}
+    .d3 {{ animation-delay: 180ms; }}
+    .d4 {{ animation-delay: 240ms; }}
+  </style>
+</head>
+<body>
+  <header>
+    <span class="logo">rucio-mcp</span>
+    <span class="version">{version}</span>
+  </header>
+
+  <main>
+    <p class="hero-label fade-in">MCP server</p>
+    <h1 class="fade-in d1">Rucio data management<br>for AI assistants.</h1>
+    <p class="subtitle fade-in d2">
+      Exposes ATLAS Rucio operations as tools for language models.
+      Connect your MCP client to a site below.
+    </p>
+
+    <p class="section-label fade-in d2">Configured sites</p>
+    <div class="sites-list fade-in d3">
+{site_rows}
+    </div>
+
+    <div class="links-row fade-in d4">
+      <a href="https://rucio-mcp.readthedocs.io/" class="link-card" target="_blank" rel="noopener noreferrer">
+        <span class="link-icon">{_BOOK_ICON}</span>
+        <div>
+          <div class="link-title">Documentation</div>
+          <div class="link-desc">Setup guides, OAuth flow, API reference</div>
+        </div>
+      </a>
+      <a href="https://github.com/kratsg/rucio-mcp" class="link-card" target="_blank" rel="noopener noreferrer">
+        <span class="link-icon">{_GITHUB_ICON}</span>
+        <div>
+          <div class="link-title">GitHub</div>
+          <div class="link-desc">Source code, issues, releases</div>
+        </div>
+      </a>
+    </div>
+  </main>
+
+  <footer>
+    <span class="footer-text">rucio-mcp &mdash; MCP server for Rucio</span>
+    <span class="footer-text">&copy; Giordon Stark</span>
+  </footer>
+
+  <script>
+    function copyUrl(site) {{
+      const el = document.getElementById('url-' + site);
+      if (!el) return;
+      navigator.clipboard.writeText(el.textContent.trim()).then(() => {{
+        const btn = el.closest('.site-card').querySelector('.copy-btn');
+        if (btn) {{
+          btn.classList.add('copied');
+          setTimeout(() => btn.classList.remove('copied'), 1500);
+        }}
+      }});
+    }}
+  </script>
+</body>
+</html>
+"""

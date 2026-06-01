@@ -218,6 +218,40 @@ class TestMetricsEndpoint:
         assert "starlette_requests_total" in resp.text
 
 
+class TestRootLandingPage:
+    def test_root_returns_200(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert resp.status_code == 200
+
+    def test_root_content_type_is_html(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "text/html" in resp.headers["content-type"]
+
+    def test_root_contains_site_name(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "escape" in resp.text
+
+    def test_root_contains_site_mcp_url(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "/site/escape" in resp.text
+
+    def test_root_contains_github_link(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "github.com/kratsg/rucio-mcp" in resp.text
+
+    def test_root_contains_docs_link(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "rucio-mcp.readthedocs.io" in resp.text
+
+    def test_root_contains_copyright(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "Giordon Stark" in resp.text
+
+    def test_root_contains_version(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "rucio-mcp" in resp.text
+
+
 class TestServeHTTPValidation:
     def test_missing_rucio_cfg_exits_nonzero(self, tmp_path: Path) -> None:
         with pytest.raises(SystemExit) as exc_info:

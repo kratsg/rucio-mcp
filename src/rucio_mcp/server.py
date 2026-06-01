@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 from contextlib import AsyncExitStack, asynccontextmanager
+from importlib.metadata import version as _pkg_version
 from importlib.resources import files as _pkg_files
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -31,6 +32,7 @@ from rucio_mcp.auth.factory import BearerTokenClientFactory, EnvBasedClientFacto
 from rucio_mcp.auth.rucio_cfg import RucioCfg
 from rucio_mcp.auth.rucio_oidc_poller import RucioOidcPoller
 from rucio_mcp.auth.session_cache import SessionCache
+from rucio_mcp.landing import make_landing_html
 from rucio_mcp.metrics import PrometheusMiddleware, metrics_handler
 from rucio_mcp.nomenclature import ATLAS_NOMENCLATURE
 from rucio_mcp.presets import PRESETS
@@ -440,6 +442,17 @@ def _make_http_app(
                 "/token", _first_sub, "/token", methods=["POST"]
             )
         )
+    _version = _pkg_version("rucio-mcp")
+
+    async def root_handler(request: Request) -> Response:
+        html = make_landing_html(
+            sites=request.app.state.sites,
+            resource_url=request.app.state.resource_url,
+            version=_version,
+        )
+        return Response(html, media_type="text/html")
+
+    routes.append(Route("/", endpoint=root_handler, methods=["GET"]))
     routes.append(Route("/metrics", endpoint=metrics_handler, methods=["GET"]))
     app = Starlette(
         routes=routes,
@@ -452,6 +465,8 @@ def _make_http_app(
     # the slash, pod sees /site/escape again → repeat forever.
     app.router.redirect_slashes = False
     app.state.bridge_stores = bridge_stores
+    app.state.sites = sites
+    app.state.resource_url = resource_url
     return app
 
 
