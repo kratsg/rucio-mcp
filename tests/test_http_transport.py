@@ -218,6 +218,96 @@ class TestMetricsEndpoint:
         assert "starlette_requests_total" in resp.text
 
 
+class TestRootLandingPage:
+    def test_root_returns_200(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert resp.status_code == 200
+
+    def test_root_content_type_is_html(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "text/html" in resp.headers["content-type"]
+
+    def test_root_contains_site_name(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "escape" in resp.text
+
+    def test_root_contains_site_mcp_url(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "/site/escape" in resp.text
+
+    def test_root_contains_github_link(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "github.com/kratsg/rucio-mcp" in resp.text
+
+    def test_root_contains_docs_link(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "rucio-mcp.readthedocs.io" in resp.text
+
+    def test_root_contains_copyright(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "Giordon Stark" in resp.text
+
+    def test_root_contains_version(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "rucio-mcp" in resp.text
+
+    def test_root_does_not_mention_atlas(self, http_client: TestClient) -> None:
+        # The server is generic Rucio, not ATLAS-specific
+        resp = http_client.get("/")
+        assert "ATLAS" not in resp.text
+
+    def test_root_shows_read_write_mode_by_default(
+        self, http_client: TestClient
+    ) -> None:
+        resp = http_client.get("/")
+        assert "read-write" in resp.text.lower() or "read/write" in resp.text.lower()
+
+    def test_root_shows_read_only_when_configured(self, oidc_rucio_cfg: Path) -> None:
+        app = _make_http_app(
+            sites=["escape"],
+            resource_url="http://localhost:8000",
+            read_only=True,
+            host="127.0.0.1",
+            port=8000,
+            rucio_cfg_overrides={"escape": oidc_rucio_cfg},
+        )
+        client = TestClient(app, raise_server_exceptions=True)
+        resp = client.get("/")
+        assert "read-only" in resp.text.lower() or "read only" in resp.text.lower()
+
+    def test_root_quick_start_shows_claude_command(
+        self, http_client: TestClient
+    ) -> None:
+        resp = http_client.get("/")
+        assert "claude mcp add" in resp.text
+
+    def test_root_quick_start_shows_codex_command(
+        self, http_client: TestClient
+    ) -> None:
+        resp = http_client.get("/")
+        assert "codex mcp add" in resp.text
+
+    def test_root_quick_start_shows_gemini_command(
+        self, http_client: TestClient
+    ) -> None:
+        resp = http_client.get("/")
+        assert "gemini mcp add" in resp.text
+
+    def test_root_quick_start_shows_opencode_command(
+        self, http_client: TestClient
+    ) -> None:
+        resp = http_client.get("/")
+        assert "opencode mcp add" in resp.text
+
+    def test_root_quick_start_contains_site_url(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "localhost:8000/site/escape" in resp.text
+
+    def test_root_contains_rucio_logo_link(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "rucio.cern.ch" in resp.text
+
+
 class TestServeHTTPValidation:
     def test_missing_rucio_cfg_exits_nonzero(self, tmp_path: Path) -> None:
         with pytest.raises(SystemExit) as exc_info:
