@@ -416,12 +416,12 @@ def make_landing_html(
       Connect your MCP client to a site below.
     </p>
 
-    <p class="section-label fade-in d2">Configured sites</p>
+    {_quick_start_section(sites, resource_url)}
+
+    <p class="section-label fade-in d3">Configured sites</p>
     <div class="sites-list fade-in d3">
 {site_rows}
     </div>
-
-    {_quick_start_section(sites, resource_url)}
 
     <div class="links-row fade-in d4">
       <a href="https://rucio-mcp.readthedocs.io/" class="link-card" target="_blank" rel="noopener noreferrer">
