@@ -275,6 +275,34 @@ class TestRootLandingPage:
         resp = client.get("/")
         assert "read-only" in resp.text.lower() or "read only" in resp.text.lower()
 
+    def test_root_quick_start_shows_claude_command(
+        self, http_client: TestClient
+    ) -> None:
+        resp = http_client.get("/")
+        assert "claude mcp add" in resp.text
+
+    def test_root_quick_start_shows_codex_command(
+        self, http_client: TestClient
+    ) -> None:
+        resp = http_client.get("/")
+        assert "codex mcp add" in resp.text
+
+    def test_root_quick_start_shows_gemini_command(
+        self, http_client: TestClient
+    ) -> None:
+        resp = http_client.get("/")
+        assert "gemini mcp add" in resp.text
+
+    def test_root_quick_start_shows_opencode_command(
+        self, http_client: TestClient
+    ) -> None:
+        resp = http_client.get("/")
+        assert "opencode mcp add" in resp.text
+
+    def test_root_quick_start_contains_site_url(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "localhost:8000/site/escape" in resp.text
+
 
 class TestServeHTTPValidation:
     def test_missing_rucio_cfg_exits_nonzero(self, tmp_path: Path) -> None:

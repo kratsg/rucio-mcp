@@ -34,6 +34,66 @@ _COPY_ICON = (
 )
 
 
+_CLIENTS = [
+    ("claude", "Claude Code", "claude mcp add --transport http {name} {url}"),
+    ("codex", "Codex", "codex mcp add {name} --url {url}"),
+    ("gemini", "Gemini", "gemini mcp add --transport http {name} {url}"),
+    ("opencode", "OpenCode", "opencode mcp add {name} {url}"),
+]
+
+
+def _quick_start_section(sites: list[str], base_url: str) -> str:
+    """Render a tabbed quick-start block with one install command per client."""
+    first_url = base_url.rstrip("/") + f"/site/{sites[0]}"
+    first_name = f"rucio-{sites[0]}"
+
+    # Site selector (only shown when multiple sites are configured)
+    if len(sites) > 1:
+        options = "\n".join(
+            f'          <option value="{base_url.rstrip("/")}/site/{s}" '
+            f'data-name="rucio-{s}">{s}</option>'
+            for s in sites
+        )
+        site_select = f"""
+        <div class="qs-site-select">
+          <label class="qs-site-label" for="qs-site">Site</label>
+          <select id="qs-site" class="qs-select" onchange="qsSiteChange(this)">
+{options}
+          </select>
+        </div>"""
+    else:
+        site_select = ""
+
+    # One hidden <code> block per client; JS swaps visibility on tab click
+    cmd_blocks = "\n".join(
+        f'      <div class="qs-cmd{" qs-active" if i == 0 else ""}" '
+        f'id="qs-cmd-{cid}" data-tpl="{tpl}">'
+        f'<code class="qs-code" id="qs-code-{cid}">'
+        f"{tpl.format(name=first_name, url=first_url)}"
+        f"</code>"
+        f'<button class="copy-btn qs-copy" onclick="qsCopy(\'{cid}\')" title="Copy">'
+        f"{_COPY_ICON}</button></div>"
+        for i, (cid, _label, tpl) in enumerate(_CLIENTS)
+    )
+
+    tabs = "\n".join(
+        f'      <button class="qs-tab{" qs-tab-active" if i == 0 else ""}" '
+        f'data-client="{cid}" onclick="qsTab(\'{cid}\')">{label}</button>'
+        for i, (cid, label, _) in enumerate(_CLIENTS)
+    )
+
+    return f"""
+    <div class="qs-block fade-in d3">{site_select}
+      <p class="section-label" style="margin-bottom:12px;">Quick start</p>
+      <div class="qs-tabs">
+{tabs}
+      </div>
+      <div class="qs-body">
+{cmd_blocks}
+      </div>
+    </div>"""
+
+
 def _site_row(site: str, base_url: str) -> str:
     mcp_url = base_url.rstrip("/") + f"/site/{site}"
     return f"""
@@ -254,6 +314,77 @@ def make_landing_html(
     }}
     .footer-text {{ font-size: 12px; color: var(--muted); }}
 
+    /* ── quick start ── */
+    .qs-block {{ margin-bottom: 48px; }}
+    .qs-site-select {{
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }}
+    .qs-site-label {{
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }}
+    .qs-select {{
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      cursor: pointer;
+    }}
+    .qs-tabs {{
+      display: flex;
+      gap: 2px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 0;
+    }}
+    .qs-tab {{
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      padding: 8px 14px;
+      cursor: pointer;
+      margin-bottom: -1px;
+      transition: color 150ms ease, border-color 150ms ease;
+    }}
+    .qs-tab:hover {{ color: var(--text); }}
+    .qs-tab-active {{ color: var(--text); border-bottom-color: var(--text); }}
+    .qs-body {{
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 8px 8px;
+      overflow: hidden;
+    }}
+    .qs-cmd {{
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      background: var(--surface);
+    }}
+    .qs-active {{ display: flex; }}
+    .qs-code {{
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+    }}
+
     /* ── animations ── */
     .fade-in {{
       opacity: 0;
@@ -290,6 +421,8 @@ def make_landing_html(
 {site_rows}
     </div>
 
+    {_quick_start_section(sites, resource_url)}
+
     <div class="links-row fade-in d4">
       <a href="https://rucio-mcp.readthedocs.io/" class="link-card" target="_blank" rel="noopener noreferrer">
         <span class="link-icon">{_BOOK_ICON}</span>
@@ -323,6 +456,36 @@ def make_landing_html(
           btn.classList.add('copied');
           setTimeout(() => btn.classList.remove('copied'), 1500);
         }}
+      }});
+    }}
+
+    function qsTab(clientId) {{
+      document.querySelectorAll('.qs-tab').forEach(t =>
+        t.classList.toggle('qs-tab-active', t.dataset.client === clientId));
+      document.querySelectorAll('.qs-cmd').forEach(c =>
+        c.classList.toggle('qs-active', c.id === 'qs-cmd-' + clientId));
+    }}
+
+    function qsCopy(clientId) {{
+      const el = document.getElementById('qs-code-' + clientId);
+      if (!el) return;
+      navigator.clipboard.writeText(el.textContent.trim()).then(() => {{
+        const btn = document.querySelector('#qs-cmd-' + clientId + ' .qs-copy');
+        if (btn) {{
+          btn.classList.add('copied');
+          setTimeout(() => btn.classList.remove('copied'), 1500);
+        }}
+      }});
+    }}
+
+    function qsSiteChange(sel) {{
+      const url = sel.value;
+      const name = sel.options[sel.selectedIndex].dataset.name;
+      document.querySelectorAll('.qs-cmd').forEach(cmd => {{
+        const tpl = cmd.dataset.tpl;
+        const cid = cmd.id.replace('qs-cmd-', '');
+        const code = document.getElementById('qs-code-' + cid);
+        if (code && tpl) code.textContent = tpl.replace('{{name}}', name).replace('{{url}}', url);
       }});
     }}
   </script>
