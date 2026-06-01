@@ -14,12 +14,8 @@ _FAVICON_DATA_URI = (
     + base64.b64encode((_media / "favicon.ico").read_bytes()).decode()
 )
 
-# Rucio logo — inlined as raw SVG markup; viewBox cropped to the wordmark only
-_LOGO_SVG = (
-    (_media / "rucio_logo.svg")
-    .read_text(encoding="utf-8")
-    .replace('viewBox="0 110 595.28 200"', 'viewBox="75 160 450 100"')
-)
+# Rucio logo — inlined as raw SVG markup for perfect scaling and CSS control
+_LOGO_SVG = (_media / "rucio_logo.svg").read_text(encoding="utf-8")
 
 _GITHUB_ICON = (
     '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
