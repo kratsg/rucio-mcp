@@ -303,6 +303,10 @@ class TestRootLandingPage:
         resp = http_client.get("/")
         assert "localhost:8000/site/escape" in resp.text
 
+    def test_root_contains_rucio_logo_link(self, http_client: TestClient) -> None:
+        resp = http_client.get("/")
+        assert "rucio.cern.ch" in resp.text
+
 
 class TestServeHTTPValidation:
     def test_missing_rucio_cfg_exits_nonzero(self, tmp_path: Path) -> None:

@@ -5,15 +5,16 @@ from __future__ import annotations
 import base64
 from importlib.resources import files as _pkg_files
 
-# Rucio favicon embedded as a base64 data URI so no static-file route is needed.
-# Source: https://github.com/rucio/rucio/blob/2a38611/lib/rucio/web/ui/media/favicon.ico
-# License: Apache License 2.0 — see src/rucio_mcp/data/media/images/README.md
-_FAVICON_DATA_URI = (
-    "data:image/png;base64,"
-    + base64.b64encode(
-        (_pkg_files("rucio_mcp.data") / "media" / "images" / "favicon.ico").read_bytes()
-    ).decode()
-)
+
+# Rucio assets embedded as base64 data URIs — no static-file route needed.
+# Source + license: src/rucio_mcp/data/media/images/README.md
+def _b64_data_uri(filename: str, mime: str) -> str:
+    data = (_pkg_files("rucio_mcp.data") / "media" / "images" / filename).read_bytes()
+    return f"data:{mime};base64,{base64.b64encode(data).decode()}"
+
+
+_FAVICON_DATA_URI = _b64_data_uri("favicon.ico", "image/png")
+_LOGO_DATA_URI = _b64_data_uri("logo.png", "image/png")
 
 _GITHUB_ICON = (
     '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
@@ -194,6 +195,17 @@ def make_landing_html(
       padding: 72px 48px 56px;
       width: 100%;
     }}
+    /* ── rucio logo ── */
+    .rucio-logo-link {{
+      display: block;
+      width: fit-content;
+      margin: 0 auto 40px;
+      opacity: 0.88;
+      transition: opacity 200ms ease;
+    }}
+    .rucio-logo-link:hover {{ opacity: 1; }}
+    .rucio-logo {{ height: 52px; width: auto; display: block; }}
+
     .hero-label {{
       font-size: 11px;
       font-weight: 500;
@@ -423,7 +435,10 @@ def make_landing_html(
   </header>
 
   <main>
-    <p class="hero-label fade-in">MCP server</p>
+    <a href="https://rucio.cern.ch/" class="rucio-logo-link fade-in" target="_blank" rel="noopener noreferrer">
+      <img src="{_LOGO_DATA_URI}" alt="Rucio" class="rucio-logo">
+    </a>
+    <p class="hero-label fade-in d1">MCP server</p>
     <h1 class="fade-in d1">Rucio data management<br>for AI assistants.</h1>
     <p class="subtitle fade-in d2">
       Exposes Rucio data management operations as tools for language models.
