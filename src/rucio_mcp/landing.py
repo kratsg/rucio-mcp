@@ -2,6 +2,19 @@
 
 from __future__ import annotations
 
+import base64
+from importlib.resources import files as _pkg_files
+
+# Rucio favicon embedded as a base64 data URI so no static-file route is needed.
+# Source: https://github.com/rucio/rucio/blob/2a38611/lib/rucio/web/ui/media/favicon.ico
+# License: Apache License 2.0 — see src/rucio_mcp/data/media/images/README.md
+_FAVICON_DATA_URI = (
+    "data:image/png;base64,"
+    + base64.b64encode(
+        (_pkg_files("rucio_mcp.data") / "media" / "images" / "favicon.ico").read_bytes()
+    ).decode()
+)
+
 _GITHUB_ICON = (
     '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">'
     '<path d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217'
@@ -126,6 +139,7 @@ def make_landing_html(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>rucio-mcp</title>
+  <link rel="icon" type="image/png" href="{_FAVICON_DATA_URI}">
   <style>
     :root {{
       --canvas:    #FBFBFA;
