@@ -163,6 +163,20 @@ class TestUnauthenticatedAccess:
         )
         assert "WWW-Authenticate" in resp.headers
 
+    def test_mcp_post_without_trailing_slash_does_not_redirect(
+        self, http_client: TestClient
+    ) -> None:
+        # Nginx ingresses commonly strip trailing slashes before forwarding to the
+        # pod. If Starlette issues a 307 for /site/escape → /site/escape/, and the
+        # ingress strips the slash again, the client loops forever. Verify that
+        # /site/escape (no trailing slash) is handled directly — not redirected.
+        resp = http_client.post(
+            "/site/escape",
+            json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
+            follow_redirects=False,
+        )
+        assert resp.status_code != 307
+
 
 class TestBridgeRoutesRegistered:
     def test_bridge_page_route_exists(self, http_client: TestClient) -> None:
