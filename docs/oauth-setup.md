@@ -195,12 +195,12 @@ Standard Starlette HTTP counters are exported for every matched route:
 
 rucio-mcp adds per-tool call metrics and live bridge/cache gauges:
 
-| Metric                                    | Labels           | Description                                                |
-| ----------------------------------------- | ---------------- | ---------------------------------------------------------- |
-| `rucio_mcp_tool_calls_total`              | `site`, `tool`   | Total MCP tool invocations                                 |
-| `rucio_mcp_tool_call_duration_seconds`    | `site`, `tool`   | Tool execution time histogram                              |
-| `rucio_mcp_bridge_sessions`              | `site`, `status` | In-flight OAuth bridge sessions (`pending`/`done`/`error`) |
-| `rucio_mcp_cached_clients`               | `site`           | Cached Rucio client instances (one per active MCP session) |
+| Metric                                 | Labels           | Description                                                |
+| -------------------------------------- | ---------------- | ---------------------------------------------------------- |
+| `rucio_mcp_tool_calls_total`           | `site`, `tool`   | Total MCP tool invocations                                 |
+| `rucio_mcp_tool_call_duration_seconds` | `site`, `tool`   | Tool execution time histogram                              |
+| `rucio_mcp_bridge_sessions`            | `site`, `status` | In-flight OAuth bridge sessions (`pending`/`done`/`error`) |
+| `rucio_mcp_cached_clients`             | `site`           | Cached Rucio client instances (one per active MCP session) |
 
 Requests to paths that do not match any registered route are not tracked, so
 probe traffic from scanners does not cause unbounded label cardinality.
