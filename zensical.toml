@@ -15,6 +15,7 @@ nav = [
   { "Tools" = "tools.md" },
   { "ATLAS nomenclature" = "atlas-nomenclature.md" },
   { "Contributing" = "contributing.md" },
+  { "OAuth" = ["oauth-setup.md", "rucio-oauth-bridge.md"] },
 ]
 
 [project.theme]
