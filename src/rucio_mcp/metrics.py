@@ -100,9 +100,11 @@ class BridgeStatsCollector(Collector):
         self,
         bridge_stores: dict[str, tuple[BridgeStateStore, SessionCache]],
     ) -> None:
+        """Store a reference to the live bridge and cache stores."""
         self._bridge_stores = bridge_stores
 
     def collect(self) -> Any:
+        """Yield bridge-session and cached-client gauge families on each scrape."""
         sessions = GaugeMetricFamily(
             "rucio_mcp_bridge_sessions",
             "Current number of in-flight OAuth bridge sessions by site and status.",
