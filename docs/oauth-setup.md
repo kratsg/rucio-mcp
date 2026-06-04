@@ -117,6 +117,7 @@ CLI flags:
 | `--auth-type`    | —                        | from cfg    | Override RUCIO_AUTH_TYPE (stdio mode only)         |
 | `--host`         | —                        | `127.0.0.1` | Bind address                                       |
 | `--port`         | —                        | `8000`      | Bind port                                          |
+| `--metrics-port` | —                        | `9001`      | Port for the Prometheus `/metrics` endpoint (http) |
 | `--poll-timeout` | —                        | `180`       | Seconds to wait for OIDC login to complete (http)  |
 | `--read-only`    | —                        | false       | Disable write tools (add/delete/update rules)      |
 
@@ -164,10 +165,22 @@ and architecture description.
 
 ### Monitoring
 
-The HTTP server exposes Prometheus metrics at `/metrics`:
+Prometheus metrics are served on a **dedicated port** (default `:9001`) that is
+separate from the MCP endpoint — scrapers never mix with MCP client traffic:
 
 ```bash
-curl http://localhost:8000/metrics
+curl http://localhost:9001/metrics
+```
+
+To use a different port, pass `--metrics-port` when starting the server:
+
+```bash
+rucio-mcp serve \
+  --transport http \
+  --site escape \
+  --resource-url https://rucio-mcp.example.com \
+  --port 8000 \
+  --metrics-port 9001
 ```
 
 Standard Starlette HTTP counters are exported for every matched route:
@@ -180,12 +193,14 @@ Standard Starlette HTTP counters are exported for every matched route:
 | `starlette_exceptions_total`                 | counter   | Unhandled exceptions by type                     |
 | `starlette_requests_in_progress`             | gauge     | Requests currently being processed               |
 
-rucio-mcp adds two gauges that are refreshed on every scrape:
+rucio-mcp adds per-tool call metrics and live bridge/cache gauges:
 
-| Metric                      | Labels           | Description                                                |
-| --------------------------- | ---------------- | ---------------------------------------------------------- |
-| `rucio_mcp_bridge_sessions` | `site`, `status` | In-flight OAuth bridge sessions (`pending`/`done`/`error`) |
-| `rucio_mcp_cached_clients`  | `site`           | Cached Rucio client instances (one per active MCP session) |
+| Metric                                    | Labels           | Description                                                |
+| ----------------------------------------- | ---------------- | ---------------------------------------------------------- |
+| `rucio_mcp_tool_calls_total`              | `site`, `tool`   | Total MCP tool invocations                                 |
+| `rucio_mcp_tool_call_duration_seconds`    | `site`, `tool`   | Tool execution time histogram                              |
+| `rucio_mcp_bridge_sessions`              | `site`, `status` | In-flight OAuth bridge sessions (`pending`/`done`/`error`) |
+| `rucio_mcp_cached_clients`               | `site`           | Cached Rucio client instances (one per active MCP session) |
 
 Requests to paths that do not match any registered route are not tracked, so
 probe traffic from scanners does not cause unbounded label cardinality.
