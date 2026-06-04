@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import textwrap
 from typing import TYPE_CHECKING
+from unittest.mock import MagicMock
 
 import pytest
+from prometheus_client import generate_latest
+from prometheus_client.registry import CollectorRegistry
 
 if TYPE_CHECKING:
     from pathlib import Path
 from starlette.testclient import TestClient
 
+from rucio_mcp.metrics import BridgeStatsCollector
 from rucio_mcp.server import _make_http_app, serve
 
 
@@ -190,32 +194,40 @@ class TestBridgeRoutesRegistered:
 
 
 class TestMetricsEndpoint:
-    def test_metrics_returns_200(self, http_client: TestClient) -> None:
+    def test_main_app_metrics_route_removed(self, http_client: TestClient) -> None:
         resp = http_client.get("/metrics")
-        assert resp.status_code == 200
+        assert resp.status_code == 404
 
-    def test_metrics_content_type_is_prometheus(self, http_client: TestClient) -> None:
-        resp = http_client.get("/metrics")
-        assert "text/plain" in resp.headers["content-type"]
 
-    def test_metrics_contains_bridge_sessions_gauge(
-        self, http_client: TestClient
-    ) -> None:
-        resp = http_client.get("/metrics")
-        assert "rucio_mcp_bridge_sessions" in resp.text
+class TestBridgeStatsCollector:
+    def test_bridge_stats_collector_emits_bridge_sessions_gauge(self) -> None:
+        mock_store = MagicMock()
+        mock_store.session_counts.return_value = {"pending": 2, "done": 1}
+        mock_cache = MagicMock()
+        mock_cache.size.return_value = 3
 
-    def test_metrics_contains_cached_clients_gauge(
-        self, http_client: TestClient
-    ) -> None:
-        resp = http_client.get("/metrics")
-        assert "rucio_mcp_cached_clients" in resp.text
+        registry = CollectorRegistry()
+        registry.register(BridgeStatsCollector({"escape": (mock_store, mock_cache)}))
+        output = generate_latest(registry).decode()
 
-    def test_metrics_contains_starlette_http_counters(
-        self, http_client: TestClient
-    ) -> None:
-        http_client.get("/metrics")  # generate at least one request first
-        resp = http_client.get("/metrics")
-        assert "starlette_requests_total" in resp.text
+        assert "rucio_mcp_bridge_sessions" in output
+        assert 'site="escape"' in output
+        assert 'status="pending"' in output
+        assert "2.0" in output
+
+    def test_bridge_stats_collector_emits_cached_clients_gauge(self) -> None:
+        mock_store = MagicMock()
+        mock_store.session_counts.return_value = {}
+        mock_cache = MagicMock()
+        mock_cache.size.return_value = 5
+
+        registry = CollectorRegistry()
+        registry.register(BridgeStatsCollector({"escape": (mock_store, mock_cache)}))
+        output = generate_latest(registry).decode()
+
+        assert "rucio_mcp_cached_clients" in output
+        assert 'site="escape"' in output
+        assert "5.0" in output
 
 
 class TestRootLandingPage:

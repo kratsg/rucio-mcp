@@ -2,38 +2,41 @@
 
 Exposes:
 - Standard HTTP request/response counters and histograms (via PrometheusMiddleware)
-- Per-site bridge session gauge (``rucio_mcp_bridge_sessions{site, status}``)
-- Per-site cached Rucio client gauge (``rucio_mcp_cached_clients{site}``)
+- Per-tool call counter and duration histogram (via _InstrumentedFastMCP in server.py)
+- Per-site bridge session gauge and cached Rucio client gauge (via BridgeStatsCollector)
 
 The PrometheusMiddleware tracks every inbound HTTP request at the Starlette app
-level.  Custom bridge gauges are computed on demand when ``/metrics`` is scraped
-— there is no background flush thread.
+level.  Tool-call metrics are incremented at the FastMCP dispatch layer.
+Bridge gauges are computed on demand when the collector is scraped — there is
+no background flush thread.
 
-``_make_http_app`` in ``server.py`` wires this module in: it stores
-``app.state.bridge_stores`` (a ``dict[site, (BridgeStateStore, SessionCache)]``)
-so the metrics handler can pull live counts without holding any locks long-term.
+``serve()`` in ``server.py`` calls ``start_metrics_server(port, bridge_stores)``
+which registers a ``BridgeStatsCollector`` and starts a dedicated HTTP server
+(``prometheus_client.start_http_server``) on a separate port so that scrape
+traffic is isolated from the MCP endpoint.
 """
 
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from prometheus_client import (
-    CONTENT_TYPE_LATEST,
     REGISTRY,
     Counter,
     Gauge,
     Histogram,
-    generate_latest,
+    start_http_server,
 )
+from prometheus_client.core import GaugeMetricFamily
+from prometheus_client.registry import Collector
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.responses import Response
 from starlette.routing import Match
 from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
 
 if TYPE_CHECKING:
     from starlette.requests import Request
+    from starlette.responses import Response
     from starlette.types import ASGIApp
 
     from rucio_mcp.auth.bridge_state import BridgeStateStore
@@ -70,19 +73,67 @@ REQUESTS_IN_PROGRESS = Gauge(
 )
 
 # ---------------------------------------------------------------------------
-# Bridge-specific gauges (values set on each /metrics scrape)
+# Tool-call metrics — registered once at module import time
 # ---------------------------------------------------------------------------
 
-BRIDGE_SESSIONS = Gauge(
-    "rucio_mcp_bridge_sessions",
-    "Current number of in-flight OAuth bridge sessions by site and status.",
-    ["site", "status"],
+TOOL_CALLS = Counter(
+    "rucio_mcp_tool_calls_total",
+    "Total count of MCP tool invocations by site and tool name.",
+    ["site", "tool"],
 )
-CACHED_CLIENTS = Gauge(
-    "rucio_mcp_cached_clients",
-    "Current number of cached Rucio client instances by site.",
-    ["site"],
+TOOL_CALL_DURATION = Histogram(
+    "rucio_mcp_tool_call_duration_seconds",
+    "Histogram of MCP tool execution time by site and tool name (seconds).",
+    ["site", "tool"],
 )
+
+
+# ---------------------------------------------------------------------------
+# Bridge-specific gauges — computed on each scrape via a custom Collector
+# ---------------------------------------------------------------------------
+
+
+class BridgeStatsCollector(Collector):
+    """Emit live bridge-session and cached-client gauges from in-memory stores."""
+
+    def __init__(
+        self,
+        bridge_stores: dict[str, tuple[BridgeStateStore, SessionCache]],
+    ) -> None:
+        """Store a reference to the live bridge and cache stores."""
+        self._bridge_stores = bridge_stores
+
+    def collect(self) -> Any:
+        """Yield bridge-session and cached-client gauge families on each scrape."""
+        sessions = GaugeMetricFamily(
+            "rucio_mcp_bridge_sessions",
+            "Current number of in-flight OAuth bridge sessions by site and status.",
+            labels=["site", "status"],
+        )
+        clients = GaugeMetricFamily(
+            "rucio_mcp_cached_clients",
+            "Current number of cached Rucio client instances by site.",
+            labels=["site"],
+        )
+        for site, (store, cache) in self._bridge_stores.items():
+            for status, count in store.session_counts().items():
+                sessions.add_metric([site, status], count)
+            clients.add_metric([site], cache.size())
+        yield sessions
+        yield clients
+
+
+def start_metrics_server(
+    port: int,
+    bridge_stores: dict[str, tuple[BridgeStateStore, SessionCache]],
+) -> None:
+    """Register bridge stats collector and start a dedicated Prometheus HTTP server.
+
+    The server runs in a daemon thread owned by prometheus_client and binds to
+    0.0.0.0:<port>.  Call this once from ``serve()`` before ``uvicorn.run``.
+    """
+    REGISTRY.register(BridgeStatsCollector(bridge_stores))
+    start_http_server(port)
 
 
 # ---------------------------------------------------------------------------
@@ -144,28 +195,3 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
             if match == Match.FULL:
                 return route.path, True
         return request.url.path, False
-
-
-# ---------------------------------------------------------------------------
-# /metrics handler
-# ---------------------------------------------------------------------------
-
-
-async def metrics_handler(request: Request) -> Response:
-    """Return the current Prometheus metrics snapshot.
-
-    Bridge session and cached-client gauges are refreshed from the live
-    in-memory stores on every scrape so values are always up-to-date.
-    """
-    bridge_stores: dict[str, tuple[BridgeStateStore, SessionCache]] = getattr(
-        request.app.state, "bridge_stores", {}
-    )
-    for site, (store, cache) in bridge_stores.items():
-        for status, count in store.session_counts().items():
-            BRIDGE_SESSIONS.labels(site=site, status=status).set(count)
-        CACHED_CLIENTS.labels(site=site).set(cache.size())
-
-    return Response(
-        generate_latest(REGISTRY),
-        headers={"Content-Type": CONTENT_TYPE_LATEST},
-    )

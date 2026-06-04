@@ -3,15 +3,26 @@
 from __future__ import annotations
 
 import os
+import textwrap
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 import pytest
+from mcp.server.fastmcp import FastMCP
+from prometheus_client import REGISTRY
 
-from rucio_mcp.server import _preflight_check, ping_server, serve
+from rucio_mcp.auth.rucio_cfg import RucioCfg
+from rucio_mcp.server import (
+    _InstrumentedFastMCP,
+    _make_site_mcp,
+    _make_stdio_mcp,
+    _preflight_check,
+    ping_server,
+    serve,
+)
 
 
 @pytest.fixture
@@ -147,6 +158,7 @@ class TestServeHTTP:
         with (
             patch("rucio_mcp.server._preflight_check") as mock_check,
             patch("rucio_mcp.server._make_http_app") as mock_make,
+            patch("rucio_mcp.server.start_metrics_server"),
             patch("uvicorn.run"),
         ):
             mock_make.return_value = MagicMock()
@@ -180,3 +192,87 @@ class TestPingServer:
             mock_client.return_value.whoami.return_value = {}
             ping_server()
         mock_check.assert_called_once()
+
+
+@pytest.fixture
+def oidc_rucio_cfg_server(tmp_path):
+    p = tmp_path / "rucio.cfg"
+    p.write_text(
+        textwrap.dedent("""\
+            [client]
+            rucio_host = https://vre-rucio.cern.ch
+            auth_host = https://vre-rucio-auth.cern.ch
+            account = gstark
+            auth_type = oidc
+            oidc_audience = rucio
+            oidc_issuer = escape
+            oidc_scope = openid profile offline_access
+        """)
+    )
+    return p
+
+
+class TestInstrumentedFastMCP:
+    def test_make_stdio_mcp_returns_instrumented_instance(self) -> None:
+        mcp = _make_stdio_mcp(site_name="atlas")
+        assert isinstance(mcp, _InstrumentedFastMCP)
+        assert mcp._site_name == "atlas"
+
+    def test_make_site_mcp_returns_instrumented_instance(
+        self, oidc_rucio_cfg_server
+    ) -> None:
+        cfg = RucioCfg.from_path(oidc_rucio_cfg_server)
+        mcp, _, _ = _make_site_mcp(
+            site_name="escape",
+            cfg=cfg,
+            resource_url="http://localhost:8000/site/escape",
+            read_only=False,
+            host="127.0.0.1",
+            port=8000,
+        )
+        assert isinstance(mcp, _InstrumentedFastMCP)
+        assert mcp._site_name == "escape"
+
+    async def test_tool_call_increments_tool_calls_counter(self) -> None:
+        mcp = _InstrumentedFastMCP("test-mcp", site_name="testsite")
+
+        before = (
+            REGISTRY.get_sample_value(
+                "rucio_mcp_tool_calls_total", {"site": "testsite", "tool": "rucio_ping"}
+            )
+            or 0.0
+        )
+
+        with patch.object(FastMCP, "call_tool", new=AsyncMock(return_value=[])):
+            await mcp.call_tool("rucio_ping", {})
+
+        after = (
+            REGISTRY.get_sample_value(
+                "rucio_mcp_tool_calls_total", {"site": "testsite", "tool": "rucio_ping"}
+            )
+            or 0.0
+        )
+        assert after - before == 1.0
+
+    async def test_tool_call_records_duration(self) -> None:
+        mcp = _InstrumentedFastMCP("test-mcp-dur", site_name="testsite_dur")
+
+        before_count = (
+            REGISTRY.get_sample_value(
+                "rucio_mcp_tool_call_duration_seconds_count",
+                {"site": "testsite_dur", "tool": "rucio_ping"},
+            )
+            or 0.0
+        )
+
+        with patch.object(FastMCP, "call_tool", new=AsyncMock(return_value=[])):
+            await mcp.call_tool("rucio_ping", {})
+
+        after_count = (
+            REGISTRY.get_sample_value(
+                "rucio_mcp_tool_call_duration_seconds_count",
+                {"site": "testsite_dur", "tool": "rucio_ping"},
+            )
+            or 0.0
+        )
+        assert after_count - before_count == 1.0

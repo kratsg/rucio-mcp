@@ -98,8 +98,11 @@ and HTTP). To add a new site: create `src/rucio_mcp/data/<site>.cfg` and add a
 
 ```
 src/rucio_mcp/
-├── cli.py          # argparse: `rucio-mcp serve [--transport {stdio,http}] [--site SITE] ...`
-├── server.py       # FastMCP setup; _make_stdio_mcp / _make_site_mcp / _make_http_app; serve()
+├── cli.py          # argparse: `rucio-mcp serve [--transport {stdio,http}] [--site SITE] [--metrics-port PORT] ...`
+├── server.py       # FastMCP setup; _InstrumentedFastMCP; _make_stdio_mcp / _make_site_mcp / _make_http_app; serve()
+├── metrics.py      # Prometheus metrics: HTTP counters (PrometheusMiddleware), tool-call counter +
+│                   # duration histogram (TOOL_CALLS / TOOL_CALL_DURATION), BridgeStatsCollector,
+│                   # start_metrics_server() — binds a dedicated port via prometheus_client.start_http_server
 ├── nomenclature.py # ATLAS dataset naming constants embedded in server instructions
 ├── resources.py    # MCP resources (static docs); register(mcp) wired in server.py
 ├── presets.py      # Preset dataclass; PRESETS dict (atlas, escape → *.cfg)

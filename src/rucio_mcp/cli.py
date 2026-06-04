@@ -46,6 +46,12 @@ def main() -> None:
         help="Port to bind to for HTTP transport (default: 8000).",
     )
     serve_parser.add_argument(
+        "--metrics-port",
+        type=int,
+        default=9001,
+        help="Port for the Prometheus /metrics endpoint (HTTP transport, default: 9001).",
+    )
+    serve_parser.add_argument(
         "--site",
         action="append",
         dest="sites",
@@ -106,6 +112,7 @@ def main() -> None:
             transport=args.transport,
             host=args.host,
             port=args.port,
+            metrics_port=args.metrics_port,
             sites=sites,
             resource_url=args.resource_url,
             rucio_cfg=args.rucio_cfg,

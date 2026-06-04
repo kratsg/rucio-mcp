@@ -11,7 +11,7 @@ class TestCLIServe:
     def test_serve_calls_run(self) -> None:
         with (
             patch("rucio_mcp.server.Client"),
-            patch("rucio_mcp.server.FastMCP") as mock_mcp_cls,
+            patch("rucio_mcp.server._InstrumentedFastMCP") as mock_mcp_cls,
             patch("rucio_mcp.server._preflight_check"),
             patch("sys.argv", ["rucio-mcp", "serve"]),
         ):
@@ -137,6 +137,37 @@ class TestCLIServe:
             main()
 
         assert captured["auth_type"] is None
+
+    def test_metrics_port_defaults_to_9001(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch("sys.argv", ["rucio-mcp", "serve"]),
+            patch("rucio_mcp.cli.serve", fake_serve),
+        ):
+            main()
+
+        assert captured["metrics_port"] == 9001
+
+    def test_metrics_port_flag_forwarded_to_serve(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch(
+                "sys.argv",
+                ["rucio-mcp", "serve", "--metrics-port", "9090"],
+            ),
+            patch("rucio_mcp.cli.serve", fake_serve),
+        ):
+            main()
+
+        assert captured["metrics_port"] == 9090
 
     def test_multiple_sites_for_http_mode(self) -> None:
         captured: dict[str, object] = {}

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 from contextlib import AsyncExitStack, asynccontextmanager
 from importlib.metadata import version as _pkg_version
 from importlib.resources import files as _pkg_files
@@ -33,7 +34,12 @@ from rucio_mcp.auth.rucio_cfg import RucioCfg
 from rucio_mcp.auth.rucio_oidc_poller import RucioOidcPoller
 from rucio_mcp.auth.session_cache import SessionCache
 from rucio_mcp.landing import make_landing_html
-from rucio_mcp.metrics import PrometheusMiddleware, metrics_handler
+from rucio_mcp.metrics import (
+    TOOL_CALL_DURATION,
+    TOOL_CALLS,
+    PrometheusMiddleware,
+    start_metrics_server,
+)
 from rucio_mcp.nomenclature import ATLAS_NOMENCLATURE
 from rucio_mcp.presets import PRESETS
 from rucio_mcp.resources import register as register_resources
@@ -59,6 +65,24 @@ _INSTRUCTIONS = (
     "(RUCIO_AUTH_TYPE, RUCIO_ACCOUNT, X509_USER_PROXY, etc.) "
     "before starting the server.\n\n" + ATLAS_NOMENCLATURE
 )
+
+
+class _InstrumentedFastMCP(FastMCP):
+    """FastMCP subclass that records per-tool call count and duration."""
+
+    def __init__(self, *args: Any, site_name: str, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._site_name = site_name
+
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+        TOOL_CALLS.labels(site=self._site_name, tool=name).inc()
+        t0 = time.perf_counter()
+        try:
+            return await super().call_tool(name, arguments)
+        finally:
+            TOOL_CALL_DURATION.labels(site=self._site_name, tool=name).observe(
+                time.perf_counter() - t0
+            )
 
 
 def _bundled_cfg_path(site_name: str) -> Path:
@@ -165,7 +189,9 @@ def ping_server(site: str = "atlas", rucio_cfg: Path | None = None) -> None:
     sys.stdout.write("status: ok\n")
 
 
-def _make_stdio_mcp(read_only: bool = False) -> FastMCP:
+def _make_stdio_mcp(
+    read_only: bool = False, site_name: str = "atlas"
+) -> _InstrumentedFastMCP:
     """Build and return a configured FastMCP instance for stdio transport."""
 
     @asynccontextmanager
@@ -185,7 +211,9 @@ def _make_stdio_mcp(read_only: bool = False) -> FastMCP:
         finally:
             factory.close()
 
-    mcp = FastMCP("rucio-mcp", lifespan=_lifespan, instructions=_INSTRUCTIONS)
+    mcp = _InstrumentedFastMCP(
+        "rucio-mcp", site_name=site_name, lifespan=_lifespan, instructions=_INSTRUCTIONS
+    )
 
     for _module in [
         ping,
@@ -244,8 +272,9 @@ def _make_site_mcp(
         finally:
             factory.close()
 
-    mcp = FastMCP(
+    mcp = _InstrumentedFastMCP(
         f"rucio-mcp-{site_name}",
+        site_name=site_name,
         instructions=_INSTRUCTIONS,
         host=host,
         port=port,
@@ -454,7 +483,6 @@ def _make_http_app(
         return Response(html, media_type="text/html")
 
     routes.append(Route("/", endpoint=root_handler, methods=["GET"]))
-    routes.append(Route("/metrics", endpoint=metrics_handler, methods=["GET"]))
     app = Starlette(
         routes=routes,
         lifespan=_combined_lifespan,
@@ -477,6 +505,7 @@ def serve(
     transport: str = "stdio",
     host: str = "127.0.0.1",
     port: int = 8000,
+    metrics_port: int = 9001,
     sites: list[str] | None = None,
     resource_url: str | None = None,
     rucio_cfg: Path | None = None,
@@ -490,7 +519,7 @@ def serve(
     if transport == "stdio":
         cfg_path = _resolve_cfg_path(sites[0], rucio_cfg)
         _preflight_check(cfg_path, auth_type_override=auth_type)
-        _make_stdio_mcp(read_only=read_only).run(transport="stdio")
+        _make_stdio_mcp(read_only=read_only, site_name=sites[0]).run(transport="stdio")
         return
 
     # HTTP transport
@@ -513,4 +542,5 @@ def serve(
         rucio_cfg_overrides=cfg_overrides or None,
         poll_timeout=poll_timeout,
     )
+    start_metrics_server(metrics_port, app.state.bridge_stores)
     uvicorn.run(app, host=host, port=port)
