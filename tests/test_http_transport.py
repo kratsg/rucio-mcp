@@ -167,6 +167,17 @@ class TestUnauthenticatedAccess:
         )
         assert "WWW-Authenticate" in resp.headers
 
+    def test_mcp_post_without_trailing_slash_returns_401(
+        self, http_client: TestClient
+    ) -> None:
+        # Clients following the resource URL from OAuth metadata send requests
+        # without a trailing slash; the server must route them, not 404.
+        resp = http_client.post(
+            "/site/escape",
+            json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
+        )
+        assert resp.status_code == 401
+
     def test_mcp_post_without_trailing_slash_does_not_redirect(
         self, http_client: TestClient
     ) -> None:
@@ -246,6 +257,13 @@ class TestRootLandingPage:
     def test_root_contains_site_mcp_url(self, http_client: TestClient) -> None:
         resp = http_client.get("/")
         assert "/site/escape" in resp.text
+
+    def test_root_site_url_has_trailing_slash(self, http_client: TestClient) -> None:
+        # Landing page URLs must include a trailing slash so MCP clients
+        # that use them verbatim send requests to /site/escape/ which the
+        # Mount handles cleanly.
+        resp = http_client.get("/")
+        assert "/site/escape/" in resp.text
 
     def test_root_contains_github_link(self, http_client: TestClient) -> None:
         resp = http_client.get("/")

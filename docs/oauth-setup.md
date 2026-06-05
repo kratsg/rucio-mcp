@@ -103,8 +103,9 @@ rucio-mcp serve \
   --port 8000
 ```
 
-Each site is mounted at `{resource-url}/site/{name}/` and has its own
-independent OAuth metadata, DCR registry, and bridge state.
+Each site is mounted at `{resource-url}/site/{name}/` (trailing slash is
+canonical) and has its own independent OAuth metadata, DCR registry, and bridge
+state.
 
 CLI flags:
 
@@ -131,14 +132,14 @@ Add the server to Claude Desktop
   "mcpServers": {
     "rucio-escape": {
       "type": "http",
-      "url": "https://rucio-mcp.example.com/site/escape"
+      "url": "https://rucio-mcp.example.com/site/escape/"
     }
   }
 }
 ```
 
-Note the `/site/{name}` suffix — each site has its own OAuth metadata endpoint
-at `{url}/.well-known/oauth-authorization-server`.
+Note the `/site/{name}/` suffix — each site has its own OAuth metadata endpoint
+at `{url}.well-known/oauth-authorization-server`.
 
 On first use, the MCP client initiates the OAuth flow automatically. A browser
 tab opens with a link to your experiment's IdP. After you log in, the Rucio
@@ -152,7 +153,7 @@ rucio-mcp itself — the login happens directly between your browser and the IdP
 curl https://rucio-mcp.example.com/site/escape/.well-known/oauth-authorization-server \
   | python -m json.tool
 
-# Unauthenticated request → 401 + WWW-Authenticate header
+# Unauthenticated request → 401 + WWW-Authenticate header (trailing slash is canonical)
 curl -X POST https://rucio-mcp.example.com/site/escape/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'

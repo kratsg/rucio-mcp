@@ -371,6 +371,31 @@ def _make_well_known_proxy_route(
     return Route(parent_path, endpoint=handler, methods=_methods)
 
 
+class _SitePathNormalizerMiddleware:
+    """Append a trailing slash to bare /site/{name} paths before routing.
+
+    Starlette's Mount matches /site/{name} exactly but passes an empty path to
+    the sub-app, so FastMCP's route at "/" returns 404. Converting to
+    /site/{name}/ lets the Mount strip the prefix cleanly and call the sub-app
+    at "/". Doing it here avoids response buffering (SSE streaming works), and
+    avoids Starlette's redirect_slashes which would cause an nginx ingress
+    infinite-redirect loop.
+    """
+
+    def __init__(self, app: Any, *, site_prefixes: frozenset[str]) -> None:
+        self._app = app
+        self._site_prefixes = site_prefixes
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] == "http" and scope.get("path") in self._site_prefixes:
+            scope = {
+                **scope,
+                "path": scope["path"] + "/",
+                "raw_path": scope["raw_path"] + b"/",
+            }
+        await self._app(scope, receive, send)
+
+
 def _make_http_app(
     *,
     sites: list[str],
@@ -489,10 +514,14 @@ def _make_http_app(
         return Response(html, media_type="text/html")
 
     routes.append(Route("/", endpoint=root_handler, methods=["GET"]))
+    site_prefixes = frozenset(f"/site/{name}" for name in sites)
     app = Starlette(
         routes=routes,
         lifespan=_combined_lifespan,
-        middleware=[Middleware(PrometheusMiddleware, filter_unhandled_paths=True)],
+        middleware=[
+            Middleware(_SitePathNormalizerMiddleware, site_prefixes=site_prefixes),
+            Middleware(PrometheusMiddleware, filter_unhandled_paths=True),
+        ],
     )
     # Prevent 307 redirects for /site/{name} → /site/{name}/. Without this,
     # nginx ingresses that strip trailing slashes cause an infinite redirect

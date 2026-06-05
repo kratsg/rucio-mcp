@@ -258,7 +258,7 @@ client with the site URL:
   "mcpServers": {
     "rucio-escape": {
       "type": "http",
-      "url": "https://rucio-mcp.example.com/site/escape"
+      "url": "https://rucio-mcp.example.com/site/escape/"
     }
   }
 }
