@@ -43,6 +43,23 @@ PRESETS: dict[str, Preset] = {
             Then run: rucio-mcp serve --site cms-x509
         """).rstrip(),
     ),
+    "cms": Preset(
+        name="cms",
+        description="CMS at CERN (OIDC — stdio and HTTP mode)",
+        config_resource="cms.cfg",
+        post_init_hint=textwrap.dedent("""\
+            Next steps:
+              export RUCIO_ACCOUNT=<your-cms-account>
+
+            For stdio mode (OIDC polling):
+              rucio-mcp serve --site cms
+
+            For HTTP mode (OAuth bridge):
+              rucio-mcp serve --transport http \\
+                              --resource-url http://localhost:8000 \\
+                              --site cms
+        """).rstrip(),
+    ),
     "atlas": Preset(
         name="atlas",
         description="ATLAS at CERN (OIDC — stdio and HTTP mode)",
