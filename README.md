@@ -1,4 +1,4 @@
-# rucio-mcp v0.4.3
+# rucio-mcp v0.4.4
 
 [![Actions Status][actions-badge]][actions-link]
 [![Documentation Status][rtd-badge]][rtd-link]
