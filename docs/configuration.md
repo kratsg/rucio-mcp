@@ -15,7 +15,8 @@ rucio-mcp serve --site escape       # escape is the default
 ```
 
 Available presets: `escape` (OIDC, default), `atlas` (OIDC), `atlas-x509` (x509
-proxy, stdio only), `cms` (OIDC), `cms-x509` (x509 proxy, stdio only), `dune` (OIDC).
+proxy, stdio only), `cms` (OIDC), `cms-x509` (x509 proxy, stdio only), `dune`
+(OIDC).
 
 !!! tip "Site-managed Rucio clients (UChicago AF, CERN lxplus, CVMFS)" If your
 site already provides a Rucio client installation, point `--rucio-cfg` at the
