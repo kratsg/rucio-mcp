@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import textwrap
-from typing import TYPE_CHECKING
+from importlib.resources import files as _pkg_files
+from pathlib import Path
 
 import pytest
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 from rucio_mcp.auth.rucio_cfg import RucioCfg
 
@@ -111,3 +109,17 @@ class TestRucioCfgFromPath:
         cfg = RucioCfg.from_path(p)
         with pytest.raises(AttributeError):
             cfg.account = "changed"  # type: ignore[misc]
+
+    def test_load_bundled_atlas_x509_cfg(self) -> None:
+        """The bundled atlas-x509.cfg uses x509_proxy auth."""
+        p = Path(str(_pkg_files("rucio_mcp.data").joinpath("atlas-x509.cfg")))
+        cfg = RucioCfg.from_path(p)
+        assert cfg.auth_type == "x509_proxy"
+        assert cfg.rucio_host == "https://voatlasrucio-server-prod.cern.ch:443"
+
+    def test_load_bundled_dune_cfg(self) -> None:
+        """The bundled dune.cfg uses OIDC auth."""
+        p = Path(str(_pkg_files("rucio_mcp.data").joinpath("dune.cfg")))
+        cfg = RucioCfg.from_path(p)
+        assert cfg.auth_type == "oidc"
+        assert cfg.rucio_host == "https://dune-rucio.fnal.gov"

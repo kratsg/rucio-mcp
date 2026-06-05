@@ -20,8 +20,8 @@ def register(mcp: FastMCP) -> None:
         to confirm that x509 authentication is set up correctly.
 
         Requires the ``voms-proxy-info`` command to be available in PATH.
-        A valid proxy is created with ``voms-proxy-init -voms atlas`` (or the
-        appropriate VO name for your experiment).
+        A valid proxy is created with ``voms-proxy-init -voms <site>`` with the
+        appropriate VO name for your experiment.
         """
         binary = shutil.which("voms-proxy-info")
         if binary is None:

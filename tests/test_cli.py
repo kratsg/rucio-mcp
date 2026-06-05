@@ -62,7 +62,7 @@ class TestCLIServe:
 
         assert captured["transport"] == "stdio"
 
-    def test_site_defaults_to_atlas(self) -> None:
+    def test_site_defaults_to_escape(self) -> None:
         captured: dict[str, object] = {}
 
         def fake_serve(**kwargs: object) -> None:
@@ -74,7 +74,7 @@ class TestCLIServe:
         ):
             main()
 
-        assert captured["sites"] == ["atlas"]
+        assert captured["sites"] == ["escape"]
 
     def test_http_transport_args_forwarded_to_serve(self) -> None:
         captured: dict[str, object] = {}

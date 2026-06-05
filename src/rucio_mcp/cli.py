@@ -58,9 +58,9 @@ def main() -> None:
         metavar="SITE",
         default=None,
         help=(
-            "Site preset to use (e.g. atlas, escape). "
+            "Site preset to use (e.g. atlas, atlas-x509, dune, escape). "
             "May be repeated for HTTP transport to mount multiple sites. "
-            "Defaults to atlas."
+            "Defaults to escape."
         ),
     )
     serve_parser.add_argument(
@@ -106,7 +106,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "serve":
-        sites = args.sites or ["atlas"]
+        sites = args.sites or ["escape"]
         serve(
             read_only=args.read_only,
             transport=args.transport,

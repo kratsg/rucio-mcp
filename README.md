@@ -62,7 +62,7 @@ pixi add rucio-mcp
 
 - Python 3.10+
 - A configured Rucio environment (`rucio.cfg` and valid authentication)
-- For x509 proxy auth: a valid VOMS proxy (`voms-proxy-init -voms atlas`)
+- For x509 proxy auth: a valid VOMS proxy (`voms-proxy-init -voms <VO>`)
 <!-- --8<-- [end:requirements] -->
 
 <!-- --8<-- [start:quick-start] -->
@@ -71,7 +71,7 @@ pixi add rucio-mcp
 
 ### 1. Set up authentication
 
-**x509 proxy (most common at ATLAS sites):**
+**x509 proxy (ATLAS sites, `atlas-x509` preset):**
 
 ```bash
 voms-proxy-init -voms atlas
@@ -115,6 +115,7 @@ export RUCIO_ACCOUNT=<your_atlas_account>
 export RUCIO_AUTH_TYPE=x509_proxy
 export X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates
 export RUCIO_HOME=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0
+rucio-mcp serve --site atlas-x509
 ```
 
 ### 2. Test the server
@@ -129,15 +130,16 @@ The server speaks MCP over stdio. Configure your MCP client to launch it.
 
 Add to your `.mcp.json` (project) or `~/.claude.json` (global).
 
-The name `atlas` lets you tell Claude "use the atlas rucio server" — useful when
-you have multiple Rucio instances configured.
+The key name (`atlas-x509` below) lets you tell Claude which Rucio server to use
+— useful when you have multiple Rucio instances configured. Choose any name you
+like.
 
 **With pixi** (`X509_CERT_DIR` set automatically by `ca-policy-lcg`):
 
 ```json
 {
   "mcpServers": {
-    "atlas": {
+    "rucio-atlas-x509": {
       "type": "stdio",
       "command": "pixi",
       "args": [
@@ -145,10 +147,11 @@ you have multiple Rucio instances configured.
         "--manifest-path",
         "/path/to/rucio-mcp",
         "rucio-mcp",
-        "serve"
+        "serve",
+        "--site",
+        "atlas-x509"
       ],
       "env": {
-        "RUCIO_AUTH_TYPE": "x509_proxy",
         "RUCIO_ACCOUNT": "youraccount",
         "RUCIO_HOME": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0"
       }
@@ -163,12 +166,11 @@ you have multiple Rucio instances configured.
 ```json
 {
   "mcpServers": {
-    "atlas": {
+    "rucio-atlas-x509": {
       "type": "stdio",
       "command": "rucio-mcp",
-      "args": ["serve"],
+      "args": ["serve", "--site", "atlas-x509"],
       "env": {
-        "RUCIO_AUTH_TYPE": "x509_proxy",
         "RUCIO_ACCOUNT": "youraccount",
         "X509_CERT_DIR": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates",
         "RUCIO_HOME": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0"
@@ -188,7 +190,7 @@ or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
 ```json
 {
   "mcpServers": {
-    "atlas": {
+    "rucio-atlas-x509": {
       "type": "stdio",
       "command": "pixi",
       "args": [
@@ -196,10 +198,11 @@ or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
         "--manifest-path",
         "/path/to/rucio-mcp",
         "rucio-mcp",
-        "serve"
+        "serve",
+        "--site",
+        "atlas-x509"
       ],
       "env": {
-        "RUCIO_AUTH_TYPE": "x509_proxy",
         "RUCIO_ACCOUNT": "youraccount",
         "RUCIO_HOME": "/path/to/rucio-clients"
       }
@@ -214,12 +217,11 @@ or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
 ```json
 {
   "mcpServers": {
-    "atlas": {
+    "rucio-atlas-x509": {
       "type": "stdio",
       "command": "rucio-mcp",
-      "args": ["serve"],
+      "args": ["serve", "--site", "atlas-x509"],
       "env": {
-        "RUCIO_AUTH_TYPE": "x509_proxy",
         "RUCIO_ACCOUNT": "youraccount",
         "X509_CERT_DIR": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates",
         "RUCIO_HOME": "/path/to/rucio-clients"
@@ -264,9 +266,6 @@ client with the site URL:
 
 See [docs/oauth-setup.md](docs/oauth-setup.md) for the full setup guide.
 
-> **Note:** ATLAS uses x509 proxy auth. HTTP mode is not yet supported for ATLAS
-> because Rucio does not currently offer OIDC for ATLAS end-users.
-
 <!-- --8<-- [end:http-mode] -->
 
 <!-- --8<-- [start:read-only] -->
@@ -286,7 +285,7 @@ Or in your MCP config:
 ```json
 {
   "mcpServers": {
-    "atlas": {
+    "rucio-escape": {
       "command": "rucio-mcp",
       "args": ["serve", "--read-only"],
       "env": { "...": "..." }

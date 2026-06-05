@@ -201,7 +201,7 @@ def classify_error(exc: Exception) -> str:
         guidance = (
             "SSL or proxy certificate error. "
             "Run `rucio_voms_proxy_info` to check your proxy certificate. "
-            "If expired, run: voms-proxy-init -voms atlas"
+            "If expired, run: voms-proxy-init -voms <site>"
         )
     elif (
         "connectionerror" in type_lower

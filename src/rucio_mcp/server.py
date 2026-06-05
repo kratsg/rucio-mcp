@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import configparser
 import os
 import sys
 import time
@@ -133,11 +134,16 @@ def _preflight_check(cfg_path: Path, auth_type_override: str | None = None) -> N
     else:
         os.environ["RUCIO_CONFIG"] = str(cfg_path)
 
-    # auth type: explicit override flag > env var > x509_proxy default
+    # auth type: explicit override flag > existing env var > cfg file > x509_proxy default
     if auth_type_override:
         os.environ["RUCIO_AUTH_TYPE"] = auth_type_override
-    else:
-        os.environ.setdefault("RUCIO_AUTH_TYPE", "x509_proxy")
+    elif "RUCIO_AUTH_TYPE" not in os.environ:
+        # Read auth_type from the cfg so that OIDC sites don't inherit the x509 default.
+        cp = configparser.ConfigParser()
+        cp.read(cfg_path)
+        os.environ["RUCIO_AUTH_TYPE"] = cp.get(
+            "client", "auth_type", fallback="x509_proxy"
+        )
     auth_type = os.environ["RUCIO_AUTH_TYPE"]
 
     # x509 proxy specifics
@@ -163,7 +169,7 @@ def _preflight_check(cfg_path: Path, auth_type_override: str | None = None) -> N
         if proxy_path and not Path(proxy_path).exists():
             warnings.append(
                 f"X509_USER_PROXY={proxy_path!r} is set but the file does not exist.\n"
-                "    Run: voms-proxy-init -voms atlas"
+                "    Run: voms-proxy-init -voms <site>"
             )
 
     for w in warnings:
@@ -177,7 +183,7 @@ def _preflight_check(cfg_path: Path, auth_type_override: str | None = None) -> N
         sys.exit(1)
 
 
-def ping_server(site: str = "atlas", rucio_cfg: Path | None = None) -> None:
+def ping_server(site: str = "escape", rucio_cfg: Path | None = None) -> None:
     """Check connectivity to the Rucio server and print version/account info."""
     cfg_path = _resolve_cfg_path(site, rucio_cfg)
     _preflight_check(cfg_path)
@@ -190,7 +196,7 @@ def ping_server(site: str = "atlas", rucio_cfg: Path | None = None) -> None:
 
 
 def _make_stdio_mcp(
-    read_only: bool = False, site_name: str = "atlas"
+    read_only: bool = False, site_name: str = "escape"
 ) -> _InstrumentedFastMCP:
     """Build and return a configured FastMCP instance for stdio transport."""
 
@@ -514,7 +520,7 @@ def serve(
 ) -> None:
     """Start the MCP server over the selected transport."""
     if sites is None:
-        sites = ["atlas"]
+        sites = ["escape"]
 
     if transport == "stdio":
         cfg_path = _resolve_cfg_path(sites[0], rucio_cfg)
