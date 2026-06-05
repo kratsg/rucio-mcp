@@ -1,0 +1,6 @@
+exclude = [
+    "https://cds.cern.ch/record/1070318", # timeouts
+]
+
+insecure = true
+timeout = 60

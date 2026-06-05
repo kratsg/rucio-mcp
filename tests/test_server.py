@@ -141,6 +141,53 @@ class TestPreflightCheck:
             _preflight_check(valid_cfg)
         assert "X509_USER_PROXY" not in capsys.readouterr().err
 
+    def test_auth_type_read_from_oidc_cfg(self, tmp_path: Path) -> None:
+        """auth_type=oidc in the cfg is propagated to RUCIO_AUTH_TYPE when no override/env."""
+        cfg = tmp_path / "rucio.cfg"
+        cfg.write_text(
+            textwrap.dedent("""\
+                [client]
+                rucio_host = https://rucio.example.com
+                auth_host = https://rucio-auth.example.com
+                auth_type = oidc
+            """)
+        )
+        with patch.dict("os.environ", {}, clear=True):
+            _preflight_check(cfg)
+            assert os.environ["RUCIO_AUTH_TYPE"] == "oidc"
+
+    def test_oidc_cfg_does_not_set_x509_proxy_env(self, tmp_path: Path) -> None:
+        """An OIDC cfg must not set X509_USER_PROXY."""
+        cfg = tmp_path / "rucio.cfg"
+        cfg.write_text(
+            textwrap.dedent("""\
+                [client]
+                rucio_host = https://rucio.example.com
+                auth_host = https://rucio-auth.example.com
+                auth_type = oidc
+            """)
+        )
+        with patch.dict("os.environ", {}, clear=True):
+            _preflight_check(cfg)
+            assert "X509_USER_PROXY" not in os.environ
+
+    def test_oidc_cfg_does_not_emit_x509_warnings(self, tmp_path: Path, capsys) -> None:
+        """An OIDC cfg must not produce x509 proxy warnings."""
+        cfg = tmp_path / "rucio.cfg"
+        cfg.write_text(
+            textwrap.dedent("""\
+                [client]
+                rucio_host = https://rucio.example.com
+                auth_host = https://rucio-auth.example.com
+                auth_type = oidc
+            """)
+        )
+        with patch.dict("os.environ", {}, clear=True):
+            _preflight_check(cfg)
+        err = capsys.readouterr().err
+        assert "X509" not in err
+        assert "voms-proxy-init" not in err
+
 
 class TestServeHTTP:
     def test_http_missing_resource_url_exits_nonzero(self) -> None:
@@ -213,6 +260,10 @@ def oidc_rucio_cfg_server(tmp_path):
 
 
 class TestInstrumentedFastMCP:
+    def test_make_stdio_mcp_default_site_name_is_escape(self) -> None:
+        mcp = _make_stdio_mcp()
+        assert mcp._site_name == "escape"
+
     def test_make_stdio_mcp_returns_instrumented_instance(self) -> None:
         mcp = _make_stdio_mcp(site_name="atlas")
         assert isinstance(mcp, _InstrumentedFastMCP)

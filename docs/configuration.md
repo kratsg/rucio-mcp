@@ -10,13 +10,12 @@ Select a bundled site preset with `--site`. The server resolves directly to the
 bundled `rucio.cfg` — no prior setup step required.
 
 ```bash
-export RUCIO_ACCOUNT=<your-atlas-account>
-voms-proxy-init -voms atlas
-rucio-mcp serve --site atlas        # atlas is also the default
+export RUCIO_ACCOUNT=<your-escape-account>
+rucio-mcp serve --site escape       # escape is the default
 ```
 
-Available presets: `atlas` (x509 proxy, stdio only), `escape` (OIDC, stdio and
-HTTP).
+Available presets: `escape` (OIDC, default), `atlas` (OIDC), `atlas-x509` (x509
+proxy, stdio only), `dune` (OIDC).
 
 !!! tip "Site-managed Rucio clients (UChicago AF, CERN lxplus, CVMFS)" If your
 site already provides a Rucio client installation, point `--rucio-cfg` at the
@@ -31,16 +30,17 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 | Variable          | Required | Description                                                                                              |
 | ----------------- | -------- | -------------------------------------------------------------------------------------------------------- |
 | `RUCIO_CONFIG`    | No       | Direct path to a `rucio.cfg` file. Set automatically from `--site` or `--rucio-cfg`.                     |
-| `RUCIO_AUTH_TYPE` | No       | Authentication method: `x509_proxy`, `userpass`, `oidc`, `x509`. Defaults to `x509_proxy`.               |
+| `RUCIO_AUTH_TYPE` | No       | Authentication method: `x509_proxy`, `userpass`, `oidc`, `x509`. Defaults to the value in `rucio.cfg`.   |
 | `RUCIO_ACCOUNT`   | Yes      | Your Rucio account name                                                                                  |
 | `X509_USER_PROXY` | x509     | Path to your VOMS proxy certificate. Defaults to `/tmp/x509up_u<uid>`.                                   |
 | `X509_CERT_DIR`   | x509     | Directory of CA certificates for SSL verification. Set automatically by `ca-policy-lcg` when using pixi. |
 
 ## Authentication methods
 
-=== "x509 proxy (ATLAS)"
+=== "x509 proxy (atlas-x509)"
 
-    The most common method at ATLAS sites. Requires a valid VOMS proxy.
+    The most common method at ATLAS sites when using a VOMS proxy. Use the
+    `atlas-x509` preset, which requires a valid VOMS proxy.
 
     **With pixi (recommended):** `ca-policy-lcg` is a bundled dependency and
     sets `X509_CERT_DIR` automatically to the certificates inside the conda
@@ -50,7 +50,7 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
     ```bash
     export RUCIO_ACCOUNT=<your_atlas_account>
     pixi exec --with rucio-mcp voms-proxy-init -voms atlas
-    rucio-mcp serve --site atlas
+    rucio-mcp serve --site atlas-x509
     ```
 
     **Without pixi — on CVMFS-based facilities (UChicago AF, CERN lxplus, etc.):**
@@ -99,12 +99,12 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 
 === "OIDC"
 
-    OpenID Connect authentication. Use the `escape` preset or point at a custom
-    `rucio.cfg` with `auth_type = oidc`:
+    OpenID Connect authentication. Use the `escape`, `atlas`, or `dune` presets,
+    or point at a custom `rucio.cfg` with `auth_type = oidc`:
 
     ```bash
     export RUCIO_ACCOUNT=<your_account>
-    rucio-mcp serve --site escape
+    rucio-mcp serve --site escape    # or --site atlas, --site dune
     ```
 
     For OIDC with a custom cfg and an explicit auth-type override:
@@ -118,19 +118,34 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 Bundled presets ship inside the package and are resolved at runtime — no copy
 step is needed. Use `--site <name>` to select one.
 
-=== "ATLAS"
+=== "escape (default)"
+
+    ```ini
+    --8<-- "src/rucio_mcp/data/escape.cfg"
+    ```
+
+    > OIDC auth. Supports both stdio and HTTP transport modes.
+
+=== "atlas"
 
     ```ini
     --8<-- "src/rucio_mcp/data/atlas.cfg"
     ```
 
-    > x509 proxy auth only. HTTP mode is not yet supported for ATLAS because
-    > Rucio does not currently offer OIDC for ATLAS end-users.
+    > OIDC auth. Supports both stdio and HTTP transport modes.
 
-=== "ESCAPE"
+=== "atlas-x509"
 
     ```ini
-    --8<-- "src/rucio_mcp/data/escape.cfg"
+    --8<-- "src/rucio_mcp/data/atlas-x509.cfg"
+    ```
+
+    > x509 proxy auth. Stdio mode only. For HTTP mode, use the `atlas` preset.
+
+=== "dune"
+
+    ```ini
+    --8<-- "src/rucio_mcp/data/dune.cfg"
     ```
 
     > OIDC auth. Supports both stdio and HTTP transport modes.
@@ -189,6 +204,7 @@ container image), point `--rucio-cfg` directly at the site's config file:
 export RUCIO_ACCOUNT=<your_atlas_account>
 voms-proxy-init -voms atlas
 rucio-mcp serve \
+  --site atlas-x509 \
   --rucio-cfg /cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0/etc/rucio.cfg
 ```
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import configparser
 import os
 import sys
 import time
@@ -133,11 +134,16 @@ def _preflight_check(cfg_path: Path, auth_type_override: str | None = None) -> N
     else:
         os.environ["RUCIO_CONFIG"] = str(cfg_path)
 
-    # auth type: explicit override flag > env var > x509_proxy default
+    # auth type: explicit override flag > existing env var > cfg file > x509_proxy default
     if auth_type_override:
         os.environ["RUCIO_AUTH_TYPE"] = auth_type_override
-    else:
-        os.environ.setdefault("RUCIO_AUTH_TYPE", "x509_proxy")
+    elif "RUCIO_AUTH_TYPE" not in os.environ:
+        # Read auth_type from the cfg so that OIDC sites don't inherit the x509 default.
+        cp = configparser.ConfigParser()
+        cp.read(cfg_path)
+        os.environ["RUCIO_AUTH_TYPE"] = cp.get(
+            "client", "auth_type", fallback="x509_proxy"
+        )
     auth_type = os.environ["RUCIO_AUTH_TYPE"]
 
     # x509 proxy specifics
@@ -163,7 +169,7 @@ def _preflight_check(cfg_path: Path, auth_type_override: str | None = None) -> N
         if proxy_path and not Path(proxy_path).exists():
             warnings.append(
                 f"X509_USER_PROXY={proxy_path!r} is set but the file does not exist.\n"
-                "    Run: voms-proxy-init -voms atlas"
+                "    Run: voms-proxy-init -voms <site>"
             )
 
     for w in warnings:
@@ -177,7 +183,7 @@ def _preflight_check(cfg_path: Path, auth_type_override: str | None = None) -> N
         sys.exit(1)
 
 
-def ping_server(site: str = "atlas", rucio_cfg: Path | None = None) -> None:
+def ping_server(site: str = "escape", rucio_cfg: Path | None = None) -> None:
     """Check connectivity to the Rucio server and print version/account info."""
     cfg_path = _resolve_cfg_path(site, rucio_cfg)
     _preflight_check(cfg_path)
@@ -190,7 +196,7 @@ def ping_server(site: str = "atlas", rucio_cfg: Path | None = None) -> None:
 
 
 def _make_stdio_mcp(
-    read_only: bool = False, site_name: str = "atlas"
+    read_only: bool = False, site_name: str = "escape"
 ) -> _InstrumentedFastMCP:
     """Build and return a configured FastMCP instance for stdio transport."""
 
@@ -365,6 +371,31 @@ def _make_well_known_proxy_route(
     return Route(parent_path, endpoint=handler, methods=_methods)
 
 
+class _SitePathNormalizerMiddleware:
+    """Append a trailing slash to bare /site/{name} paths before routing.
+
+    Starlette's Mount matches /site/{name} exactly but passes an empty path to
+    the sub-app, so FastMCP's route at "/" returns 404. Converting to
+    /site/{name}/ lets the Mount strip the prefix cleanly and call the sub-app
+    at "/". Doing it here avoids response buffering (SSE streaming works), and
+    avoids Starlette's redirect_slashes which would cause an nginx ingress
+    infinite-redirect loop.
+    """
+
+    def __init__(self, app: Any, *, site_prefixes: frozenset[str]) -> None:
+        self._app = app
+        self._site_prefixes = site_prefixes
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] == "http" and scope.get("path") in self._site_prefixes:
+            scope = {
+                **scope,
+                "path": scope["path"] + "/",
+                "raw_path": scope["raw_path"] + b"/",
+            }
+        await self._app(scope, receive, send)
+
+
 def _make_http_app(
     *,
     sites: list[str],
@@ -483,10 +514,14 @@ def _make_http_app(
         return Response(html, media_type="text/html")
 
     routes.append(Route("/", endpoint=root_handler, methods=["GET"]))
+    site_prefixes = frozenset(f"/site/{name}" for name in sites)
     app = Starlette(
         routes=routes,
         lifespan=_combined_lifespan,
-        middleware=[Middleware(PrometheusMiddleware, filter_unhandled_paths=True)],
+        middleware=[
+            Middleware(_SitePathNormalizerMiddleware, site_prefixes=site_prefixes),
+            Middleware(PrometheusMiddleware, filter_unhandled_paths=True),
+        ],
     )
     # Prevent 307 redirects for /site/{name} → /site/{name}/. Without this,
     # nginx ingresses that strip trailing slashes cause an infinite redirect
@@ -514,7 +549,7 @@ def serve(
 ) -> None:
     """Start the MCP server over the selected transport."""
     if sites is None:
-        sites = ["atlas"]
+        sites = ["escape"]
 
     if transport == "stdio":
         cfg_path = _resolve_cfg_path(sites[0], rucio_cfg)

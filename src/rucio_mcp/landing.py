@@ -59,13 +59,13 @@ _CLIENTS = [
 
 def _quick_start_section(sites: list[str], base_url: str) -> str:
     """Render a tabbed quick-start block with one install command per client."""
-    first_url = base_url.rstrip("/") + f"/site/{sites[0]}"
+    first_url = base_url.rstrip("/") + f"/site/{sites[0]}/"
     first_name = f"rucio-{sites[0]}"
 
     # Site selector (only shown when multiple sites are configured)
     if len(sites) > 1:
         options = "\n".join(
-            f'          <option value="{base_url.rstrip("/")}/site/{s}" '
+            f'          <option value="{base_url.rstrip("/")}/site/{s}/" '
             f'data-name="rucio-{s}">{s}</option>'
             for s in sites
         )
@@ -110,7 +110,7 @@ def _quick_start_section(sites: list[str], base_url: str) -> str:
 
 
 def _site_row(site: str, base_url: str) -> str:
-    mcp_url = base_url.rstrip("/") + f"/site/{site}"
+    mcp_url = base_url.rstrip("/") + f"/site/{site}/"
     return f"""
       <div class="site-card">
         <div class="site-info">

@@ -14,15 +14,18 @@ Start without any prior setup step — `--site` resolves directly to a bundled
 preset:
 
 ```bash
-export RUCIO_ACCOUNT=<your-atlas-account>
-voms-proxy-init -voms atlas
-rucio-mcp serve --site atlas        # atlas is also the default
+export RUCIO_ACCOUNT=<your-escape-account>
+rucio-mcp serve --site escape       # escape is the default
 ```
 
-To override the auth type (e.g. use OIDC polling for an ESCAPE account):
+To use ATLAS OIDC or x509 proxy:
 
 ```bash
-rucio-mcp serve --site escape
+rucio-mcp serve --site atlas        # OIDC polling
+# or
+export RUCIO_ACCOUNT=<your-atlas-account>
+voms-proxy-init -voms atlas
+rucio-mcp serve --site atlas-x509   # x509 proxy
 ```
 
 To point at a custom rucio.cfg instead of the bundled preset:
@@ -34,14 +37,11 @@ rucio-mcp serve --rucio-cfg /path/to/rucio.cfg
 The `--auth-type` flag overrides whatever `auth_type` is in the cfg:
 
 ```bash
-rucio-mcp serve --site atlas --auth-type oidc
+rucio-mcp serve --rucio-cfg /path/to/rucio.cfg --auth-type oidc
 ```
 
 The Claude Desktop / VS Code MCP config uses `"type": "stdio"`. All rucio auth
 types (`x509_proxy`, `userpass`, `oidc`, `gss`, …) are supported.
-
-> **Note:** ATLAS uses `x509_proxy` auth. HTTP mode is not yet supported for
-> ATLAS because Rucio does not currently offer OIDC for ATLAS end-users.
 
 ---
 
@@ -103,15 +103,16 @@ rucio-mcp serve \
   --port 8000
 ```
 
-Each site is mounted at `{resource-url}/site/{name}/` and has its own
-independent OAuth metadata, DCR registry, and bridge state.
+Each site is mounted at `{resource-url}/site/{name}/` (trailing slash is
+canonical) and has its own independent OAuth metadata, DCR registry, and bridge
+state.
 
 CLI flags:
 
 | Flag             | Env var                  | Default     | Description                                        |
 | ---------------- | ------------------------ | ----------- | -------------------------------------------------- |
 | `--transport`    | —                        | `stdio`     | `stdio` or `http`                                  |
-| `--site`         | —                        | `atlas`     | Site preset name (repeatable for HTTP multi-site)  |
+| `--site`         | —                        | `escape`    | Site preset name (repeatable for HTTP multi-site)  |
 | `--resource-url` | `RUCIO_MCP_RESOURCE_URL` | —           | Public URL of this MCP server (required for http)  |
 | `--rucio-cfg`    | —                        | preset cfg  | Override rucio.cfg (single site only in http mode) |
 | `--auth-type`    | —                        | from cfg    | Override RUCIO_AUTH_TYPE (stdio mode only)         |
@@ -131,14 +132,14 @@ Add the server to Claude Desktop
   "mcpServers": {
     "rucio-escape": {
       "type": "http",
-      "url": "https://rucio-mcp.example.com/site/escape"
+      "url": "https://rucio-mcp.example.com/site/escape/"
     }
   }
 }
 ```
 
-Note the `/site/{name}` suffix — each site has its own OAuth metadata endpoint
-at `{url}/.well-known/oauth-authorization-server`.
+Note the `/site/{name}/` suffix — each site has its own OAuth metadata endpoint
+at `{url}.well-known/oauth-authorization-server`.
 
 On first use, the MCP client initiates the OAuth flow automatically. A browser
 tab opens with a link to your experiment's IdP. After you log in, the Rucio
@@ -152,7 +153,7 @@ rucio-mcp itself — the login happens directly between your browser and the IdP
 curl https://rucio-mcp.example.com/site/escape/.well-known/oauth-authorization-server \
   | python -m json.tool
 
-# Unauthenticated request → 401 + WWW-Authenticate header
+# Unauthenticated request → 401 + WWW-Authenticate header (trailing slash is canonical)
 curl -X POST https://rucio-mcp.example.com/site/escape/ \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
