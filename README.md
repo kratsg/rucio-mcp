@@ -118,6 +118,14 @@ export RUCIO_HOME=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clie
 rucio-mcp serve --site atlas-x509
 ```
 
+**x509 proxy (CMS sites, `cms-x509` preset):**
+
+```bash
+voms-proxy-init -voms cms
+export RUCIO_ACCOUNT=<your_cms_account>
+rucio-mcp serve --site cms-x509
+```
+
 ### 2. Test the server
 
 ```bash
