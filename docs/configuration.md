@@ -15,7 +15,7 @@ rucio-mcp serve --site escape       # escape is the default
 ```
 
 Available presets: `escape` (OIDC, default), `atlas` (OIDC), `atlas-x509` (x509
-proxy, stdio only), `dune` (OIDC).
+proxy, stdio only), `cms-x509` (x509 proxy, stdio only), `dune` (OIDC).
 
 !!! tip "Site-managed Rucio clients (UChicago AF, CERN lxplus, CVMFS)" If your
 site already provides a Rucio client installation, point `--rucio-cfg` at the
@@ -73,6 +73,24 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 
     Otherwise, install `ca-policy-lcg` from conda-forge or from your system
     package manager (`fetch-crl` / `ca-policy-egi-core`).
+
+=== "x509 proxy (cms-x509)"
+
+    Use the `cms-x509` preset with a valid CMS VOMS proxy.
+
+    ```bash
+    export RUCIO_ACCOUNT=<your_cms_account>
+    voms-proxy-init -voms cms
+    rucio-mcp serve --site cms-x509
+    ```
+
+    If `X509_CERT_DIR` is not set automatically, point it at a local CA bundle
+    (e.g. from `ca-policy-lcg` or your system package manager):
+
+    ```bash
+    export X509_CERT_DIR=/etc/grid-security/certificates
+    rucio-mcp serve --site cms-x509
+    ```
 
 === "userpass"
 
@@ -141,6 +159,14 @@ step is needed. Use `--site <name>` to select one.
     ```
 
     > x509 proxy auth. Stdio mode only. For HTTP mode, use the `atlas` preset.
+
+=== "cms-x509"
+
+    ```ini
+    --8<-- "src/rucio_mcp/data/cms-x509.cfg"
+    ```
+
+    > x509 proxy auth. Stdio mode only.
 
 === "dune"
 

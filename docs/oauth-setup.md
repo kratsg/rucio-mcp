@@ -28,6 +28,14 @@ voms-proxy-init -voms atlas
 rucio-mcp serve --site atlas-x509   # x509 proxy
 ```
 
+To use CMS x509 proxy:
+
+```bash
+export RUCIO_ACCOUNT=<your-cms-account>
+voms-proxy-init -voms cms
+rucio-mcp serve --site cms-x509     # x509 proxy
+```
+
 To point at a custom rucio.cfg instead of the bundled preset:
 
 ```bash
