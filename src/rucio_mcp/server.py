@@ -178,10 +178,10 @@ def _preflight_check(cfg_path: Path, auth_type_override: str | None = None) -> N
     elif auth_type == "x509":
         # Bare cert auth (not VOMS proxy): default cert/key to standard globus locations.
         os.environ.setdefault(
-            "RUCIO_CLIENT_CERT", os.path.expanduser("~/.globus/usercert.pem")
+            "RUCIO_CLIENT_CERT", str(Path("~/.globus/usercert.pem").expanduser())
         )
         os.environ.setdefault(
-            "RUCIO_CLIENT_KEY", os.path.expanduser("~/.globus/userkey.pem")
+            "RUCIO_CLIENT_KEY", str(Path("~/.globus/userkey.pem").expanduser())
         )
 
         cert_path = os.environ.get("RUCIO_CLIENT_CERT")

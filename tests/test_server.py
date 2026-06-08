@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import os
 import textwrap
-from typing import TYPE_CHECKING
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 import pytest
 from mcp.server.fastmcp import FastMCP
@@ -201,8 +198,8 @@ class TestPreflightCheck:
         env = {"RUCIO_AUTH_TYPE": "x509"}
         with patch.dict("os.environ", env, clear=True):
             _preflight_check(valid_cfg)
-            assert os.environ.get("RUCIO_CLIENT_CERT") == os.path.expanduser(
-                "~/.globus/usercert.pem"
+            assert os.environ.get("RUCIO_CLIENT_CERT") == str(
+                Path("~/.globus/usercert.pem").expanduser()
             )
 
     def test_x509_key_default_set_when_auth_type_is_bare_x509(
@@ -212,8 +209,8 @@ class TestPreflightCheck:
         env = {"RUCIO_AUTH_TYPE": "x509"}
         with patch.dict("os.environ", env, clear=True):
             _preflight_check(valid_cfg)
-            assert os.environ.get("RUCIO_CLIENT_KEY") == os.path.expanduser(
-                "~/.globus/userkey.pem"
+            assert os.environ.get("RUCIO_CLIENT_KEY") == str(
+                Path("~/.globus/userkey.pem").expanduser()
             )
 
     def test_x509_explicit_cert_not_overridden(
