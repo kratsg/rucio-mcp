@@ -135,8 +135,11 @@ def _preflight_check(cfg_path: Path, auth_type_override: str | None = None) -> N
         os.environ["RUCIO_CONFIG"] = str(cfg_path)
 
     # auth type: explicit override flag > existing env var > cfg file > x509_proxy default
+    # 'x509' is a user-friendly alias for 'x509_proxy' (VOMS proxy auth).
     if auth_type_override:
-        os.environ["RUCIO_AUTH_TYPE"] = auth_type_override
+        os.environ["RUCIO_AUTH_TYPE"] = (
+            "x509_proxy" if auth_type_override == "x509" else auth_type_override
+        )
     elif "RUCIO_AUTH_TYPE" not in os.environ:
         # Read auth_type from the cfg so that OIDC sites don't inherit the x509 default.
         cp = configparser.ConfigParser()
@@ -558,6 +561,12 @@ def serve(
         return
 
     # HTTP transport
+    if auth_type is not None:
+        sys.stderr.write(
+            "[rucio-mcp] WARNING: --auth-type is ignored in HTTP mode "
+            "(HTTP mode always authenticates via the OIDC OAuth bridge).\n"
+        )
+
     if not resource_url:
         sys.stderr.write(
             "[rucio-mcp] Error: --resource-url is required for HTTP transport.\n"

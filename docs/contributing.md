@@ -157,10 +157,9 @@ class TestRucioMyTool:
 2. Start the server with the standard ATLAS environment:
 
    ```bash
-   env RUCIO_AUTH_TYPE=x509_proxy \
-       X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates \
+   X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates \
        RUCIO_CONFIG=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0/etc/rucio.cfg \
-       rucio-mcp serve
+       rucio-mcp serve --site atlas --auth-type x509
    ```
 
 3. Run integration tests:

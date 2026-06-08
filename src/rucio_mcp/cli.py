@@ -58,18 +58,21 @@ def main() -> None:
         metavar="SITE",
         default=None,
         help=(
-            "Site preset to use (e.g. atlas, atlas-x509, dune, escape). "
+            "Site preset to use (e.g. atlas, cms, dune, escape). "
             "May be repeated for HTTP transport to mount multiple sites. "
-            "Defaults to escape."
+            "Defaults to escape. Use --auth-type x509 for x509 proxy auth."
         ),
     )
     serve_parser.add_argument(
         "--auth-type",
         default=None,
-        metavar="AUTH_TYPE",
+        choices=("oidc", "x509", "x509_proxy", "userpass", "gss"),
         help=(
-            "Override RUCIO_AUTH_TYPE for stdio transport "
-            "(e.g. x509_proxy, userpass, oidc). Ignored in HTTP mode."
+            "Override authentication method for stdio transport. "
+            "Use 'x509' as a friendly alias for 'x509_proxy'. "
+            "Ignored in HTTP mode (HTTP mode always uses OIDC via the OAuth bridge). "
+            "Note: 'x509' is the rucio cert-based method; "
+            "use 'x509_proxy' or the 'x509' alias for VOMS proxy auth."
         ),
     )
     serve_parser.add_argument(

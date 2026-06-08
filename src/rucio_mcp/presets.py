@@ -17,32 +17,6 @@ class Preset:
 
 
 PRESETS: dict[str, Preset] = {
-    "atlas-x509": Preset(
-        name="atlas-x509",
-        description="ATLAS at CERN (x509 proxy — stdio mode only)",
-        config_resource="atlas-x509.cfg",
-        post_init_hint=textwrap.dedent("""\
-            Next steps:
-              export RUCIO_ACCOUNT=<your-atlas-account>
-              voms-proxy-init -voms atlas
-
-            Then run: rucio-mcp serve --site atlas-x509
-
-            For HTTP mode, use the 'atlas' site.
-        """).rstrip(),
-    ),
-    "cms-x509": Preset(
-        name="cms-x509",
-        description="CMS at CERN (x509 proxy — stdio mode only)",
-        config_resource="cms-x509.cfg",
-        post_init_hint=textwrap.dedent("""\
-            Next steps:
-              export RUCIO_ACCOUNT=<your-cms-account>
-              voms-proxy-init -voms cms
-
-            Then run: rucio-mcp serve --site cms-x509
-        """).rstrip(),
-    ),
     "cms": Preset(
         name="cms",
         description="CMS at CERN (OIDC — stdio and HTTP mode)",
@@ -53,6 +27,10 @@ PRESETS: dict[str, Preset] = {
 
             For stdio mode (OIDC polling):
               rucio-mcp serve --site cms
+
+            For stdio mode (x509 proxy):
+              voms-proxy-init -voms cms
+              rucio-mcp serve --site cms --auth-type x509
 
             For HTTP mode (OAuth bridge):
               rucio-mcp serve --transport http \\
@@ -70,6 +48,10 @@ PRESETS: dict[str, Preset] = {
 
             For stdio mode (OIDC polling):
               rucio-mcp serve --site atlas
+
+            For stdio mode (x509 proxy):
+              voms-proxy-init -voms atlas
+              rucio-mcp serve --site atlas --auth-type x509
 
             For HTTP mode (OAuth bridge):
               rucio-mcp serve --transport http \\

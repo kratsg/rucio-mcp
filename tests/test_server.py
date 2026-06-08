@@ -188,6 +188,12 @@ class TestPreflightCheck:
         assert "X509" not in err
         assert "voms-proxy-init" not in err
 
+    def test_x509_alias_normalizes_to_x509_proxy(self, valid_cfg: Path) -> None:
+        """--auth-type x509 (friendly alias) must resolve to x509_proxy in RUCIO_AUTH_TYPE."""
+        with patch.dict("os.environ", {}, clear=True):
+            _preflight_check(valid_cfg, auth_type_override="x509")
+            assert os.environ["RUCIO_AUTH_TYPE"] == "x509_proxy"
+
 
 class TestServeHTTP:
     def test_http_missing_resource_url_exits_nonzero(self) -> None:
@@ -199,6 +205,23 @@ class TestServeHTTP:
         with pytest.raises(SystemExit):
             serve(transport="http", resource_url=None)
         assert "resource-url" in capsys.readouterr().err
+
+    def test_serve_warns_when_auth_type_passed_with_http(self, capsys) -> None:
+        """Passing --auth-type with --transport http must emit a warning (it is ignored in HTTP mode)."""
+        with (
+            patch("rucio_mcp.server._make_http_app") as mock_make,
+            patch("rucio_mcp.server.start_metrics_server"),
+            patch("uvicorn.run"),
+        ):
+            mock_make.return_value = MagicMock()
+            serve(
+                transport="http",
+                resource_url="http://localhost:8000",
+                sites=["escape"],
+                auth_type="oidc",
+            )
+        err = capsys.readouterr().err
+        assert "--auth-type" in err
 
     def test_stdio_calls_preflight_http_does_not(self) -> None:
         """stdio path calls _preflight_check; http path does not."""
