@@ -460,10 +460,10 @@ def _make_http_app(
             )
             sys.exit(1)
         cfg = RucioCfg.from_path(cfg_path)
-        if cfg.auth_type not in (None, "oidc"):
+        if cfg.auth_type != "oidc":
             sys.stderr.write(
                 f"[rucio-mcp] Error: site {site_name!r} has auth_type={cfg.auth_type!r}. "
-                "HTTP mode requires an OIDC-capable site (auth_type=oidc or unset).\n"
+                "HTTP mode requires auth_type=oidc.\n"
                 f"    For x509/userpass sites use stdio mode: rucio-mcp serve --site {site_name}\n"
             )
             sys.exit(1)

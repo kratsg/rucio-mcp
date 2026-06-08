@@ -85,7 +85,7 @@ class TestRucioCfgFromPath:
         cfg = RucioCfg.from_path(p)
         assert cfg.auth_type == "oidc"
 
-    def test_auth_type_defaults_to_none(self, tmp_path: Path) -> None:
+    def test_auth_type_defaults_to_oidc(self, tmp_path: Path) -> None:
         p = tmp_path / "rucio.cfg"
         p.write_text(
             textwrap.dedent("""\
@@ -95,7 +95,7 @@ class TestRucioCfgFromPath:
             """)
         )
         cfg = RucioCfg.from_path(p)
-        assert cfg.auth_type is None
+        assert cfg.auth_type == "oidc"
 
     def test_frozen_dataclass(self, tmp_path: Path) -> None:
         p = tmp_path / "rucio.cfg"
@@ -111,22 +111,22 @@ class TestRucioCfgFromPath:
             cfg.account = "changed"  # type: ignore[misc]
 
     def test_load_bundled_atlas_cfg(self) -> None:
-        """The bundled atlas.cfg does not set auth_type; auth method is selected at runtime via --auth-type."""
+        """Bundled atlas.cfg has no auth_type key; RucioCfg defaults to oidc."""
         p = Path(str(_pkg_files("rucio_mcp.data").joinpath("atlas.cfg")))
         cfg = RucioCfg.from_path(p)
-        assert cfg.auth_type is None
+        assert cfg.auth_type == "oidc"
         assert cfg.rucio_host == "https://voatlasrucio-server-prod.cern.ch:443"
 
     def test_load_bundled_cms_cfg(self) -> None:
-        """The bundled cms.cfg does not set auth_type; auth method is selected at runtime via --auth-type."""
+        """Bundled cms.cfg has no auth_type key; RucioCfg defaults to oidc."""
         p = Path(str(_pkg_files("rucio_mcp.data").joinpath("cms.cfg")))
         cfg = RucioCfg.from_path(p)
-        assert cfg.auth_type is None
+        assert cfg.auth_type == "oidc"
         assert cfg.rucio_host == "https://cms-rucio.cern.ch"
 
     def test_load_bundled_dune_cfg(self) -> None:
-        """The bundled dune.cfg does not set auth_type; auth method is selected at runtime via --auth-type."""
+        """Bundled dune.cfg has no auth_type key; RucioCfg defaults to oidc."""
         p = Path(str(_pkg_files("rucio_mcp.data").joinpath("dune.cfg")))
         cfg = RucioCfg.from_path(p)
-        assert cfg.auth_type is None
+        assert cfg.auth_type == "oidc"
         assert cfg.rucio_host == "https://dune-rucio.fnal.gov"

@@ -65,7 +65,7 @@ def main() -> None:
     )
     serve_parser.add_argument(
         "--auth-type",
-        default=None,
+        default="oidc",
         choices=("oidc", "x509", "x509_proxy", "userpass", "gss"),
         help=(
             "Override authentication method for stdio transport. "

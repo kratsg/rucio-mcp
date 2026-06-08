@@ -86,7 +86,7 @@ class BearerTokenClientFactory(RucioClientFactory):
             account=account,
             rucio_host=self._cfg.rucio_host,
             auth_host=self._cfg.auth_host,
-            auth_type=self._cfg.auth_type or "oidc",
+            auth_type=self._cfg.auth_type,
         )
         self._cache.put(session_id, client, time.time() + 300)
         return client
