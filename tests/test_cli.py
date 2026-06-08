@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from rucio_mcp.cli import main
+from rucio_mcp.presets import PRESETS
 
 
 class TestCLIServe:
@@ -196,6 +199,23 @@ class TestCLIServe:
             main()
 
         assert captured["sites"] == ["escape", "atlas"]
+
+    def test_auth_type_rejects_invalid_value(self) -> None:
+        """--auth-type must reject values not in the allowed choices."""
+        with (
+            patch("sys.argv", ["rucio-mcp", "serve", "--auth-type", "bad_value"]),
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+        assert exc_info.value.code != 0
+
+    def test_atlas_x509_preset_removed(self) -> None:
+        """atlas-x509 must not exist as a preset after the auth-type refactor."""
+        assert "atlas-x509" not in PRESETS
+
+    def test_cms_x509_preset_removed(self) -> None:
+        """cms-x509 must not exist as a preset after the auth-type refactor."""
+        assert "cms-x509" not in PRESETS
 
 
 class TestCLIPing:

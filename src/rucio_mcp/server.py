@@ -135,8 +135,11 @@ def _preflight_check(cfg_path: Path, auth_type_override: str | None = None) -> N
         os.environ["RUCIO_CONFIG"] = str(cfg_path)
 
     # auth type: explicit override flag > existing env var > cfg file > x509_proxy default
+    # 'x509' is a user-friendly alias for 'x509_proxy' (VOMS proxy auth).
     if auth_type_override:
-        os.environ["RUCIO_AUTH_TYPE"] = auth_type_override
+        os.environ["RUCIO_AUTH_TYPE"] = (
+            "x509_proxy" if auth_type_override == "x509" else auth_type_override
+        )
     elif "RUCIO_AUTH_TYPE" not in os.environ:
         # Read auth_type from the cfg so that OIDC sites don't inherit the x509 default.
         cp = configparser.ConfigParser()
@@ -170,6 +173,29 @@ def _preflight_check(cfg_path: Path, auth_type_override: str | None = None) -> N
             warnings.append(
                 f"X509_USER_PROXY={proxy_path!r} is set but the file does not exist.\n"
                 "    Run: voms-proxy-init -voms <site>"
+            )
+
+    elif auth_type == "x509":
+        # Bare cert auth (not VOMS proxy): default cert/key to standard globus locations.
+        os.environ.setdefault(
+            "RUCIO_CLIENT_CERT", str(Path("~/.globus/usercert.pem").expanduser())
+        )
+        os.environ.setdefault(
+            "RUCIO_CLIENT_KEY", str(Path("~/.globus/userkey.pem").expanduser())
+        )
+
+        cert_path = os.environ.get("RUCIO_CLIENT_CERT")
+        if cert_path and not Path(cert_path).exists():
+            warnings.append(
+                f"RUCIO_CLIENT_CERT={cert_path!r} is set but the file does not exist.\n"
+                "    Provide a valid certificate at that path or set RUCIO_CLIENT_CERT."
+            )
+
+        key_path = os.environ.get("RUCIO_CLIENT_KEY")
+        if key_path and not Path(key_path).exists():
+            warnings.append(
+                f"RUCIO_CLIENT_KEY={key_path!r} is set but the file does not exist.\n"
+                "    Provide a valid key at that path or set RUCIO_CLIENT_KEY."
             )
 
     for w in warnings:
@@ -558,6 +584,12 @@ def serve(
         return
 
     # HTTP transport
+    if auth_type is not None:
+        sys.stderr.write(
+            "[rucio-mcp] WARNING: --auth-type is ignored in HTTP mode "
+            "(HTTP mode always authenticates via the OIDC OAuth bridge).\n"
+        )
+
     if not resource_url:
         sys.stderr.write(
             "[rucio-mcp] Error: --resource-url is required for HTTP transport.\n"

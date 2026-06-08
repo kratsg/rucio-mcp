@@ -71,13 +71,11 @@ pixi add rucio-mcp
 
 ### 1. Set up authentication
 
-**x509 proxy (ATLAS sites, `atlas-x509` preset):**
+**x509 proxy (ATLAS sites):**
 
 ```bash
 voms-proxy-init -voms atlas
 export RUCIO_ACCOUNT=<your_atlas_account>
-export RUCIO_AUTH_TYPE=x509_proxy
-export RUCIO_HOME=/path/to/rucio-clients   # directory containing etc/rucio.cfg
 ```
 
 **When installed via pixi (recommended):**
@@ -112,18 +110,17 @@ pixi exec --with rucio-mcp sh -c '$X509_CERT_DIR/refresh_crls.sh'
 ```bash
 voms-proxy-init -voms atlas
 export RUCIO_ACCOUNT=<your_atlas_account>
-export RUCIO_AUTH_TYPE=x509_proxy
 export X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates
-export RUCIO_HOME=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0
-rucio-mcp serve --site atlas-x509
+export RUCIO_CONFIG=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0/etc/rucio.cfg
+rucio-mcp serve --site atlas --auth-type x509
 ```
 
-**x509 proxy (CMS sites, `cms-x509` preset):**
+**x509 proxy (CMS sites):**
 
 ```bash
 voms-proxy-init -voms cms
 export RUCIO_ACCOUNT=<your_cms_account>
-rucio-mcp serve --site cms-x509
+rucio-mcp serve --site cms --auth-type x509
 ```
 
 ### 2. Test the server
@@ -138,16 +135,16 @@ The server speaks MCP over stdio. Configure your MCP client to launch it.
 
 Add to your `.mcp.json` (project) or `~/.claude.json` (global).
 
-The key name (`atlas-x509` below) lets you tell Claude which Rucio server to use
-— useful when you have multiple Rucio instances configured. Choose any name you
-like.
+The key name (`rucio-atlas` below) lets you tell Claude which Rucio server to
+use — useful when you have multiple Rucio instances configured. Choose any name
+you like.
 
 **With pixi** (`X509_CERT_DIR` set automatically by `ca-policy-lcg`):
 
 ```json
 {
   "mcpServers": {
-    "rucio-atlas-x509": {
+    "rucio-atlas": {
       "type": "stdio",
       "command": "pixi",
       "args": [
@@ -157,11 +154,12 @@ like.
         "rucio-mcp",
         "serve",
         "--site",
-        "atlas-x509"
+        "atlas",
+        "--auth-type",
+        "x509"
       ],
       "env": {
-        "RUCIO_ACCOUNT": "youraccount",
-        "RUCIO_HOME": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0"
+        "RUCIO_ACCOUNT": "youraccount"
       }
     }
   }
@@ -174,14 +172,14 @@ like.
 ```json
 {
   "mcpServers": {
-    "rucio-atlas-x509": {
+    "rucio-atlas": {
       "type": "stdio",
       "command": "rucio-mcp",
-      "args": ["serve", "--site", "atlas-x509"],
+      "args": ["serve", "--site", "atlas", "--auth-type", "x509"],
       "env": {
         "RUCIO_ACCOUNT": "youraccount",
         "X509_CERT_DIR": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates",
-        "RUCIO_HOME": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0"
+        "RUCIO_CONFIG": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0/etc/rucio.cfg"
       }
     }
   }
@@ -198,7 +196,7 @@ or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
 ```json
 {
   "mcpServers": {
-    "rucio-atlas-x509": {
+    "rucio-atlas": {
       "type": "stdio",
       "command": "pixi",
       "args": [
@@ -208,11 +206,12 @@ or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
         "rucio-mcp",
         "serve",
         "--site",
-        "atlas-x509"
+        "atlas",
+        "--auth-type",
+        "x509"
       ],
       "env": {
-        "RUCIO_ACCOUNT": "youraccount",
-        "RUCIO_HOME": "/path/to/rucio-clients"
+        "RUCIO_ACCOUNT": "youraccount"
       }
     }
   }
@@ -225,14 +224,14 @@ or `%APPDATA%\Claude\claude_desktop_config.json` (Windows).
 ```json
 {
   "mcpServers": {
-    "rucio-atlas-x509": {
+    "rucio-atlas": {
       "type": "stdio",
       "command": "rucio-mcp",
-      "args": ["serve", "--site", "atlas-x509"],
+      "args": ["serve", "--site", "atlas", "--auth-type", "x509"],
       "env": {
         "RUCIO_ACCOUNT": "youraccount",
         "X509_CERT_DIR": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates",
-        "RUCIO_HOME": "/path/to/rucio-clients"
+        "RUCIO_CONFIG": "/path/to/rucio-clients/etc/rucio.cfg"
       }
     }
   }

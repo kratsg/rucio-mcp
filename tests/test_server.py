@@ -4,11 +4,8 @@ from __future__ import annotations
 
 import os
 import textwrap
-from typing import TYPE_CHECKING
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 import pytest
 from mcp.server.fastmcp import FastMCP
@@ -188,6 +185,87 @@ class TestPreflightCheck:
         assert "X509" not in err
         assert "voms-proxy-init" not in err
 
+    def test_x509_alias_normalizes_to_x509_proxy(self, valid_cfg: Path) -> None:
+        """--auth-type x509 (friendly alias) must resolve to x509_proxy in RUCIO_AUTH_TYPE."""
+        with patch.dict("os.environ", {}, clear=True):
+            _preflight_check(valid_cfg, auth_type_override="x509")
+            assert os.environ["RUCIO_AUTH_TYPE"] == "x509_proxy"
+
+    def test_x509_cert_default_set_when_auth_type_is_bare_x509(
+        self, valid_cfg: Path
+    ) -> None:
+        """When auth_type=x509 (bare cert), RUCIO_CLIENT_CERT must default to ~/.globus/usercert.pem."""
+        env = {"RUCIO_AUTH_TYPE": "x509"}
+        with patch.dict("os.environ", env, clear=True):
+            _preflight_check(valid_cfg)
+            assert os.environ.get("RUCIO_CLIENT_CERT") == str(
+                Path("~/.globus/usercert.pem").expanduser()
+            )
+
+    def test_x509_key_default_set_when_auth_type_is_bare_x509(
+        self, valid_cfg: Path
+    ) -> None:
+        """When auth_type=x509 (bare cert), RUCIO_CLIENT_KEY must default to ~/.globus/userkey.pem."""
+        env = {"RUCIO_AUTH_TYPE": "x509"}
+        with patch.dict("os.environ", env, clear=True):
+            _preflight_check(valid_cfg)
+            assert os.environ.get("RUCIO_CLIENT_KEY") == str(
+                Path("~/.globus/userkey.pem").expanduser()
+            )
+
+    def test_x509_explicit_cert_not_overridden(
+        self, valid_cfg: Path, tmp_path: Path
+    ) -> None:
+        """Explicitly set RUCIO_CLIENT_CERT must not be overwritten by the default."""
+        cert = tmp_path / "mycert.pem"
+        cert.touch()
+        env = {"RUCIO_AUTH_TYPE": "x509", "RUCIO_CLIENT_CERT": str(cert)}
+        with patch.dict("os.environ", env, clear=True):
+            _preflight_check(valid_cfg)
+            assert os.environ["RUCIO_CLIENT_CERT"] == str(cert)
+
+    def test_x509_warns_when_cert_file_missing(self, valid_cfg: Path, capsys) -> None:
+        """Missing cert file must produce a warning."""
+        env = {
+            "RUCIO_AUTH_TYPE": "x509",
+            "RUCIO_CLIENT_CERT": "/nonexistent/cert.pem",
+            "RUCIO_CLIENT_KEY": "/nonexistent/key.pem",
+        }
+        with patch.dict("os.environ", env, clear=True):
+            _preflight_check(valid_cfg)
+        assert "RUCIO_CLIENT_CERT" in capsys.readouterr().err
+
+    def test_x509_warns_when_key_file_missing(self, valid_cfg: Path, capsys) -> None:
+        """Missing key file must produce a warning."""
+        cert = valid_cfg  # reuse an existing file as the cert
+        env = {
+            "RUCIO_AUTH_TYPE": "x509",
+            "RUCIO_CLIENT_CERT": str(cert),
+            "RUCIO_CLIENT_KEY": "/nonexistent/key.pem",
+        }
+        with patch.dict("os.environ", env, clear=True):
+            _preflight_check(valid_cfg)
+        assert "RUCIO_CLIENT_KEY" in capsys.readouterr().err
+
+    def test_x509_no_warnings_when_cert_and_key_exist(
+        self, valid_cfg: Path, tmp_path: Path, capsys
+    ) -> None:
+        """No warnings when cert and key files both exist."""
+        cert = tmp_path / "usercert.pem"
+        key = tmp_path / "userkey.pem"
+        cert.touch()
+        key.touch()
+        env = {
+            "RUCIO_AUTH_TYPE": "x509",
+            "RUCIO_CLIENT_CERT": str(cert),
+            "RUCIO_CLIENT_KEY": str(key),
+        }
+        with patch.dict("os.environ", env, clear=True):
+            _preflight_check(valid_cfg)
+        err = capsys.readouterr().err
+        assert "RUCIO_CLIENT_CERT" not in err
+        assert "RUCIO_CLIENT_KEY" not in err
+
 
 class TestServeHTTP:
     def test_http_missing_resource_url_exits_nonzero(self) -> None:
@@ -199,6 +277,23 @@ class TestServeHTTP:
         with pytest.raises(SystemExit):
             serve(transport="http", resource_url=None)
         assert "resource-url" in capsys.readouterr().err
+
+    def test_serve_warns_when_auth_type_passed_with_http(self, capsys) -> None:
+        """Passing --auth-type with --transport http must emit a warning (it is ignored in HTTP mode)."""
+        with (
+            patch("rucio_mcp.server._make_http_app") as mock_make,
+            patch("rucio_mcp.server.start_metrics_server"),
+            patch("uvicorn.run"),
+        ):
+            mock_make.return_value = MagicMock()
+            serve(
+                transport="http",
+                resource_url="http://localhost:8000",
+                sites=["escape"],
+                auth_type="oidc",
+            )
+        err = capsys.readouterr().err
+        assert "--auth-type" in err
 
     def test_stdio_calls_preflight_http_does_not(self) -> None:
         """stdio path calls _preflight_check; http path does not."""

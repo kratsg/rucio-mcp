@@ -21,11 +21,11 @@ rucio-mcp serve --site escape       # escape is the default
 To use ATLAS OIDC or x509 proxy:
 
 ```bash
-rucio-mcp serve --site atlas        # OIDC polling
+rucio-mcp serve --site atlas                  # OIDC polling
 # or
 export RUCIO_ACCOUNT=<your-atlas-account>
 voms-proxy-init -voms atlas
-rucio-mcp serve --site atlas-x509   # x509 proxy
+rucio-mcp serve --site atlas --auth-type x509 # x509 proxy
 ```
 
 To use CMS x509 proxy:
@@ -33,7 +33,7 @@ To use CMS x509 proxy:
 ```bash
 export RUCIO_ACCOUNT=<your-cms-account>
 voms-proxy-init -voms cms
-rucio-mcp serve --site cms-x509     # x509 proxy
+rucio-mcp serve --site cms --auth-type x509   # x509 proxy
 ```
 
 To point at a custom rucio.cfg instead of the bundled preset:

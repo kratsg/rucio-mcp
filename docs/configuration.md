@@ -14,9 +14,9 @@ export RUCIO_ACCOUNT=<your-escape-account>
 rucio-mcp serve --site escape       # escape is the default
 ```
 
-Available presets: `escape` (OIDC, default), `atlas` (OIDC), `atlas-x509` (x509
-proxy, stdio only), `cms` (OIDC), `cms-x509` (x509 proxy, stdio only), `dune`
-(OIDC).
+Available presets: `escape` (OIDC, default), `atlas` (OIDC), `cms` (OIDC),
+`dune` (OIDC). All presets use OIDC by default; pass `--auth-type x509` to
+switch to x509 proxy auth at runtime without a separate preset.
 
 !!! tip "Site-managed Rucio clients (UChicago AF, CERN lxplus, CVMFS)" If your
 site already provides a Rucio client installation, point `--rucio-cfg` at the
@@ -38,51 +38,38 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 
 ## Authentication methods
 
-=== "x509 proxy (atlas-x509)"
+=== "x509 proxy"
 
-    The most common method at ATLAS sites when using a VOMS proxy. Use the
-    `atlas-x509` preset, which requires a valid VOMS proxy.
+    Use `--auth-type x509` with any site preset. One preset covers both OIDC and
+    x509 proxy — no separate `-x509` preset is needed.
 
-    **With pixi (recommended):** `ca-policy-lcg` is a bundled dependency and
-    sets `X509_CERT_DIR` automatically to the certificates inside the conda
+    **ATLAS with pixi (recommended):** `ca-policy-lcg` is a bundled dependency
+    and sets `X509_CERT_DIR` automatically to the certificates inside the conda
     environment (`$CONDA_PREFIX/etc/grid-security/certificates/`). You only
     need:
 
     ```bash
     export RUCIO_ACCOUNT=<your_atlas_account>
     pixi exec --with rucio-mcp voms-proxy-init -voms atlas
-    rucio-mcp serve --site atlas-x509
+    rucio-mcp serve --site atlas --auth-type x509
     ```
 
-    **Without pixi — on CVMFS-based facilities (UChicago AF, CERN lxplus, etc.):**
+    **ATLAS — on CVMFS-based facilities (UChicago AF, CERN lxplus, etc.):**
 
     ```bash
     export RUCIO_ACCOUNT=<your_atlas_account>
-    export RUCIO_AUTH_TYPE=x509_proxy
     export X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates
     export RUCIO_CONFIG=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0/etc/rucio.cfg
     voms-proxy-init -voms atlas
-    rucio-mcp serve
+    rucio-mcp serve --site atlas --auth-type x509
     ```
 
-    **Without pixi — elsewhere:** set `X509_CERT_DIR` to a local CA bundle.
-    If you have CVMFS with ATLAS installed, the path is already available:
-
-    ```bash
-    export X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates
-    ```
-
-    Otherwise, install `ca-policy-lcg` from conda-forge or from your system
-    package manager (`fetch-crl` / `ca-policy-egi-core`).
-
-=== "x509 proxy (cms-x509)"
-
-    Use the `cms-x509` preset with a valid CMS VOMS proxy.
+    **CMS:**
 
     ```bash
     export RUCIO_ACCOUNT=<your_cms_account>
     voms-proxy-init -voms cms
-    rucio-mcp serve --site cms-x509
+    rucio-mcp serve --site cms --auth-type x509
     ```
 
     If `X509_CERT_DIR` is not set automatically, point it at a local CA bundle
@@ -90,8 +77,13 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 
     ```bash
     export X509_CERT_DIR=/etc/grid-security/certificates
-    rucio-mcp serve --site cms-x509
     ```
+
+    !!! note "x509 vs x509_proxy"
+        `--auth-type x509` is a friendly alias for `x509_proxy` (VOMS proxy
+        auth). The underlying rucio value used is `x509_proxy`. To use rucio's
+        bare cert-based `x509` auth type, set `RUCIO_AUTH_TYPE=x509` or
+        `auth_type = x509` in your `rucio.cfg` directly.
 
 === "userpass"
 
@@ -161,22 +153,6 @@ step is needed. Use `--site <name>` to select one.
 
     > OIDC auth. Supports both stdio and HTTP transport modes.
 
-=== "atlas-x509"
-
-    ```ini
-    --8<-- "src/rucio_mcp/data/atlas-x509.cfg"
-    ```
-
-    > x509 proxy auth. Stdio mode only. For HTTP mode, use the `atlas` preset.
-
-=== "cms-x509"
-
-    ```ini
-    --8<-- "src/rucio_mcp/data/cms-x509.cfg"
-    ```
-
-    > x509 proxy auth. Stdio mode only.
-
 === "dune"
 
     ```ini
@@ -239,7 +215,8 @@ container image), point `--rucio-cfg` directly at the site's config file:
 export RUCIO_ACCOUNT=<your_atlas_account>
 voms-proxy-init -voms atlas
 rucio-mcp serve \
-  --site atlas-x509 \
+  --site atlas \
+  --auth-type x509 \
   --rucio-cfg /cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/35.6.0/etc/rucio.cfg
 ```
 

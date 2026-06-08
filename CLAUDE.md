@@ -90,9 +90,10 @@ hooks:
 
 ### Preset extension
 
-Available presets: `escape` (OIDC, default), `atlas` (OIDC), `atlas-x509` (x509
-proxy, stdio only), `dune` (OIDC). To add a new site: create
-`src/rucio_mcp/data/<site>.cfg` and add a `Preset` entry to
+Available presets: `escape` (OIDC, default), `atlas` (OIDC), `cms` (OIDC),
+`dune` (OIDC). All presets use OIDC by default; x509 proxy auth is selected at
+runtime with `--auth-type x509` (no separate `-x509` preset). To add a new site:
+create `src/rucio_mcp/data/<site>.cfg` and add a `Preset` entry to
 `src/rucio_mcp/presets.py`.
 
 ## Project layout
@@ -106,7 +107,7 @@ src/rucio_mcp/
 │                   # start_metrics_server() — binds a dedicated port via prometheus_client.start_http_server
 ├── nomenclature.py # ATLAS dataset naming constants embedded in server instructions
 ├── resources.py    # MCP resources (static docs); register(mcp) wired in server.py
-├── presets.py      # Preset dataclass; PRESETS dict (escape, atlas, atlas-x509, dune → *.cfg)
+├── presets.py      # Preset dataclass; PRESETS dict (escape, atlas, cms, dune → *.cfg)
 ├── auth/
 │   ├── factory.py            # RucioClientFactory ABC, EnvBasedClientFactory,
 │   │                         # BearerTokenClientFactory, _extract_request_auth
@@ -118,8 +119,8 @@ src/rucio_mcp/
 │   ├── bridge_provider.py    # BridgePoller Protocol + RucioBridgeProvider
 │   └── bridge_routes.py      # GET /bridge (HTML) + GET /bridge/status (JSON)
 ├── data/
-│   ├── atlas.cfg             # ATLAS rucio.cfg preset (oidc, stdio + HTTP)
-│   ├── atlas-x509.cfg        # ATLAS rucio.cfg preset (x509_proxy, stdio only)
+│   ├── atlas.cfg             # ATLAS rucio.cfg preset (oidc, stdio + HTTP; x509 via --auth-type x509)
+│   ├── cms.cfg               # CMS rucio.cfg preset (oidc, stdio + HTTP; x509 via --auth-type x509)
 │   ├── dune.cfg              # DUNE rucio.cfg preset (oidc, stdio + HTTP)
 │   └── escape.cfg            # ESCAPE VRE rucio.cfg preset (oidc, stdio + HTTP)
 └── tools/
@@ -412,18 +413,16 @@ where the directory is the first three digits + `xxx` and then the full DSID.
    **With pixi** (`ca-policy-lcg` sets `X509_CERT_DIR` automatically):
 
    ```bash
-   env RUCIO_AUTH_TYPE=x509_proxy \
-       RUCIO_CONFIG=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/<version>/etc/rucio.cfg \
-       rucio-mcp serve --site atlas-x509
+   RUCIO_CONFIG=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/<version>/etc/rucio.cfg \
+       rucio-mcp serve --site atlas --auth-type x509
    ```
 
    **Without pixi** (set `X509_CERT_DIR` to CVMFS CA bundle manually):
 
    ```bash
-   env RUCIO_AUTH_TYPE=x509_proxy \
-       X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates \
+   X509_CERT_DIR=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates \
        RUCIO_CONFIG=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-clients/<version>/etc/rucio.cfg \
-       rucio-mcp serve --site atlas-x509
+       rucio-mcp serve --site atlas --auth-type x509
    ```
 
    - `RUCIO_CONFIG` — direct path to the site's `rucio.cfg` file inside the
@@ -436,7 +435,7 @@ where the directory is the first three digits + `xxx` and then the full DSID.
    ```json
    {
      "mcpServers": {
-       "rucio-atlas-x509": {
+       "rucio-atlas": {
          "type": "stdio",
          "command": "pixi",
          "args": [
@@ -446,7 +445,9 @@ where the directory is the first three digits + `xxx` and then the full DSID.
            "rucio-mcp",
            "serve",
            "--site",
-           "atlas-x509"
+           "atlas",
+           "--auth-type",
+           "x509"
          ],
          "env": {
            "RUCIO_ACCOUNT": "gstark",
@@ -462,10 +463,10 @@ where the directory is the first three digits + `xxx` and then the full DSID.
    ```json
    {
      "mcpServers": {
-       "rucio-atlas-x509": {
+       "rucio-atlas": {
          "type": "stdio",
          "command": "rucio-mcp",
-         "args": ["serve", "--site", "atlas-x509"],
+         "args": ["serve", "--site", "atlas", "--auth-type", "x509"],
          "env": {
            "RUCIO_ACCOUNT": "gstark",
            "X509_CERT_DIR": "/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/etc/grid-security-emi/certificates",
