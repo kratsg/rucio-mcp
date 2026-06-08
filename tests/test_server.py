@@ -268,6 +268,7 @@ class TestPreflightCheck:
         assert "RUCIO_CLIENT_CERT" not in err
         assert "RUCIO_CLIENT_KEY" not in err
 
+
 class TestServeHTTP:
     def test_http_missing_resource_url_exits_nonzero(self) -> None:
         with pytest.raises(SystemExit) as exc_info:
