@@ -277,7 +277,7 @@ def _make_stdio_mcp(
     ]:
         _module.register(mcp)
 
-    register_resources(mcp, preset.nomenclature_resource)
+    register_resources(mcp, site_name, preset.nomenclature_resource)
     return mcp
 
 
@@ -352,7 +352,7 @@ def _make_site_mcp(
         subscriptions,
     ]:
         _module.register(mcp)
-    register_resources(mcp, preset.nomenclature_resource)
+    register_resources(mcp, site_name, preset.nomenclature_resource)
     return mcp, provider, cache
 
 
