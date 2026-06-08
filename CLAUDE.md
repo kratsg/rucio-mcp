@@ -105,9 +105,9 @@ src/rucio_mcp/
 ├── metrics.py      # Prometheus metrics: HTTP counters (PrometheusMiddleware), tool-call counter +
 │                   # duration histogram (TOOL_CALLS / TOOL_CALL_DURATION), BridgeStatsCollector,
 │                   # start_metrics_server() — binds a dedicated port via prometheus_client.start_http_server
-├── nomenclature.py # ATLAS dataset naming constants embedded in server instructions
-├── resources.py    # MCP resources (static docs); register(mcp) wired in server.py
-├── presets.py      # Preset dataclass; PRESETS dict (escape, atlas, cms, dune → *.cfg)
+├── nomenclature.py # load_nomenclature(resource) — loads per-site nomenclature markdown from data/
+├── resources.py    # MCP resources; register(mcp, nomenclature_resource) wired in server.py
+├── presets.py      # Preset dataclass (incl. nomenclature_resource); PRESETS dict (escape, atlas, cms, dune → *.cfg)
 ├── auth/
 │   ├── factory.py            # RucioClientFactory ABC, EnvBasedClientFactory,
 │   │                         # BearerTokenClientFactory, _extract_request_auth
@@ -122,7 +122,9 @@ src/rucio_mcp/
 │   ├── atlas.cfg             # ATLAS rucio.cfg preset (oidc, stdio + HTTP; x509 via --auth-type x509)
 │   ├── cms.cfg               # CMS rucio.cfg preset (oidc, stdio + HTTP; x509 via --auth-type x509)
 │   ├── dune.cfg              # DUNE rucio.cfg preset (oidc, stdio + HTTP)
-│   └── escape.cfg            # ESCAPE VRE rucio.cfg preset (oidc, stdio + HTTP)
+│   ├── escape.cfg            # ESCAPE VRE rucio.cfg preset (oidc, stdio + HTTP)
+│   └── nomenclature/
+│       └── atlas.md          # ATLAS dataset naming reference (single source for server, resource, docs)
 └── tools/
     ├── _helpers.py  # parse_did(), format_dict(), format_list(), check_write_allowed(),
     │                # human_bytes(), paginate_iter(), build_hints(), classify_error(),
@@ -354,42 +356,14 @@ Authentication is configured via environment variables:
 
 ## ATLAS dataset nomenclature
 
+Single source of truth: `src/rucio_mcp/data/nomenclature/atlas.md`
+
+This file is loaded at runtime into the server instructions and the
+`rucio://nomenclature` MCP resource for the `atlas` preset. The docs page
+`docs/atlas-nomenclature.md` renders the same file via snippet include.
+
 Full reference: ATL-COM-GEN-2007-003 "ATLAS Dataset Nomenclature" (2024
 edition), available at https://cds.cern.ch/record/1070318
-
-DIDs use the format `scope:name`. For centrally produced data, scope = project.
-
-**Monte Carlo:**
-
-```
-project.datasetNumber.physicsShort.prodStep.dataType.AMITags
-mc20_13TeV:mc20_13TeV.700320.Sh_2211_Zee_maxHTpTV2_BFilter.deriv.DAOD_PHYS.e8351_s3681_r13144_r13146_p5855
-```
-
-**Real data (primary):**
-
-```
-project.runNumber.streamName.prodStep.dataType.AMITags
-data18_13TeV:data18_13TeV.00348885.physics_Main.deriv.DAOD_PHYS.r13286_p4910_p5855
-```
-
-**Real data (physics containers — preferred for analysis):**
-
-```
-project.periodName.streamName.PhysCont.dataType.contVersion
-data15_13TeV:data15_13TeV.periodAllYear.physics_Main.PhysCont.DAOD_PHYSLITE.grp15_v01_p5631
-```
-
-AMI tag letters: `e`=evgen, `s`=simul, `d`=digit, `r`=reco(ProdSys),
-`f`=reco(Tier0), `p`=group-production/deriv, `m`=merge(Tier0),
-`t`=merge(ProdSys)
-
-Common data types: `DAOD_PHYS`, `DAOD_PHYSLITE` (most common for analysis),
-`DAOD_EXOT*`, `DAOD_SUSY*`, `AOD`, `ESD`, `EVNT`, `HITS`, `RDO`
-
-DSID (MC dataset number) job options:
-`https://gitlab.cern.ch/atlas-physics/pmg/mcjoboptions/-/tree/master/<700xxx>/<700320>`
-where the directory is the first three digits + `xxx` and then the full DSID.
 
 ## Testing on the UChicago Analysis Facility
 
