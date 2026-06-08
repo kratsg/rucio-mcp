@@ -23,25 +23,25 @@ def mcp_without_nomenclature() -> FastMCP:
 
 
 class TestNomenclatureResource:
-    async def test_resource_uri_is_site_qualified(
+    async def test_resource_uri_is_generic(
         self, mcp_with_nomenclature: FastMCP
     ) -> None:
         resources = await mcp_with_nomenclature.list_resources()
         uris = [str(r.uri) for r in resources]
-        assert "rucio://atlas/nomenclature" in uris
+        assert "rucio://nomenclature" in uris
 
     async def test_resource_not_registered_when_none(
         self, mcp_without_nomenclature: FastMCP
     ) -> None:
         resources = await mcp_without_nomenclature.list_resources()
         uris = [str(r.uri) for r in resources]
-        assert not any("nomenclature" in u for u in uris)
+        assert "rucio://nomenclature" not in uris
 
     async def test_resource_returns_nomenclature_content(
         self, mcp_with_nomenclature: FastMCP
     ) -> None:
         content = list(
-            await mcp_with_nomenclature.read_resource("rucio://atlas/nomenclature")
+            await mcp_with_nomenclature.read_resource("rucio://nomenclature")
         )
         text = content[0].content
         assert "scope:name" in text
@@ -52,16 +52,12 @@ class TestNomenclatureResource:
         self, mcp_with_nomenclature: FastMCP
     ) -> None:
         resources = await mcp_with_nomenclature.list_resources()
-        resource = next(
-            r for r in resources if str(r.uri) == "rucio://atlas/nomenclature"
-        )
+        resource = next(r for r in resources if str(r.uri) == "rucio://nomenclature")
         assert resource.mimeType == "text/markdown"
 
     async def test_resource_name_includes_site(
         self, mcp_with_nomenclature: FastMCP
     ) -> None:
         resources = await mcp_with_nomenclature.list_resources()
-        resource = next(
-            r for r in resources if str(r.uri) == "rucio://atlas/nomenclature"
-        )
+        resource = next(r for r in resources if str(r.uri) == "rucio://nomenclature")
         assert "atlas" in resource.name.lower()

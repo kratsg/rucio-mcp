@@ -41,7 +41,6 @@ from rucio_mcp.metrics import (
     PrometheusMiddleware,
     start_metrics_server,
 )
-from rucio_mcp.nomenclature import load_nomenclature
 from rucio_mcp.presets import PRESETS, Preset
 from rucio_mcp.resources import register as register_resources
 from rucio_mcp.tools import (
@@ -67,15 +66,16 @@ _GENERIC_PREAMBLE = (
     "before starting the server."
 )
 
+_NOMENCLATURE_HINT = (
+    "Dataset naming conventions for this site are available "
+    "via the `rucio://nomenclature` resource."
+)
+
 
 def _build_instructions(preset: Preset) -> str:
-    """Build the server instructions string for *preset*.
-
-    Appends the site's nomenclature markdown when present.
-    """
-    nomenclature = load_nomenclature(preset.nomenclature_resource)
-    if nomenclature:
-        return _GENERIC_PREAMBLE + "\n\n" + nomenclature
+    """Build the server instructions string for *preset*."""
+    if preset.nomenclature_resource is not None:
+        return _GENERIC_PREAMBLE + "\n\n" + _NOMENCLATURE_HINT
     return _GENERIC_PREAMBLE
 
 
