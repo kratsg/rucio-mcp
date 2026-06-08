@@ -90,11 +90,14 @@ hooks:
 
 ### Preset extension
 
-Available presets: `escape` (OIDC, default), `atlas` (OIDC), `cms` (OIDC),
-`dune` (OIDC). All presets use OIDC by default; x509 proxy auth is selected at
-runtime with `--auth-type x509` (no separate `-x509` preset). To add a new site:
-create `src/rucio_mcp/data/<site>.cfg` and add a `Preset` entry to
-`src/rucio_mcp/presets.py`.
+Available presets: `escape` (OIDC), `atlas` (OIDC), `cms` (OIDC), `dune` (OIDC).
+All presets use OIDC by default; x509 proxy auth is selected at runtime with
+`--auth-type x509` (no separate `-x509` preset). To add a new site: create
+`src/rucio_mcp/data/<site>.cfg`, add a `Preset` entry to
+`src/rucio_mcp/presets.py` (include
+`nomenclature_resource="nomenclature/<site>.md"` if applicable), and add a
+`test_load_bundled_<site>_cfg` test to `tests/auth/test_rucio_cfg.py`. Full
+steps in `docs/contributing.md` § "Contributing a new site".
 
 ## Project layout
 

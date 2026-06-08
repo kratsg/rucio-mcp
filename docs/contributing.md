@@ -98,6 +98,110 @@ for _module in [..., mymodule]:
     _module.register(mcp)
 ```
 
+## Contributing a new site
+
+A "site" is a bundled `rucio.cfg` preset plus a `Preset` entry that the CLI
+knows about. Adding one requires a cfg file, a preset entry, a bundled-cfg test,
+and docs updates.
+
+### 1. Add `src/rucio_mcp/data/<site>.cfg`
+
+The file must have a `[client]` section. Required keys:
+
+```ini
+[client]
+rucio_host = https://<site>-rucio.example.org
+auth_host  = https://<site>-rucio-auth.example.org
+auth_type  = oidc
+```
+
+Use `auth_type = oidc` so the site works in both stdio and HTTP mode. x509 proxy
+auth is selected at runtime with `--auth-type x509` — no separate cfg is needed.
+
+Common optional OIDC keys (include only what the site requires):
+
+```ini
+oidc_polling  = true
+oidc_issuer   = <issuer-label>
+oidc_audience = rucio
+oidc_scope    = openid profile offline_access
+```
+
+### 2. Add a `Preset` entry in `src/rucio_mcp/presets.py`
+
+```python
+PRESETS["mysite"] = Preset(
+    name="mysite",
+    description="My Site (OIDC — stdio and HTTP mode)",
+    config_resource="mysite.cfg",
+    post_init_hint=textwrap.dedent("""\
+        Next steps:
+          export RUCIO_ACCOUNT=<your-mysite-account>
+
+        For stdio mode (OIDC polling):
+          rucio-mcp serve --site mysite
+
+        For stdio mode (x509 proxy):
+          voms-proxy-init -voms mysite
+          rucio-mcp serve --site mysite --auth-type x509
+
+        For HTTP mode (OAuth bridge):
+          rucio-mcp serve --transport http \\
+                          --resource-url http://localhost:8000 \\
+                          --site mysite
+    """).rstrip(),
+)
+```
+
+Leave `nomenclature_resource=None` (the default) unless you add a nomenclature
+file (see step 3).
+
+### 3. (Optional) Add site nomenclature
+
+If the site has dataset naming conventions worth documenting, add a markdown
+file at `src/rucio_mcp/data/nomenclature/<site>.md` and set
+`nomenclature_resource="nomenclature/mysite.md"` in the `Preset` entry.
+
+The file is automatically exposed as the `rucio://nomenclature` MCP resource and
+referenced in the server instructions. To also publish it as a docs page, create
+`docs/<site>-nomenclature.md` with a snippet include:
+
+```markdown
+---
+icon: lucide/book-open
+---
+
+--8<-- "src/rucio_mcp/data/nomenclature/mysite.md"
+```
+
+### 4. Add a bundled-cfg test
+
+In `tests/auth/test_rucio_cfg.py`, add a test inside `TestRucioCfg`:
+
+```python
+def test_load_bundled_mysite_cfg(self) -> None:
+    p = Path(str(_pkg_files("rucio_mcp.data").joinpath("mysite.cfg")))
+    cfg = RucioCfg.from_path(p)
+    assert cfg.auth_type == "oidc"
+    assert cfg.rucio_host == "https://<site>-rucio.example.org"
+```
+
+### 5. Update docs
+
+Add the new site to:
+
+- `docs/configuration.md` — auth-method tabs and preset snippet tabs
+- `README.md` — quick-start usage block
+- `docs/oauth-setup.md` — HTTP mode section (if the site supports it)
+
+Then verify everything passes:
+
+```bash
+pixi run test
+pixi run lint
+pixi run build && pixi run build-check   # confirms the .cfg ships in the wheel
+```
+
 ## Write-protected tools
 
 Tools that modify Rucio state must check the `--read-only` flag before
