@@ -27,7 +27,6 @@ def oidc_rucio_cfg(tmp_path: Path) -> Path:
             rucio_host = https://vre-rucio.cern.ch
             auth_host = https://vre-rucio-auth.cern.ch
             account = gstark
-            auth_type = oidc
             oidc_audience = rucio
             oidc_issuer = escape
             oidc_scope = openid profile offline_access
@@ -348,6 +347,26 @@ class TestServeHTTPValidation:
                 rucio_cfg=tmp_path / "nonexistent.cfg",
             )
         assert exc_info.value.code != 0
+
+    def test_cfg_without_auth_type_accepted_in_http_mode(self, tmp_path: Path) -> None:
+        cfg = tmp_path / "rucio.cfg"
+        cfg.write_text(
+            textwrap.dedent("""\
+                [client]
+                rucio_host = https://vre-rucio.cern.ch
+                auth_host = https://vre-rucio-auth.cern.ch
+                oidc_audience = rucio
+            """)
+        )
+        app = _make_http_app(
+            sites=["escape"],
+            resource_url="http://localhost:8000",
+            read_only=False,
+            host="127.0.0.1",
+            port=8000,
+            rucio_cfg_overrides={"escape": cfg},
+        )
+        assert app is not None
 
     def test_x509_site_in_http_mode_exits_nonzero(self, tmp_path: Path) -> None:
         cfg = tmp_path / "rucio.cfg"

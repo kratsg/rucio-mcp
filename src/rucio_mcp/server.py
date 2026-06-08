@@ -152,12 +152,10 @@ def _preflight_check(cfg_path: Path, auth_type_override: str | None = None) -> N
             "x509_proxy" if auth_type_override == "x509" else auth_type_override
         )
     elif "RUCIO_AUTH_TYPE" not in os.environ:
-        # Read auth_type from the cfg so that OIDC sites don't inherit the x509 default.
+        # Bundled presets omit auth_type; default to oidc so users don't need --auth-type.
         cp = configparser.ConfigParser()
         cp.read(cfg_path)
-        os.environ["RUCIO_AUTH_TYPE"] = cp.get(
-            "client", "auth_type", fallback="x509_proxy"
-        )
+        os.environ["RUCIO_AUTH_TYPE"] = cp.get("client", "auth_type", fallback="oidc")
     auth_type = os.environ["RUCIO_AUTH_TYPE"]
 
     # x509 proxy specifics

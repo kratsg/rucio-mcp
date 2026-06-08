@@ -127,7 +127,7 @@ class TestCLIServe:
 
         assert captured["auth_type"] == "oidc"
 
-    def test_auth_type_defaults_to_none(self) -> None:
+    def test_auth_type_defaults_to_oidc(self) -> None:
         captured: dict[str, object] = {}
 
         def fake_serve(**kwargs: object) -> None:
@@ -139,7 +139,7 @@ class TestCLIServe:
         ):
             main()
 
-        assert captured["auth_type"] is None
+        assert captured["auth_type"] == "oidc"
 
     def test_metrics_port_defaults_to_9001(self) -> None:
         captured: dict[str, object] = {}
