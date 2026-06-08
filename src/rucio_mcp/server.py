@@ -175,6 +175,29 @@ def _preflight_check(cfg_path: Path, auth_type_override: str | None = None) -> N
                 "    Run: voms-proxy-init -voms <site>"
             )
 
+    elif auth_type == "x509":
+        # Bare cert auth (not VOMS proxy): default cert/key to standard globus locations.
+        os.environ.setdefault(
+            "RUCIO_CLIENT_CERT", os.path.expanduser("~/.globus/usercert.pem")
+        )
+        os.environ.setdefault(
+            "RUCIO_CLIENT_KEY", os.path.expanduser("~/.globus/userkey.pem")
+        )
+
+        cert_path = os.environ.get("RUCIO_CLIENT_CERT")
+        if cert_path and not Path(cert_path).exists():
+            warnings.append(
+                f"RUCIO_CLIENT_CERT={cert_path!r} is set but the file does not exist.\n"
+                "    Provide a valid certificate at that path or set RUCIO_CLIENT_CERT."
+            )
+
+        key_path = os.environ.get("RUCIO_CLIENT_KEY")
+        if key_path and not Path(key_path).exists():
+            warnings.append(
+                f"RUCIO_CLIENT_KEY={key_path!r} is set but the file does not exist.\n"
+                "    Provide a valid key at that path or set RUCIO_CLIENT_KEY."
+            )
+
     for w in warnings:
         sys.stderr.write(f"[rucio-mcp] WARNING: {w}\n")
 
