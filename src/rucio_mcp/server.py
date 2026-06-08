@@ -152,12 +152,10 @@ def _preflight_check(cfg_path: Path, auth_type_override: str | None = None) -> N
             "x509_proxy" if auth_type_override == "x509" else auth_type_override
         )
     elif "RUCIO_AUTH_TYPE" not in os.environ:
-        # Read auth_type from the cfg so that OIDC sites don't inherit the x509 default.
+        # Bundled presets omit auth_type; default to oidc so users don't need --auth-type.
         cp = configparser.ConfigParser()
         cp.read(cfg_path)
-        os.environ["RUCIO_AUTH_TYPE"] = cp.get(
-            "client", "auth_type", fallback="x509_proxy"
-        )
+        os.environ["RUCIO_AUTH_TYPE"] = cp.get("client", "auth_type", fallback="oidc")
     auth_type = os.environ["RUCIO_AUTH_TYPE"]
 
     # x509 proxy specifics
@@ -462,10 +460,10 @@ def _make_http_app(
             )
             sys.exit(1)
         cfg = RucioCfg.from_path(cfg_path)
-        if cfg.auth_type != "oidc":
+        if cfg.auth_type not in (None, "oidc"):
             sys.stderr.write(
                 f"[rucio-mcp] Error: site {site_name!r} has auth_type={cfg.auth_type!r}. "
-                "HTTP mode requires auth_type=oidc.\n"
+                "HTTP mode requires an OIDC-capable site (auth_type=oidc or unset).\n"
                 f"    For x509/userpass sites use stdio mode: rucio-mcp serve --site {site_name}\n"
             )
             sys.exit(1)

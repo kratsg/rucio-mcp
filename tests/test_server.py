@@ -52,10 +52,10 @@ class TestPreflightCheck:
             _preflight_check(valid_cfg)
             assert os.environ["RUCIO_CONFIG"] == str(valid_cfg)
 
-    def test_auth_type_defaults_to_x509_proxy(self, valid_cfg: Path) -> None:
+    def test_auth_type_defaults_to_oidc(self, valid_cfg: Path) -> None:
         with patch.dict("os.environ", {}, clear=True):
             _preflight_check(valid_cfg)
-            assert os.environ["RUCIO_AUTH_TYPE"] == "x509_proxy"
+            assert os.environ["RUCIO_AUTH_TYPE"] == "oidc"
 
     def test_auth_type_override_sets_env(self, valid_cfg: Path) -> None:
         with patch.dict("os.environ", {}, clear=True):

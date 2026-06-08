@@ -112,11 +112,11 @@ The file must have a `[client]` section. Required keys:
 [client]
 rucio_host = https://<site>-rucio.example.org
 auth_host  = https://<site>-rucio-auth.example.org
-auth_type  = oidc
 ```
 
-Use `auth_type = oidc` so the site works in both stdio and HTTP mode. x509 proxy
-auth is selected at runtime with `--auth-type x509` — no separate cfg is needed.
+Do **not** include `auth_type` — auth method is a CLI concern (`--auth-type`).
+Without an explicit `--auth-type` flag the server defaults to OIDC, so bundled
+cfgs don't need to repeat it.
 
 Common optional OIDC keys (include only what the site requires):
 
@@ -182,7 +182,7 @@ In `tests/auth/test_rucio_cfg.py`, add a test inside `TestRucioCfg`:
 def test_load_bundled_mysite_cfg(self) -> None:
     p = Path(str(_pkg_files("rucio_mcp.data").joinpath("mysite.cfg")))
     cfg = RucioCfg.from_path(p)
-    assert cfg.auth_type == "oidc"
+    assert cfg.auth_type is None
     assert cfg.rucio_host == "https://<site>-rucio.example.org"
 ```
 
