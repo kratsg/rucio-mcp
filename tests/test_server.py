@@ -12,7 +12,9 @@ from mcp.server.fastmcp import FastMCP
 from prometheus_client import REGISTRY
 
 from rucio_mcp.auth.rucio_cfg import RucioCfg
+from rucio_mcp.presets import PRESETS
 from rucio_mcp.server import (
+    _build_instructions,
     _InstrumentedFastMCP,
     _make_site_mcp,
     _make_stdio_mcp,
@@ -421,3 +423,17 @@ class TestInstrumentedFastMCP:
             or 0.0
         )
         assert after_count - before_count == 1.0
+
+
+class TestBuildInstructions:
+    def test_atlas_instructions_include_nomenclature(self) -> None:
+        instructions = _build_instructions(PRESETS["atlas"])
+        assert "DAOD_PHYSLITE" in instructions
+
+    def test_escape_instructions_do_not_include_atlas_nomenclature(self) -> None:
+        instructions = _build_instructions(PRESETS["escape"])
+        assert "DAOD_PHYSLITE" not in instructions
+
+    def test_instructions_include_generic_preamble(self) -> None:
+        instructions = _build_instructions(PRESETS["escape"])
+        assert "Rucio" in instructions

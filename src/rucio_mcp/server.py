@@ -41,8 +41,8 @@ from rucio_mcp.metrics import (
     PrometheusMiddleware,
     start_metrics_server,
 )
-from rucio_mcp.nomenclature import ATLAS_NOMENCLATURE
-from rucio_mcp.presets import PRESETS
+from rucio_mcp.nomenclature import load_nomenclature
+from rucio_mcp.presets import PRESETS, Preset
 from rucio_mcp.resources import register as register_resources
 from rucio_mcp.tools import (
     account,
@@ -58,14 +58,25 @@ from rucio_mcp.tools import (
     subscriptions,
 )
 
-_INSTRUCTIONS = (
-    "MCP server for ATLAS Rucio data management. "
+_GENERIC_PREAMBLE = (
+    "MCP server for Rucio data management. "
     "Provides tools to discover datasets, check replica locations, "
     "inspect and manage replication rules, and verify proxy authentication. "
     "Authentication is configured via environment variables "
     "(RUCIO_AUTH_TYPE, RUCIO_ACCOUNT, X509_USER_PROXY, etc.) "
-    "before starting the server.\n\n" + ATLAS_NOMENCLATURE
+    "before starting the server."
 )
+
+
+def _build_instructions(preset: Preset) -> str:
+    """Build the server instructions string for *preset*.
+
+    Appends the site's nomenclature markdown when present.
+    """
+    nomenclature = load_nomenclature(preset.nomenclature_resource)
+    if nomenclature:
+        return _GENERIC_PREAMBLE + "\n\n" + nomenclature
+    return _GENERIC_PREAMBLE
 
 
 class _InstrumentedFastMCP(FastMCP):
@@ -243,8 +254,12 @@ def _make_stdio_mcp(
         finally:
             factory.close()
 
+    preset = PRESETS.get(site_name, PRESETS["escape"])
     mcp = _InstrumentedFastMCP(
-        "rucio-mcp", site_name=site_name, lifespan=_lifespan, instructions=_INSTRUCTIONS
+        "rucio-mcp",
+        site_name=site_name,
+        lifespan=_lifespan,
+        instructions=_build_instructions(preset),
     )
 
     for _module in [
@@ -262,7 +277,7 @@ def _make_stdio_mcp(
     ]:
         _module.register(mcp)
 
-    register_resources(mcp)
+    register_resources(mcp, preset.nomenclature_resource)
     return mcp
 
 
@@ -304,10 +319,11 @@ def _make_site_mcp(
         finally:
             factory.close()
 
+    preset = PRESETS.get(site_name, PRESETS["escape"])
     mcp = _InstrumentedFastMCP(
         f"rucio-mcp-{site_name}",
         site_name=site_name,
-        instructions=_INSTRUCTIONS,
+        instructions=_build_instructions(preset),
         host=host,
         port=port,
         streamable_http_path="/",
@@ -336,7 +352,7 @@ def _make_site_mcp(
         subscriptions,
     ]:
         _module.register(mcp)
-    register_resources(mcp)
+    register_resources(mcp, preset.nomenclature_resource)
     return mcp, provider, cache
 
 

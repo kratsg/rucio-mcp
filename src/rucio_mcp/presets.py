@@ -14,6 +14,7 @@ class Preset:
     description: str
     config_resource: str  # filename inside the rucio_mcp.data package
     post_init_hint: str  # guidance printed after a successful init
+    nomenclature_resource: str | None = None  # path inside rucio_mcp.data, or None
 
 
 PRESETS: dict[str, Preset] = {
@@ -42,6 +43,7 @@ PRESETS: dict[str, Preset] = {
         name="atlas",
         description="ATLAS at CERN (OIDC — stdio and HTTP mode)",
         config_resource="atlas.cfg",
+        nomenclature_resource="nomenclature/atlas.md",
         post_init_hint=textwrap.dedent("""\
             Next steps:
               export RUCIO_ACCOUNT=<your-atlas-account>
