@@ -33,7 +33,7 @@ class RucioCfg:
             auth_host=c["auth_host"],
             account=c.get("account", ""),
             auth_type=c.get("auth_type", "oidc"),
-            oidc_audience=c.get("oidc_audience", "rucio"),
+            oidc_audience=c.get("oidc_audience", ""),
             oidc_scope=c.get("oidc_scope", "openid profile offline_access"),
             oidc_issuer=c.get("oidc_issuer", ""),
         )

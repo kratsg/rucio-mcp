@@ -46,7 +46,7 @@ class TestRucioCfgFromPath:
         )
         cfg = RucioCfg.from_path(p)
         assert cfg.account == ""
-        assert cfg.oidc_audience == "rucio"
+        assert cfg.oidc_audience == ""
         assert cfg.oidc_scope == "openid profile offline_access"
         assert cfg.oidc_issuer == ""
 
@@ -111,22 +111,25 @@ class TestRucioCfgFromPath:
             cfg.account = "changed"  # type: ignore[misc]
 
     def test_load_bundled_atlas_cfg(self) -> None:
-        """Bundled atlas.cfg has no auth_type key; RucioCfg defaults to oidc."""
+        """Bundled atlas.cfg uses CERN IAM which requires audience=rucio."""
         p = Path(str(_pkg_files("rucio_mcp.data").joinpath("atlas.cfg")))
         cfg = RucioCfg.from_path(p)
         assert cfg.auth_type == "oidc"
         assert cfg.rucio_host == "https://voatlasrucio-server-prod.cern.ch:443"
+        assert cfg.oidc_audience == "rucio"
 
     def test_load_bundled_cms_cfg(self) -> None:
-        """Bundled cms.cfg has no auth_type key; RucioCfg defaults to oidc."""
+        """Bundled cms.cfg uses CERN IAM which requires audience=rucio."""
         p = Path(str(_pkg_files("rucio_mcp.data").joinpath("cms.cfg")))
         cfg = RucioCfg.from_path(p)
         assert cfg.auth_type == "oidc"
         assert cfg.rucio_host == "https://cms-rucio.cern.ch"
+        assert cfg.oidc_audience == "rucio"
 
     def test_load_bundled_dune_cfg(self) -> None:
-        """Bundled dune.cfg has no auth_type key; RucioCfg defaults to oidc."""
+        """Bundled dune.cfg uses FNAL/CILogon which does not use an audience header."""
         p = Path(str(_pkg_files("rucio_mcp.data").joinpath("dune.cfg")))
         cfg = RucioCfg.from_path(p)
         assert cfg.auth_type == "oidc"
         assert cfg.rucio_host == "https://dune-rucio.fnal.gov"
+        assert cfg.oidc_audience == ""
