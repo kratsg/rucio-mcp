@@ -200,6 +200,51 @@ class TestCLIServe:
 
         assert captured["sites"] == ["escape", "atlas"]
 
+    def test_forwarded_allow_ips_defaults_to_loopback(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch("sys.argv", ["rucio-mcp", "serve"]),
+            patch("rucio_mcp.cli.serve", fake_serve),
+        ):
+            main()
+
+        assert captured["forwarded_allow_ips"] == "127.0.0.1"
+
+    def test_forwarded_allow_ips_flag_forwarded_to_serve(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch(
+                "sys.argv",
+                ["rucio-mcp", "serve", "--forwarded-allow-ips", "172.16.140.142"],
+            ),
+            patch("rucio_mcp.cli.serve", fake_serve),
+        ):
+            main()
+
+        assert captured["forwarded_allow_ips"] == "172.16.140.142"
+
+    def test_forwarded_allow_ips_wildcard_forwarded_to_serve(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch("sys.argv", ["rucio-mcp", "serve", "--forwarded-allow-ips", "*"]),
+            patch("rucio_mcp.cli.serve", fake_serve),
+        ):
+            main()
+
+        assert captured["forwarded_allow_ips"] == "*"
+
     def test_auth_type_rejects_invalid_value(self) -> None:
         """--auth-type must reject values not in the allowed choices."""
         with (

@@ -100,6 +100,16 @@ def main() -> None:
             "(HTTP transport only, default: 180)."
         ),
     )
+    serve_parser.add_argument(
+        "--forwarded-allow-ips",
+        default="127.0.0.1",
+        metavar="IPS",
+        help=(
+            "Comma-separated list of IP addresses (or '*' for all) whose "
+            "X-Forwarded-For headers are trusted when running behind a reverse proxy "
+            "(HTTP transport only, default: 127.0.0.1)."
+        ),
+    )
 
     subparsers.add_parser(
         "ping",
@@ -121,6 +131,7 @@ def main() -> None:
             rucio_cfg=args.rucio_cfg,
             auth_type=args.auth_type,
             poll_timeout=args.poll_timeout,
+            forwarded_allow_ips=args.forwarded_allow_ips,
         )
     elif args.command == "ping":
         ping_server()
