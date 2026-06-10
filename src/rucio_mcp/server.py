@@ -571,6 +571,7 @@ def _make_http_app(
                 PrometheusMiddleware,
                 filter_unhandled_paths=True,
                 excluded_paths=frozenset({"/healthz"}),
+                site_names=frozenset(sites),
             ),
         ],
     )

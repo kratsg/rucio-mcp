@@ -409,6 +409,76 @@ class TestServeHTTPValidation:
         assert "stdio" in capsys.readouterr().err
 
 
+class TestSiteLabelOnHTTPMetrics:
+    """starlette_* metrics must carry a site label, enabling $site variable filtering."""
+
+    def test_site_mcp_request_records_site_label(
+        self, http_client: TestClient
+    ) -> None:
+        before = (
+            REGISTRY.get_sample_value(
+                "starlette_requests_total",
+                {"method": "POST", "path_template": "/site/{site}", "site": "escape"},
+            )
+            or 0.0
+        )
+        http_client.post("/site/escape", json={})
+        after = (
+            REGISTRY.get_sample_value(
+                "starlette_requests_total",
+                {"method": "POST", "path_template": "/site/{site}", "site": "escape"},
+            )
+            or 0.0
+        )
+        assert after - before == 1.0
+
+    def test_root_request_records_empty_site(self, http_client: TestClient) -> None:
+        before = (
+            REGISTRY.get_sample_value(
+                "starlette_requests_total",
+                {"method": "GET", "path_template": "/", "site": ""},
+            )
+            or 0.0
+        )
+        http_client.get("/")
+        after = (
+            REGISTRY.get_sample_value(
+                "starlette_requests_total",
+                {"method": "GET", "path_template": "/", "site": ""},
+            )
+            or 0.0
+        )
+        assert after - before == 1.0
+
+    def test_well_known_auth_server_per_site_records_site_and_normalized_path(
+        self, http_client: TestClient
+    ) -> None:
+        before = (
+            REGISTRY.get_sample_value(
+                "starlette_requests_total",
+                {
+                    "method": "GET",
+                    "path_template": "/.well-known/oauth-authorization-server/site/{site}",
+                    "site": "escape",
+                },
+            )
+            or 0.0
+        )
+        http_client.get("/.well-known/oauth-authorization-server/site/escape")
+        after = (
+            REGISTRY.get_sample_value(
+                "starlette_requests_total",
+                {
+                    "method": "GET",
+                    "path_template": "/.well-known/oauth-authorization-server/site/{site}",
+                    "site": "escape",
+                },
+            )
+            or 0.0
+        )
+        assert after - before == 1.0
+
+
 class TestNoCreatedSeries:
     def test_no_created_series_in_metrics_output(self) -> None:
         """Counters and histograms must not emit _created timestamp series."""
