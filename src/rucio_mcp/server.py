@@ -305,7 +305,10 @@ def _make_site_mcp(
         oidc_issuer=cfg.oidc_issuer,
     )
     provider = RucioBridgeProvider(
-        poller=poller, resource_url=resource_url, poll_timeout=poll_timeout
+        poller=poller,
+        resource_url=resource_url,
+        poll_timeout=poll_timeout,
+        site_name=site_name,
     )
     cache = SessionCache()
 

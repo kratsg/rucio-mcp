@@ -33,6 +33,7 @@ from mcp.server.auth.provider import (
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 
 from rucio_mcp.auth.bridge_state import BridgeSession, BridgeStateStore
+from rucio_mcp.metrics import BRIDGE_AUTH
 
 _log = logging.getLogger(__name__)
 
@@ -65,12 +66,23 @@ class RucioBridgeProvider:
     """
 
     def __init__(
-        self, *, poller: BridgePoller, resource_url: str, poll_timeout: float = 180.0
+        self,
+        *,
+        poller: BridgePoller,
+        resource_url: str,
+        poll_timeout: float = 180.0,
+        site_name: str = "",
     ) -> None:
-        """Initialize rucio bridge provider."""
+        """Initialize rucio bridge provider.
+
+        *site_name* labels the auth-outcome Prometheus counter.  Pass the
+        site identifier (e.g. ``"atlas"``) for hosted deployments; leave
+        empty in tests that don't care about metrics.
+        """
         self._resource_url = resource_url.rstrip("/")
         self._poller = poller
         self._poll_timeout = poll_timeout
+        self._site_name = site_name
         self.store = BridgeStateStore()
         self._clients: dict[str, OAuthClientInformationFull] = {}
         self._clients_lock = threading.Lock()
@@ -129,6 +141,7 @@ class RucioBridgeProvider:
             account=account,
         )
         self.store.put(session)
+        BRIDGE_AUTH.labels(site=self._site_name, outcome="started").inc()
         _log.info(
             "Bridge session %s started for client %s", session_id[:8], client.client_id
         )
@@ -150,10 +163,16 @@ class RucioBridgeProvider:
             )
             auth_code = secrets.token_urlsafe(32)
             self.store.mark_done(session_id, rucio_token=token, auth_code=auth_code)
+            BRIDGE_AUTH.labels(site=self._site_name, outcome="success").inc()
             _log.info("Bridge session %s: authentication complete", session_id[:8])
+        except asyncio.TimeoutError:
+            _log.error("Bridge session %s: polling timed out", session_id[:8])
+            self.store.mark_error(session_id, "polling timed out")
+            BRIDGE_AUTH.labels(site=self._site_name, outcome="timeout").inc()
         except Exception as exc:  # noqa: BLE001
             _log.error("Bridge session %s: polling failed: %s", session_id[:8], exc)
             self.store.mark_error(session_id, str(exc))
+            BRIDGE_AUTH.labels(site=self._site_name, outcome="failure").inc()
 
     async def load_authorization_code(
         self, _client: OAuthClientInformationFull, authorization_code: str

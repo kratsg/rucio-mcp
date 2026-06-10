@@ -78,6 +78,16 @@ REQUESTS_IN_PROGRESS = Gauge(
 )
 
 # ---------------------------------------------------------------------------
+# Authentication outcome counter — registered once at module import time
+# ---------------------------------------------------------------------------
+
+BRIDGE_AUTH = Counter(
+    "rucio_mcp_bridge_auth_total",
+    "Total OAuth bridge auth events by site and outcome (started|success|failure|timeout).",
+    ["site", "outcome"],
+)
+
+# ---------------------------------------------------------------------------
 # Tool-call metrics — registered once at module import time
 # ---------------------------------------------------------------------------
 
