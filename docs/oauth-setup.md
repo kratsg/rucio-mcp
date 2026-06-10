@@ -216,7 +216,7 @@ rucio-mcp adds per-tool, authentication, and error metrics:
 
 | Metric                                 | Labels                     | Description                                                                                                                                               |
 | -------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rucio_mcp_tool_calls_total`           | `site`, `tool`, `user`     | Total MCP tool invocations; `user` is extracted from the JWT bearer (`preferred_username` → `sub` → `"unknown"`; `"local"` in stdio mode)                 |
+| `rucio_mcp_tool_calls_total`           | `site`, `tool`             | Total MCP tool invocations by site and tool name                                                                                                          |
 | `rucio_mcp_tool_call_duration_seconds` | `site`, `tool`             | Tool execution time histogram                                                                                                                             |
 | `rucio_mcp_tool_errors_total`          | `site`, `tool`, `category` | Tool errors by category (`did_not_found`, `rse_not_found`, `rule_not_found`, `duplicate_rule`, `quota`, `access_denied`, `ssl_proxy`, `network`, `other`) |
 | `rucio_mcp_bridge_auth_total`          | `site`, `outcome`          | OAuth bridge auth events (`started`, `success`, `failure`, `timeout`)                                                                                     |

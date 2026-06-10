@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-import json
 import os
 import textwrap
 from pathlib import Path
@@ -438,7 +436,7 @@ class TestInstrumentedFastMCP:
         before = (
             REGISTRY.get_sample_value(
                 "rucio_mcp_tool_calls_total",
-                {"site": "testsite", "tool": "rucio_ping", "user": "local"},
+                {"site": "testsite", "tool": "rucio_ping"},
             )
             or 0.0
         )
@@ -449,111 +447,7 @@ class TestInstrumentedFastMCP:
         after = (
             REGISTRY.get_sample_value(
                 "rucio_mcp_tool_calls_total",
-                {"site": "testsite", "tool": "rucio_ping", "user": "local"},
-            )
-            or 0.0
-        )
-        assert after - before == 1.0
-
-    async def test_tool_call_user_label_from_jwt_bearer(self) -> None:
-        mcp = _InstrumentedFastMCP("test-mcp-jwt", site_name="testsite_jwt")
-
-        payload = {"sub": "uid-42", "preferred_username": "alice"}
-        body = (
-            base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
-        )
-        header = base64.urlsafe_b64encode(b'{"alg":"RS256"}').rstrip(b"=").decode()
-        jwt_token = f"{header}.{body}.fakesig"
-
-        fake_request = MagicMock()
-        fake_request.headers.get = lambda key, default="": (
-            f"Bearer {jwt_token}" if key == "authorization" else default
-        )
-        fake_ctx = MagicMock()
-        fake_ctx.request_context.request = fake_request
-
-        before = (
-            REGISTRY.get_sample_value(
-                "rucio_mcp_tool_calls_total",
-                {"site": "testsite_jwt", "tool": "rucio_ping", "user": "alice"},
-            )
-            or 0.0
-        )
-
-        with (
-            patch.object(mcp, "get_context", return_value=fake_ctx),
-            patch.object(FastMCP, "call_tool", new=AsyncMock(return_value=[])),
-        ):
-            await mcp.call_tool("rucio_ping", {})
-
-        after = (
-            REGISTRY.get_sample_value(
-                "rucio_mcp_tool_calls_total",
-                {"site": "testsite_jwt", "tool": "rucio_ping", "user": "alice"},
-            )
-            or 0.0
-        )
-        assert after - before == 1.0
-
-    async def test_tool_call_user_label_opaque_bearer_is_unknown(self) -> None:
-        mcp = _InstrumentedFastMCP("test-mcp-opaque", site_name="testsite_opaque")
-
-        fake_request = MagicMock()
-        fake_request.headers.get = lambda key, default="": (
-            "Bearer opaque-rucio-token" if key == "authorization" else default
-        )
-        fake_ctx = MagicMock()
-        fake_ctx.request_context.request = fake_request
-
-        before = (
-            REGISTRY.get_sample_value(
-                "rucio_mcp_tool_calls_total",
-                {"site": "testsite_opaque", "tool": "rucio_ping", "user": "unknown"},
-            )
-            or 0.0
-        )
-
-        with (
-            patch.object(mcp, "get_context", return_value=fake_ctx),
-            patch.object(FastMCP, "call_tool", new=AsyncMock(return_value=[])),
-        ):
-            await mcp.call_tool("rucio_ping", {})
-
-        after = (
-            REGISTRY.get_sample_value(
-                "rucio_mcp_tool_calls_total",
-                {"site": "testsite_opaque", "tool": "rucio_ping", "user": "unknown"},
-            )
-            or 0.0
-        )
-        assert after - before == 1.0
-
-    async def test_tool_call_user_label_no_auth_header_is_unknown(self) -> None:
-        mcp = _InstrumentedFastMCP("test-mcp-noauth", site_name="testsite_noauth")
-
-        fake_request = MagicMock()
-        fake_request.headers.get = lambda _key, default="": default
-        fake_ctx = MagicMock()
-        fake_ctx.request_context.request = fake_request
-
-        before = (
-            REGISTRY.get_sample_value(
-                "rucio_mcp_tool_calls_total",
-                {"site": "testsite_noauth", "tool": "rucio_ping", "user": "unknown"},
-            )
-            or 0.0
-        )
-
-        with (
-            patch.object(mcp, "get_context", return_value=fake_ctx),
-            patch.object(FastMCP, "call_tool", new=AsyncMock(return_value=[])),
-        ):
-            await mcp.call_tool("rucio_ping", {})
-
-        after = (
-            REGISTRY.get_sample_value(
-                "rucio_mcp_tool_calls_total",
-                {"site": "testsite_noauth", "tool": "rucio_ping", "user": "unknown"},
+                {"site": "testsite", "tool": "rucio_ping"},
             )
             or 0.0
         )

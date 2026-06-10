@@ -31,7 +31,6 @@ from starlette.routing import BaseRoute, Mount, Route
 from rucio_mcp.auth.bridge_provider import RucioBridgeProvider
 from rucio_mcp.auth.bridge_routes import register_bridge_routes
 from rucio_mcp.auth.factory import BearerTokenClientFactory, EnvBasedClientFactory
-from rucio_mcp.auth.identity import user_label
 from rucio_mcp.auth.rucio_cfg import RucioCfg
 from rucio_mcp.auth.rucio_oidc_poller import RucioOidcPoller
 from rucio_mcp.auth.session_cache import SessionCache
@@ -89,18 +88,7 @@ class _InstrumentedFastMCP(FastMCP):
         self._site_name = site_name
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
-        user = "local"
-        try:
-            req = self.get_context().request_context.request
-            if req is not None:
-                auth_header = req.headers.get("authorization", "")
-                if auth_header.lower().startswith("bearer "):
-                    user = user_label(auth_header[7:].strip())
-                else:
-                    user = "unknown"
-        except (LookupError, ValueError):
-            pass  # stdio mode — no HTTP request context
-        TOOL_CALLS.labels(site=self._site_name, tool=name, user=user).inc()
+        TOOL_CALLS.labels(site=self._site_name, tool=name).inc()
         current_tool_labels.set((self._site_name, name))
         t0 = time.perf_counter()
         try:
