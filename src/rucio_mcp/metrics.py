@@ -19,6 +19,7 @@ traffic is isolated from the MCP endpoint.
 from __future__ import annotations
 
 import time
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 from prometheus_client import (
@@ -26,6 +27,7 @@ from prometheus_client import (
     Counter,
     Gauge,
     Histogram,
+    disable_created_metrics,
     start_http_server,
 )
 from prometheus_client.core import GaugeMetricFamily
@@ -33,6 +35,11 @@ from prometheus_client.registry import Collector
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.routing import Match
 from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
+
+# Suppress the _created timestamp series that prometheus_client emits by default
+# for every Counter and Histogram.  These are pure noise for our dashboards.
+# Must be called before any Counter/Histogram is instantiated (below).
+disable_created_metrics()
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -48,28 +55,38 @@ if TYPE_CHECKING:
 
 REQUESTS = Counter(
     "starlette_requests_total",
-    "Total count of requests by method and path.",
-    ["method", "path_template"],
+    "Total count of requests by method, path and site.",
+    ["method", "path_template", "site"],
 )
 RESPONSES = Counter(
     "starlette_responses_total",
-    "Total count of responses by method, path and status codes.",
-    ["method", "path_template", "status_code"],
+    "Total count of responses by method, path, status code and site.",
+    ["method", "path_template", "status_code", "site"],
 )
 REQUESTS_PROCESSING_TIME = Histogram(
     "starlette_requests_processing_time_seconds",
-    "Histogram of requests processing time by path (in seconds)",
-    ["method", "path_template"],
+    "Histogram of requests processing time by path and site (in seconds)",
+    ["method", "path_template", "site"],
 )
 EXCEPTIONS = Counter(
     "starlette_exceptions_total",
-    "Total count of exceptions by method, path and exception type.",
-    ["method", "path_template", "exception_type"],
+    "Total count of exceptions by method, path, exception type and site.",
+    ["method", "path_template", "exception_type", "site"],
 )
 REQUESTS_IN_PROGRESS = Gauge(
     "starlette_requests_in_progress",
-    "Gauge of requests by method and path currently being processed.",
-    ["method", "path_template"],
+    "Gauge of requests by method, path and site currently being processed.",
+    ["method", "path_template", "site"],
+)
+
+# ---------------------------------------------------------------------------
+# Authentication outcome counter — registered once at module import time
+# ---------------------------------------------------------------------------
+
+BRIDGE_AUTH = Counter(
+    "rucio_mcp_bridge_auth_total",
+    "Total OAuth bridge auth events by site and outcome (started|success|failure|timeout).",
+    ["site", "outcome"],
 )
 
 # ---------------------------------------------------------------------------
@@ -85,6 +102,18 @@ TOOL_CALL_DURATION = Histogram(
     "rucio_mcp_tool_call_duration_seconds",
     "Histogram of MCP tool execution time by site and tool name (seconds).",
     ["site", "tool"],
+)
+TOOL_ERRORS = Counter(
+    "rucio_mcp_tool_errors_total",
+    "Total count of tool errors by site, tool, and error category.",
+    ["site", "tool", "category"],
+)
+
+# Set by _InstrumentedFastMCP.call_tool before dispatching to the tool handler.
+# Carries (site, tool) so classify_error() can label TOOL_ERRORS without
+# threading the labels through every tool call site.
+current_tool_labels: ContextVar[tuple[str, str]] = ContextVar(
+    "current_tool_labels", default=("unknown", "unknown")
 )
 
 
@@ -144,23 +173,50 @@ def start_metrics_server(
 class PrometheusMiddleware(BaseHTTPMiddleware):
     """Record per-route request counts, response codes, latency, and exceptions."""
 
-    def __init__(self, app: ASGIApp, *, filter_unhandled_paths: bool = False) -> None:
-        """Wrap *app*; set *filter_unhandled_paths* to skip unmatched routes."""
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        filter_unhandled_paths: bool = False,
+        excluded_paths: frozenset[str] = frozenset(),
+        site_names: frozenset[str] = frozenset(),
+    ) -> None:
+        """Wrap *app*.
+
+        *filter_unhandled_paths* skips unmatched routes.
+        *excluded_paths* lists exact paths (e.g. ``{"/healthz"}``) that are
+        served but must never be recorded in metrics.
+        *site_names* is the set of known site identifiers (e.g. ``{"atlas",
+        "escape"}``).  Any matched path containing ``/site/<name>`` for a
+        known name will record ``site=<name>`` and have that segment
+        normalised to ``/site/{site}`` in ``path_template``, collapsing the
+        per-site well-known variant paths into a single template each.
+        """
         super().__init__(app)
         self.filter_unhandled_paths = filter_unhandled_paths
+        self.excluded_paths = excluded_paths
+        self.site_names = site_names
 
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
     ) -> Response:
         """Instrument the request and delegate to *call_next*."""
         method = request.method
+
+        if request.url.path in self.excluded_paths:
+            return await call_next(request)
+
         path_template, is_handled = self._path_template(request)
 
         if self.filter_unhandled_paths and not is_handled:
             return await call_next(request)
 
-        REQUESTS_IN_PROGRESS.labels(method=method, path_template=path_template).inc()
-        REQUESTS.labels(method=method, path_template=path_template).inc()
+        site, path_template = self._normalize_site(path_template)
+
+        REQUESTS_IN_PROGRESS.labels(
+            method=method, path_template=path_template, site=site
+        ).inc()
+        REQUESTS.labels(method=method, path_template=path_template, site=site).inc()
         t0 = time.perf_counter()
         status_code = HTTP_500_INTERNAL_SERVER_ERROR
         try:
@@ -171,22 +227,37 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
                 method=method,
                 path_template=path_template,
                 exception_type=type(exc).__name__,
+                site=site,
             ).inc()
             raise
         finally:
             elapsed = time.perf_counter() - t0
             REQUESTS_PROCESSING_TIME.labels(
-                method=method, path_template=path_template
+                method=method, path_template=path_template, site=site
             ).observe(elapsed)
             RESPONSES.labels(
                 method=method,
                 path_template=path_template,
                 status_code=str(status_code),
+                site=site,
             ).inc()
             REQUESTS_IN_PROGRESS.labels(
-                method=method, path_template=path_template
+                method=method, path_template=path_template, site=site
             ).dec()
         return response
+
+    def _normalize_site(self, path_template: str) -> tuple[str, str]:
+        """Return ``(site, normalized_path_template)`` for the matched route.
+
+        If the path contains ``/site/<known_name>``, returns that name as
+        ``site`` and replaces the literal segment with ``/site/{site}`` so
+        all per-site variants collapse to a single template in metrics.
+        """
+        for name in self.site_names:
+            segment = f"/site/{name}"
+            if segment in path_template:
+                return name, path_template.replace(segment, "/site/{site}", 1)
+        return "", path_template
 
     @staticmethod
     def _path_template(request: Request) -> tuple[str, bool]:

@@ -193,24 +193,35 @@ rucio-mcp serve \
   --metrics-port 9001
 ```
 
+A `/healthz` endpoint (returns `200 ok`) is available for liveness and readiness
+probes. Probe traffic to `/healthz` is excluded from Prometheus instrumentation
+so it never inflates request counts.
+
 Standard Starlette HTTP counters are exported for every matched route:
 
-| Metric                                       | Type      | Description                                      |
-| -------------------------------------------- | --------- | ------------------------------------------------ |
-| `starlette_requests_total`                   | counter   | Total requests by method and path template       |
-| `starlette_responses_total`                  | counter   | Total responses by method, path, and status code |
-| `starlette_requests_processing_time_seconds` | histogram | Request latency by method and path               |
-| `starlette_exceptions_total`                 | counter   | Unhandled exceptions by type                     |
-| `starlette_requests_in_progress`             | gauge     | Requests currently being processed               |
+| Metric                                       | Labels                                              | Description                                       |
+| -------------------------------------------- | --------------------------------------------------- | ------------------------------------------------- |
+| `starlette_requests_total`                   | `method`, `path_template`, `site`                   | Total requests by method, path template, and site |
+| `starlette_responses_total`                  | `method`, `path_template`, `status_code`, `site`    | Total responses by method, path, status, and site |
+| `starlette_requests_processing_time_seconds` | `method`, `path_template`, `site`                   | Request latency histogram                         |
+| `starlette_exceptions_total`                 | `method`, `path_template`, `exception_type`, `site` | Unhandled exceptions                              |
+| `starlette_requests_in_progress`             | `method`, `path_template`, `site`                   | Requests currently being processed                |
 
-rucio-mcp adds per-tool call metrics and live bridge/cache gauges:
+The `site` label is derived from the mounted path (e.g. `/site/atlas` →
+`site="atlas"`). Per-site path segments are normalised to `/site/{site}` in
+`path_template` so that e.g. `POST /site/atlas/mcp/v1` and
+`POST /site/escape/mcp/v1` share a single template.
 
-| Metric                                 | Labels           | Description                                                |
-| -------------------------------------- | ---------------- | ---------------------------------------------------------- |
-| `rucio_mcp_tool_calls_total`           | `site`, `tool`   | Total MCP tool invocations                                 |
-| `rucio_mcp_tool_call_duration_seconds` | `site`, `tool`   | Tool execution time histogram                              |
-| `rucio_mcp_bridge_sessions`            | `site`, `status` | In-flight OAuth bridge sessions (`pending`/`done`/`error`) |
-| `rucio_mcp_cached_clients`             | `site`           | Cached Rucio client instances (one per active MCP session) |
+rucio-mcp adds per-tool, authentication, and error metrics:
+
+| Metric                                 | Labels                     | Description                                                                                                                                               |
+| -------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `rucio_mcp_tool_calls_total`           | `site`, `tool`             | Total MCP tool invocations by site and tool name                                                                                                          |
+| `rucio_mcp_tool_call_duration_seconds` | `site`, `tool`             | Tool execution time histogram                                                                                                                             |
+| `rucio_mcp_tool_errors_total`          | `site`, `tool`, `category` | Tool errors by category (`did_not_found`, `rse_not_found`, `rule_not_found`, `duplicate_rule`, `quota`, `access_denied`, `ssl_proxy`, `network`, `other`) |
+| `rucio_mcp_bridge_auth_total`          | `site`, `outcome`          | OAuth bridge auth events (`started`, `success`, `failure`, `timeout`)                                                                                     |
+| `rucio_mcp_bridge_sessions`            | `site`, `status`           | In-flight OAuth bridge sessions (`pending`/`done`/`error`) — live gauge                                                                                   |
+| `rucio_mcp_cached_clients`             | `site`                     | Cached Rucio client instances (one per active MCP session)                                                                                                |
 
 Requests to paths that do not match any registered route are not tracked, so
 probe traffic from scanners does not cause unbounded label cardinality.

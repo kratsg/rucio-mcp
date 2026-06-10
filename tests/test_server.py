@@ -435,7 +435,8 @@ class TestInstrumentedFastMCP:
 
         before = (
             REGISTRY.get_sample_value(
-                "rucio_mcp_tool_calls_total", {"site": "testsite", "tool": "rucio_ping"}
+                "rucio_mcp_tool_calls_total",
+                {"site": "testsite", "tool": "rucio_ping"},
             )
             or 0.0
         )
@@ -445,7 +446,8 @@ class TestInstrumentedFastMCP:
 
         after = (
             REGISTRY.get_sample_value(
-                "rucio_mcp_tool_calls_total", {"site": "testsite", "tool": "rucio_ping"}
+                "rucio_mcp_tool_calls_total",
+                {"site": "testsite", "tool": "rucio_ping"},
             )
             or 0.0
         )

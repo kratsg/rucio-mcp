@@ -16,6 +16,7 @@ from mcp.server.auth.provider import (
     TokenError,
 )
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+from prometheus_client import REGISTRY
 from pydantic import AnyUrl
 
 from rucio_mcp.auth.bridge_provider import BridgePoller, RucioBridgeProvider
@@ -372,3 +373,74 @@ class TestRefreshAndRevoke:
     async def test_revoke_token_is_noop(self, provider: RucioBridgeProvider) -> None:
         token = AccessToken(token="tok", client_id="c", scopes=[])
         await provider.revoke_token(token)  # must not raise
+
+
+class TestBridgeAuthCounter:
+    """rucio_mcp_bridge_auth_total must track auth outcomes per site."""
+
+    @pytest.fixture
+    def provider_site(self, mock_poller: AsyncMock) -> RucioBridgeProvider:
+        return RucioBridgeProvider(
+            poller=mock_poller,
+            resource_url="http://localhost:8000",
+            site_name="counter_test_site",
+        )
+
+    def _counter(self, outcome: str) -> float:
+        return (
+            REGISTRY.get_sample_value(
+                "rucio_mcp_bridge_auth_total",
+                {"site": "counter_test_site", "outcome": outcome},
+            )
+            or 0.0
+        )
+
+    async def test_authorize_increments_started(
+        self,
+        provider_site: RucioBridgeProvider,
+        mock_poller: AsyncMock,
+        client_info: OAuthClientInformationFull,
+        auth_params: AuthorizationParams,
+    ) -> None:
+        mock_poller.request_auth_url.return_value = "https://idp.example.com/login"
+        before = self._counter("started")
+        with patch.object(provider_site, "_bg_poll", AsyncMock()):
+            await provider_site.authorize(client_info, auth_params)
+            await asyncio.sleep(0)
+        assert self._counter("started") - before == 1.0
+
+    async def test_bg_poll_success_increments_success(
+        self,
+        provider_site: RucioBridgeProvider,
+        mock_poller: AsyncMock,
+    ) -> None:
+        session = _make_session("c-s1")
+        provider_site.store.put(session)
+        mock_poller.poll_for_token.return_value = "tok"
+        before = self._counter("success")
+        await provider_site._bg_poll("c-s1")
+        assert self._counter("success") - before == 1.0
+
+    async def test_bg_poll_timeout_increments_timeout(
+        self,
+        provider_site: RucioBridgeProvider,
+        mock_poller: AsyncMock,
+    ) -> None:
+        session = _make_session("c-s2")
+        provider_site.store.put(session)
+        mock_poller.poll_for_token.side_effect = asyncio.TimeoutError
+        before = self._counter("timeout")
+        await provider_site._bg_poll("c-s2")
+        assert self._counter("timeout") - before == 1.0
+
+    async def test_bg_poll_error_increments_failure(
+        self,
+        provider_site: RucioBridgeProvider,
+        mock_poller: AsyncMock,
+    ) -> None:
+        session = _make_session("c-s3")
+        provider_site.store.put(session)
+        mock_poller.poll_for_token.side_effect = RuntimeError("network down")
+        before = self._counter("failure")
+        await provider_site._bg_poll("c-s3")
+        assert self._counter("failure") - before == 1.0
