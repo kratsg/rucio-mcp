@@ -313,6 +313,55 @@ class TestServeHTTP:
             )
         mock_check.assert_not_called()
 
+    def test_uvicorn_proxy_headers_enabled_for_http(self) -> None:
+        """HTTP transport must pass proxy_headers=True to uvicorn so X-Forwarded-For is logged."""
+        with (
+            patch("rucio_mcp.server._make_http_app") as mock_make,
+            patch("rucio_mcp.server.start_metrics_server"),
+            patch("uvicorn.run") as mock_run,
+        ):
+            mock_make.return_value = MagicMock()
+            serve(
+                transport="http",
+                resource_url="http://localhost:8000",
+                sites=["escape"],
+            )
+        _, kwargs = mock_run.call_args
+        assert kwargs.get("proxy_headers") is True
+
+    def test_uvicorn_forwarded_allow_ips_default(self) -> None:
+        """forwarded_allow_ips must default to '127.0.0.1' (trust only localhost proxy)."""
+        with (
+            patch("rucio_mcp.server._make_http_app") as mock_make,
+            patch("rucio_mcp.server.start_metrics_server"),
+            patch("uvicorn.run") as mock_run,
+        ):
+            mock_make.return_value = MagicMock()
+            serve(
+                transport="http",
+                resource_url="http://localhost:8000",
+                sites=["escape"],
+            )
+        _, kwargs = mock_run.call_args
+        assert kwargs.get("forwarded_allow_ips") == "127.0.0.1"
+
+    def test_uvicorn_forwarded_allow_ips_custom(self) -> None:
+        """A custom forwarded_allow_ips value must be forwarded to uvicorn."""
+        with (
+            patch("rucio_mcp.server._make_http_app") as mock_make,
+            patch("rucio_mcp.server.start_metrics_server"),
+            patch("uvicorn.run") as mock_run,
+        ):
+            mock_make.return_value = MagicMock()
+            serve(
+                transport="http",
+                resource_url="http://localhost:8000",
+                sites=["escape"],
+                forwarded_allow_ips="172.16.140.142",
+            )
+        _, kwargs = mock_run.call_args
+        assert kwargs.get("forwarded_allow_ips") == "172.16.140.142"
+
 
 class TestPingServer:
     def test_ping_prints_server_version(self, capsys) -> None:
