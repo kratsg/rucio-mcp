@@ -93,8 +93,8 @@ BRIDGE_AUTH = Counter(
 
 TOOL_CALLS = Counter(
     "rucio_mcp_tool_calls_total",
-    "Total count of MCP tool invocations by site and tool name.",
-    ["site", "tool"],
+    "Total count of MCP tool invocations by site, tool name, and user.",
+    ["site", "tool", "user"],
 )
 TOOL_CALL_DURATION = Histogram(
     "rucio_mcp_tool_call_duration_seconds",
