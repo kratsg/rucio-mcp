@@ -586,6 +586,7 @@ def serve(
     rucio_cfg: Path | None = None,
     auth_type: str | None = None,
     poll_timeout: float = 180.0,
+    forwarded_allow_ips: str = "127.0.0.1",
 ) -> None:
     """Start the MCP server over the selected transport."""
     if sites is None:
@@ -624,4 +625,10 @@ def serve(
         poll_timeout=poll_timeout,
     )
     start_metrics_server(metrics_port, app.state.bridge_stores)
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        proxy_headers=True,
+        forwarded_allow_ips=forwarded_allow_ips,
+    )

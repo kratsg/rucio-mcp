@@ -117,18 +117,19 @@ state.
 
 CLI flags:
 
-| Flag             | Env var                  | Default     | Description                                        |
-| ---------------- | ------------------------ | ----------- | -------------------------------------------------- |
-| `--transport`    | —                        | `stdio`     | `stdio` or `http`                                  |
-| `--site`         | —                        | `escape`    | Site preset name (repeatable for HTTP multi-site)  |
-| `--resource-url` | `RUCIO_MCP_RESOURCE_URL` | —           | Public URL of this MCP server (required for http)  |
-| `--rucio-cfg`    | —                        | preset cfg  | Override rucio.cfg (single site only in http mode) |
-| `--auth-type`    | —                        | from cfg    | Override RUCIO_AUTH_TYPE (stdio mode only)         |
-| `--host`         | —                        | `127.0.0.1` | Bind address                                       |
-| `--port`         | —                        | `8000`      | Bind port                                          |
-| `--metrics-port` | —                        | `9001`      | Port for the Prometheus `/metrics` endpoint (http) |
-| `--poll-timeout` | —                        | `180`       | Seconds to wait for OIDC login to complete (http)  |
-| `--read-only`    | —                        | false       | Disable write tools (add/delete/update rules)      |
+| Flag                    | Env var                  | Default     | Description                                                                              |
+| ----------------------- | ------------------------ | ----------- | ---------------------------------------------------------------------------------------- |
+| `--transport`           | —                        | `stdio`     | `stdio` or `http`                                                                        |
+| `--site`                | —                        | `escape`    | Site preset name (repeatable for HTTP multi-site)                                        |
+| `--resource-url`        | `RUCIO_MCP_RESOURCE_URL` | —           | Public URL of this MCP server (required for http)                                        |
+| `--rucio-cfg`           | —                        | preset cfg  | Override rucio.cfg (single site only in http mode)                                       |
+| `--auth-type`           | —                        | from cfg    | Override RUCIO_AUTH_TYPE (stdio mode only)                                               |
+| `--host`                | —                        | `127.0.0.1` | Bind address                                                                             |
+| `--port`                | —                        | `8000`      | Bind port                                                                                |
+| `--metrics-port`        | —                        | `9001`      | Port for the Prometheus `/metrics` endpoint (http)                                       |
+| `--poll-timeout`        | —                        | `180`       | Seconds to wait for OIDC login to complete (http)                                        |
+| `--forwarded-allow-ips` | —                        | `127.0.0.1` | Comma-separated IPs (or `*`) trusted to set `X-Forwarded-For` (http, reverse proxy only) |
+| `--read-only`           | —                        | false       | Disable write tools (add/delete/update rules)                                            |
 
 ### MCP client configuration
 
@@ -213,6 +214,33 @@ rucio-mcp adds per-tool call metrics and live bridge/cache gauges:
 
 Requests to paths that do not match any registered route are not tracked, so
 probe traffic from scanners does not cause unbounded label cardinality.
+
+### Running behind a reverse proxy
+
+When rucio-mcp sits behind nginx (or another reverse proxy), access logs show
+the proxy's internal IP rather than the real client address. Pass
+`--forwarded-allow-ips` to tell uvicorn which upstream IPs are trusted to set
+`X-Forwarded-For`:
+
+```bash
+# Trust a specific proxy IP
+rucio-mcp serve \
+  --transport http \
+  --site escape \
+  --resource-url https://rucio-mcp.example.com \
+  --forwarded-allow-ips 10.0.0.1
+
+# Trust any upstream (e.g. inside a private Kubernetes cluster)
+rucio-mcp serve \
+  --transport http \
+  --site escape \
+  --resource-url https://rucio-mcp.example.com \
+  --forwarded-allow-ips '*'
+```
+
+The default (`127.0.0.1`) only trusts a proxy on the same host. Set this to the
+actual proxy IP (or `*`) when your proxy is on a different machine, otherwise
+the real client IP will not appear in logs.
 
 ### What the server does NOT do
 
