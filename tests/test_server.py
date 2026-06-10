@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import os
 import textwrap
 from pathlib import Path
@@ -454,13 +456,12 @@ class TestInstrumentedFastMCP:
         assert after - before == 1.0
 
     async def test_tool_call_user_label_from_jwt_bearer(self) -> None:
-        import base64
-        import json
-
         mcp = _InstrumentedFastMCP("test-mcp-jwt", site_name="testsite_jwt")
 
         payload = {"sub": "uid-42", "preferred_username": "alice"}
-        body = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
+        body = (
+            base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
+        )
         header = base64.urlsafe_b64encode(b'{"alg":"RS256"}').rstrip(b"=").decode()
         jwt_token = f"{header}.{body}.fakesig"
 
@@ -531,7 +532,7 @@ class TestInstrumentedFastMCP:
         mcp = _InstrumentedFastMCP("test-mcp-noauth", site_name="testsite_noauth")
 
         fake_request = MagicMock()
-        fake_request.headers.get = lambda key, default="": default
+        fake_request.headers.get = lambda _key, default="": default
         fake_ctx = MagicMock()
         fake_ctx.request_context.request = fake_request
 

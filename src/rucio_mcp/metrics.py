@@ -19,6 +19,7 @@ traffic is isolated from the MCP endpoint.
 from __future__ import annotations
 
 import time
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Any
 
 from prometheus_client import (
@@ -29,15 +30,16 @@ from prometheus_client import (
     disable_created_metrics,
     start_http_server,
 )
-
-# Suppress the _created timestamp series that prometheus_client emits by default
-# for every Counter and Histogram.  These are pure noise for our dashboards.
-disable_created_metrics()
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.routing import Match
 from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
+
+# Suppress the _created timestamp series that prometheus_client emits by default
+# for every Counter and Histogram.  These are pure noise for our dashboards.
+# Must be called before any Counter/Histogram is instantiated (below).
+disable_created_metrics()
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -100,6 +102,18 @@ TOOL_CALL_DURATION = Histogram(
     "rucio_mcp_tool_call_duration_seconds",
     "Histogram of MCP tool execution time by site and tool name (seconds).",
     ["site", "tool"],
+)
+TOOL_ERRORS = Counter(
+    "rucio_mcp_tool_errors_total",
+    "Total count of tool errors by site, tool, and error category.",
+    ["site", "tool", "category"],
+)
+
+# Set by _InstrumentedFastMCP.call_tool before dispatching to the tool handler.
+# Carries (site, tool) so classify_error() can label TOOL_ERRORS without
+# threading the labels through every tool call site.
+current_tool_labels: ContextVar[tuple[str, str]] = ContextVar(
+    "current_tool_labels", default=("unknown", "unknown")
 )
 
 

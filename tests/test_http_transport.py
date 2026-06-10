@@ -412,9 +412,7 @@ class TestServeHTTPValidation:
 class TestSiteLabelOnHTTPMetrics:
     """starlette_* metrics must carry a site label, enabling $site variable filtering."""
 
-    def test_site_mcp_request_records_site_label(
-        self, http_client: TestClient
-    ) -> None:
+    def test_site_mcp_request_records_site_label(self, http_client: TestClient) -> None:
         before = (
             REGISTRY.get_sample_value(
                 "starlette_requests_total",

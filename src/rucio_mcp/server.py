@@ -40,6 +40,7 @@ from rucio_mcp.metrics import (
     TOOL_CALL_DURATION,
     TOOL_CALLS,
     PrometheusMiddleware,
+    current_tool_labels,
     start_metrics_server,
 )
 from rucio_mcp.presets import PRESETS, Preset
@@ -100,6 +101,7 @@ class _InstrumentedFastMCP(FastMCP):
         except (LookupError, ValueError):
             pass  # stdio mode — no HTTP request context
         TOOL_CALLS.labels(site=self._site_name, tool=name, user=user).inc()
+        current_tool_labels.set((self._site_name, name))
         t0 = time.perf_counter()
         try:
             return await super().call_tool(name, arguments)

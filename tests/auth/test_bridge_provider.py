@@ -8,7 +8,6 @@ from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from prometheus_client import REGISTRY
 from mcp.server.auth.provider import (
     AccessToken,
     AuthorizationCode,
@@ -17,6 +16,7 @@ from mcp.server.auth.provider import (
     TokenError,
 )
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
+from prometheus_client import REGISTRY
 from pydantic import AnyUrl
 
 from rucio_mcp.auth.bridge_provider import BridgePoller, RucioBridgeProvider

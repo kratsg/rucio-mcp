@@ -5,6 +5,8 @@ from __future__ import annotations
 import itertools
 from typing import Any, TypeVar
 
+from rucio_mcp.metrics import TOOL_ERRORS, current_tool_labels
+
 T = TypeVar("T")
 
 
@@ -151,21 +153,25 @@ def classify_error(exc: Exception) -> str:
         "dataidentifiernotfound" in type_lower
         or "data identifier not found" in msg_lower
     ):
+        category = "did_not_found"
         guidance = (
             "The DID does not exist in Rucio. "
             "Use `rucio_list_dids` with a wildcard pattern to search for it."
         )
     elif "rsenotfound" in type_lower or "rse not found" in msg_lower:
+        category = "rse_not_found"
         guidance = (
             "The RSE name is not recognised. "
             "Use `rucio_list_rses` to find valid RSE names or expressions."
         )
     elif "rulenotfound" in type_lower or "rule not found" in msg_lower:
+        category = "rule_not_found"
         guidance = (
             "The rule ID does not exist or has been deleted. "
             "Use `rucio_list_did_rules <did>` to find valid rule IDs."
         )
     elif "duplicaterule" in type_lower or "duplicate rule" in msg_lower:
+        category = "duplicate_rule"
         guidance = (
             "A rule with the same parameters already exists. "
             "Use `rucio_list_did_rules <did>` to inspect the existing rule."
@@ -175,6 +181,7 @@ def classify_error(exc: Exception) -> str:
         or "quota" in msg_lower
         or "account limit" in msg_lower
     ):
+        category = "quota"
         guidance = (
             "Your account has insufficient quota for this operation. "
             "Use `rucio_get_local_account_limits` to check your quotas and "
@@ -186,6 +193,7 @@ def classify_error(exc: Exception) -> str:
         or "not allowed" in msg_lower
         or "permission" in msg_lower
     ):
+        category = "access_denied"
         guidance = (
             "Access denied. "
             "Use `rucio_whoami` to verify your authenticated account and "
@@ -198,6 +206,7 @@ def classify_error(exc: Exception) -> str:
         or "certificate" in msg_lower
         or "x509" in msg_lower
     ):
+        category = "ssl_proxy"
         guidance = (
             "SSL or proxy certificate error. "
             "Run `rucio_voms_proxy_info` to check your proxy certificate. "
@@ -209,14 +218,18 @@ def classify_error(exc: Exception) -> str:
         or "timeout" in msg_lower
         or "database" in type_lower
     ):
+        category = "network"
         guidance = (
             "Network or server error — this may be transient. "
             "Use `rucio_ping` to check server connectivity and try again."
         )
     else:
-        # Generic fallback — preserve original error text, no recovery guidance
+        site, tool = current_tool_labels.get()
+        TOOL_ERRORS.labels(site=site, tool=tool, category="other").inc()
         return f"Error: {exc_msg}"
 
+    site, tool = current_tool_labels.get()
+    TOOL_ERRORS.labels(site=site, tool=tool, category=category).inc()
     return f"Error: {exc_msg}\n\n**Recovery:** {guidance}"
 
 

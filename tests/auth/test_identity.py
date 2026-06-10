@@ -4,16 +4,15 @@ from __future__ import annotations
 
 import base64
 import json
+from typing import Any
 
 from rucio_mcp.auth.identity import decode_jwt_claims, user_label
 
 
-def _make_jwt(payload: dict) -> str:
+def _make_jwt(payload: dict[str, Any]) -> str:
     """Build a minimal (unsigned) JWT string for testing."""
     header = base64.urlsafe_b64encode(b'{"alg":"RS256"}').rstrip(b"=").decode()
-    body = (
-        base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
-    )
+    body = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
     return f"{header}.{body}.fakesig"
 
 

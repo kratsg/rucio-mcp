@@ -11,9 +11,10 @@ from __future__ import annotations
 import base64
 import json
 from functools import lru_cache
+from typing import Any
 
 
-def decode_jwt_claims(token: str) -> dict:
+def decode_jwt_claims(token: str) -> dict[str, Any]:
     """Return the payload claims from a JWT string without verifying the signature.
 
     Returns an empty dict if *token* is not a three-part JWT or if the payload
@@ -29,9 +30,11 @@ def decode_jwt_claims(token: str) -> dict:
         payload_b64 += "=" * padding
     try:
         raw = base64.urlsafe_b64decode(payload_b64)
-        return json.loads(raw)
+        result: dict[str, Any] = json.loads(raw)
     except Exception:  # noqa: BLE001
         return {}
+    else:
+        return result
 
 
 @lru_cache(maxsize=1024)
