@@ -117,19 +117,19 @@ state.
 
 CLI flags:
 
-| Flag                    | Env var                  | Default       | Description                                                                               |
-| ----------------------- | ------------------------ | ------------- | ----------------------------------------------------------------------------------------- |
-| `--transport`           | —                        | `stdio`       | `stdio` or `http`                                                                         |
-| `--site`                | —                        | `escape`      | Site preset name (repeatable for HTTP multi-site)                                         |
-| `--resource-url`        | `RUCIO_MCP_RESOURCE_URL` | —             | Public URL of this MCP server (required for http)                                         |
-| `--rucio-cfg`           | —                        | preset cfg    | Override rucio.cfg (single site only in http mode)                                        |
-| `--auth-type`           | —                        | from cfg      | Override RUCIO_AUTH_TYPE (stdio mode only)                                                |
-| `--host`                | —                        | `127.0.0.1`   | Bind address                                                                              |
-| `--port`                | —                        | `8000`        | Bind port                                                                                 |
-| `--metrics-port`        | —                        | `9001`        | Port for the Prometheus `/metrics` endpoint (http)                                        |
-| `--poll-timeout`        | —                        | `180`         | Seconds to wait for OIDC login to complete (http)                                         |
-| `--forwarded-allow-ips` | —                        | `127.0.0.1`   | Comma-separated IPs (or `*`) trusted to set `X-Forwarded-For` (http, reverse proxy only) |
-| `--read-only`           | —                        | false         | Disable write tools (add/delete/update rules)                                             |
+| Flag                    | Env var                  | Default     | Description                                                                              |
+| ----------------------- | ------------------------ | ----------- | ---------------------------------------------------------------------------------------- |
+| `--transport`           | —                        | `stdio`     | `stdio` or `http`                                                                        |
+| `--site`                | —                        | `escape`    | Site preset name (repeatable for HTTP multi-site)                                        |
+| `--resource-url`        | `RUCIO_MCP_RESOURCE_URL` | —           | Public URL of this MCP server (required for http)                                        |
+| `--rucio-cfg`           | —                        | preset cfg  | Override rucio.cfg (single site only in http mode)                                       |
+| `--auth-type`           | —                        | from cfg    | Override RUCIO_AUTH_TYPE (stdio mode only)                                               |
+| `--host`                | —                        | `127.0.0.1` | Bind address                                                                             |
+| `--port`                | —                        | `8000`      | Bind port                                                                                |
+| `--metrics-port`        | —                        | `9001`      | Port for the Prometheus `/metrics` endpoint (http)                                       |
+| `--poll-timeout`        | —                        | `180`       | Seconds to wait for OIDC login to complete (http)                                        |
+| `--forwarded-allow-ips` | —                        | `127.0.0.1` | Comma-separated IPs (or `*`) trusted to set `X-Forwarded-For` (http, reverse proxy only) |
+| `--read-only`           | —                        | false       | Disable write tools (add/delete/update rules)                                            |
 
 ### MCP client configuration
 
