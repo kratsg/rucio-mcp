@@ -26,8 +26,13 @@ from prometheus_client import (
     Counter,
     Gauge,
     Histogram,
+    disable_created_metrics,
     start_http_server,
 )
+
+# Suppress the _created timestamp series that prometheus_client emits by default
+# for every Counter and Histogram.  These are pure noise for our dashboards.
+disable_created_metrics()
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -144,10 +149,22 @@ def start_metrics_server(
 class PrometheusMiddleware(BaseHTTPMiddleware):
     """Record per-route request counts, response codes, latency, and exceptions."""
 
-    def __init__(self, app: ASGIApp, *, filter_unhandled_paths: bool = False) -> None:
-        """Wrap *app*; set *filter_unhandled_paths* to skip unmatched routes."""
+    def __init__(
+        self,
+        app: ASGIApp,
+        *,
+        filter_unhandled_paths: bool = False,
+        excluded_paths: frozenset[str] = frozenset(),
+    ) -> None:
+        """Wrap *app*.
+
+        *filter_unhandled_paths* skips unmatched routes.
+        *excluded_paths* lists exact paths (e.g. ``{"/healthz"}``) that are
+        served but must never be recorded in metrics.
+        """
         super().__init__(app)
         self.filter_unhandled_paths = filter_unhandled_paths
+        self.excluded_paths = excluded_paths
 
     async def dispatch(
         self, request: Request, call_next: RequestResponseEndpoint
@@ -155,6 +172,9 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         """Instrument the request and delegate to *call_next*."""
         method = request.method
         path_template, is_handled = self._path_template(request)
+
+        if request.url.path in self.excluded_paths:
+            return await call_next(request)
 
         if self.filter_unhandled_paths and not is_handled:
             return await call_next(request)

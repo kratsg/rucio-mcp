@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
-from prometheus_client import generate_latest
+from prometheus_client import REGISTRY, Counter, generate_latest
 from prometheus_client.registry import CollectorRegistry
 
 if TYPE_CHECKING:
@@ -407,3 +407,38 @@ class TestServeHTTPValidation:
                 rucio_cfg=cfg,
             )
         assert "stdio" in capsys.readouterr().err
+
+
+class TestNoCreatedSeries:
+    def test_no_created_series_in_metrics_output(self) -> None:
+        """Counters and histograms must not emit _created timestamp series."""
+        registry = CollectorRegistry()
+        c = Counter("noise_test_counter", "test counter", registry=registry)
+        c.inc()
+        output = generate_latest(registry).decode()
+        assert "_created" not in output
+
+
+class TestHealthzEndpoint:
+    def test_healthz_returns_200(self, http_client: TestClient) -> None:
+        resp = http_client.get("/healthz")
+        assert resp.status_code == 200
+
+    def test_healthz_response_body_is_ok(self, http_client: TestClient) -> None:
+        resp = http_client.get("/healthz")
+        assert "ok" in resp.text.lower()
+
+    def test_healthz_not_tracked_in_starlette_metrics(
+        self, http_client: TestClient
+    ) -> None:
+        """Health-check requests must not appear in HTTP metrics."""
+        before = REGISTRY.get_sample_value(
+            "starlette_requests_total",
+            {"method": "GET", "path_template": "/healthz"},
+        )
+        http_client.get("/healthz")
+        after = REGISTRY.get_sample_value(
+            "starlette_requests_total",
+            {"method": "GET", "path_template": "/healthz"},
+        )
+        assert before == after  # excluded — counter must not move

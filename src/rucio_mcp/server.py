@@ -25,7 +25,7 @@ from pydantic import AnyHttpUrl
 from rucio.client import Client
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
-from starlette.responses import Response
+from starlette.responses import PlainTextResponse, Response
 from starlette.routing import BaseRoute, Mount, Route
 
 from rucio_mcp.auth.bridge_provider import RucioBridgeProvider
@@ -553,6 +553,10 @@ def _make_http_app(
         )
         return Response(html, media_type="text/html")
 
+    async def healthz_handler(_request: Request) -> Response:
+        return PlainTextResponse("ok")
+
+    routes.append(Route("/healthz", endpoint=healthz_handler, methods=["GET"]))
     routes.append(Route("/", endpoint=root_handler, methods=["GET"]))
     site_prefixes = frozenset(f"/site/{name}" for name in sites)
     app = Starlette(
@@ -560,7 +564,11 @@ def _make_http_app(
         lifespan=_combined_lifespan,
         middleware=[
             Middleware(_SitePathNormalizerMiddleware, site_prefixes=site_prefixes),
-            Middleware(PrometheusMiddleware, filter_unhandled_paths=True),
+            Middleware(
+                PrometheusMiddleware,
+                filter_unhandled_paths=True,
+                excluded_paths=frozenset({"/healthz"}),
+            ),
         ],
     )
     # Prevent 307 redirects for /site/{name} → /site/{name}/. Without this,
