@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 from rucio_mcp.auth.token_client import TokenInjectedClient
+
+_log = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from rucio.client import Client
@@ -78,9 +81,19 @@ class BearerTokenClientFactory(RucioClientFactory):
         session_id, bearer, account = _extract_request_auth(
             ctx, default_account=self._cfg.account
         )
+        _log.debug(
+            "get_client session=%s…, bearer prefix=%s…",
+            session_id[:8] if session_id else "(none)",
+            bearer[:12],
+        )
         cached = self._cache.get(session_id)
         if cached is not None:
+            _log.debug("get_client cache HIT for session=%s…", session_id[:8])
             return cached
+        _log.debug(
+            "get_client cache MISS for session=%s…, building new client",
+            session_id[:8] if session_id else "(none)",
+        )
         client = TokenInjectedClient(
             bearer_token=bearer,
             account=account,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
@@ -110,6 +111,13 @@ def main() -> None:
             "(HTTP transport only, default: 127.0.0.1)."
         ),
     )
+    serve_parser.add_argument(
+        "--log-level",
+        default="info",
+        choices=("debug", "info", "warning", "error"),
+        metavar="LEVEL",
+        help="Logging verbosity (default: info). Use 'debug' to trace auth flow.",
+    )
 
     subparsers.add_parser(
         "ping",
@@ -119,6 +127,10 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.command == "serve":
+        logging.basicConfig(
+            level=getattr(logging, args.log_level.upper()),
+            format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        )
         sites = args.sites or ["escape"]
         serve(
             read_only=args.read_only,
@@ -132,6 +144,7 @@ def main() -> None:
             auth_type=args.auth_type,
             poll_timeout=args.poll_timeout,
             forwarded_allow_ips=args.forwarded_allow_ips,
+            log_level=args.log_level,
         )
     elif args.command == "ping":
         ping_server()

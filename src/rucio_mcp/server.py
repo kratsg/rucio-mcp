@@ -610,6 +610,7 @@ def serve(
     auth_type: str | None = None,
     poll_timeout: float = 180.0,
     forwarded_allow_ips: str = "127.0.0.1",
+    log_level: str = "info",
 ) -> None:
     """Start the MCP server over the selected transport."""
     if sites is None:
@@ -654,4 +655,5 @@ def serve(
         port=port,
         proxy_headers=True,
         forwarded_allow_ips=forwarded_allow_ips,
+        log_level=log_level,
     )

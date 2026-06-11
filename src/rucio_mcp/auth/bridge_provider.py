@@ -219,6 +219,7 @@ class RucioBridgeProvider:
         No signature validation is performed — the bearer IS the rucio session
         token and Rucio will reject it with 401 if it is invalid.
         """
+        _log.debug("load_access_token called, token prefix=%s…", token[:12])
         return AccessToken(
             token=token,
             client_id="rucio-bridge",
