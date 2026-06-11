@@ -101,8 +101,7 @@ def register(mcp: FastMCP, *, transport: str = "stdio") -> None:
                 if secs > 0:
                     mins, s = divmod(secs, 60)
                     lines.append(
-                        f"- **expires_at:** {exp_dt.isoformat()} "
-                        f"(in {mins}m {s:02d}s)"
+                        f"- **expires_at:** {exp_dt.isoformat()} (in {mins}m {s:02d}s)"
                     )
                 else:
                     lines.append(

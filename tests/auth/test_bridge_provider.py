@@ -22,9 +22,9 @@ from prometheus_client import REGISTRY
 from pydantic import AnyUrl
 
 from rucio_mcp.auth.bridge_provider import (
+    _DEFAULT_EXPIRES_IN,
     BridgePoller,
     RucioBridgeProvider,
-    _DEFAULT_EXPIRES_IN,
     _jwt_expires_in,
 )
 from rucio_mcp.auth.bridge_state import BridgeSession
@@ -492,7 +492,9 @@ class TestExchangeAuthorizationCodeExpiresIn:
 
         session = _make_session("exp-s1")
         provider.store.put(session)
-        provider.store.mark_done("exp-s1", rucio_token=rucio_token, auth_code="exp-code")
+        provider.store.mark_done(
+            "exp-s1", rucio_token=rucio_token, auth_code="exp-code"
+        )
 
         auth_code = AuthorizationCode(
             code="exp-code",
@@ -513,7 +515,9 @@ class TestExchangeAuthorizationCodeExpiresIn:
     ) -> None:
         session = _make_session("exp-s2")
         provider.store.put(session)
-        provider.store.mark_done("exp-s2", rucio_token="opaque-token", auth_code="exp-code2")
+        provider.store.mark_done(
+            "exp-s2", rucio_token="opaque-token", auth_code="exp-code2"
+        )
 
         auth_code = AuthorizationCode(
             code="exp-code2",

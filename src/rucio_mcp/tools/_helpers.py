@@ -195,8 +195,7 @@ def classify_error(exc: Exception) -> str:
     ):
         category = "access_denied"
         guidance = (
-            "Access denied. "
-            "Use `rucio_whoami` to verify your authenticated account."
+            "Access denied. Use `rucio_whoami` to verify your authenticated account."
         )
     elif (
         "ssl" in type_lower
@@ -207,8 +206,7 @@ def classify_error(exc: Exception) -> str:
     ):
         category = "ssl_proxy"
         guidance = (
-            "SSL or certificate error. "
-            "Use `rucio_ping` to check server connectivity."
+            "SSL or certificate error. Use `rucio_ping` to check server connectivity."
         )
     elif (
         "connectionerror" in type_lower

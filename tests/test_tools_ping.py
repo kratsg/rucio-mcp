@@ -43,8 +43,8 @@ def registered_tools_http() -> dict[str, Callable[..., Awaitable[str]]]:
 def _mock_http_ctx(authorization: str = "") -> MagicMock:
     """Build a mock Context whose request carries the given Authorization header."""
     ctx: MagicMock = MagicMock()
-    ctx.request_context.request.headers.get = (
-        lambda key, default="": authorization if key == "authorization" else default
+    ctx.request_context.request.headers.get = lambda key, default="": (
+        authorization if key == "authorization" else default
     )
     return ctx
 
