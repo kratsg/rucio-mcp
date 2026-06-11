@@ -72,6 +72,8 @@ def register(mcp: FastMCP, *, transport: str = "stdio") -> None:
             Only available in HTTP transport mode.
             """
             req = ctx.request_context.request
+            if req is None:
+                return "Error: no request context available."
             auth: str = req.headers.get("authorization", "")
             if not auth.lower().startswith("bearer "):
                 return "Error: no Bearer token found in the request headers."

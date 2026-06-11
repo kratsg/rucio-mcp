@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
 
-def _make_jwt(payload: dict) -> str:
+def _make_jwt(payload: dict[str, object]) -> str:
     """Build a minimal unsigned JWT from a payload dict."""
     header = base64.urlsafe_b64encode(b'{"alg":"none"}').rstrip(b"=").decode()
     body = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()

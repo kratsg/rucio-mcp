@@ -453,7 +453,7 @@ class TestBridgeAuthCounter:
         assert self._counter("failure") - before == 1.0
 
 
-def _make_test_jwt(payload: dict) -> str:
+def _make_test_jwt(payload: dict[str, object]) -> str:
     header = base64.urlsafe_b64encode(b'{"alg":"none"}').rstrip(b"=").decode()
     body = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
     return f"{header}.{body}."
