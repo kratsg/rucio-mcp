@@ -58,7 +58,7 @@ from rucio_mcp.tools import (
     subscriptions,
 )
 
-_GENERIC_PREAMBLE = (
+_STDIO_PREAMBLE = (
     "MCP server for Rucio data management. "
     "Provides tools to discover datasets, check replica locations, "
     "inspect and manage replication rules, and verify proxy authentication. "
@@ -67,17 +67,27 @@ _GENERIC_PREAMBLE = (
     "before starting the server."
 )
 
+_HTTP_PREAMBLE = (
+    "MCP server for Rucio data management. "
+    "Provides tools to discover datasets, check replica locations, "
+    "inspect and manage replication rules, and verify authentication. "
+    "Authentication uses OIDC via the OAuth 2.1 bridge — no environment "
+    "variables or proxy certificates are required. "
+    "Use `rucio_token_info` to check how long the current session remains valid."
+)
+
 _NOMENCLATURE_HINT = (
     "Dataset naming conventions for this site are available "
     "via the `rucio://nomenclature` resource."
 )
 
 
-def _build_instructions(preset: Preset) -> str:
-    """Build the server instructions string for *preset*."""
+def _build_instructions(preset: Preset, *, transport: str = "stdio") -> str:
+    """Build the server instructions string for *preset* and *transport*."""
+    preamble = _HTTP_PREAMBLE if transport == "http" else _STDIO_PREAMBLE
     if preset.nomenclature_resource is not None:
-        return _GENERIC_PREAMBLE + "\n\n" + _NOMENCLATURE_HINT
-    return _GENERIC_PREAMBLE
+        return preamble + "\n\n" + _NOMENCLATURE_HINT
+    return preamble
 
 
 class _InstrumentedFastMCP(FastMCP):
@@ -259,11 +269,10 @@ def _make_stdio_mcp(
         "rucio-mcp",
         site_name=site_name,
         lifespan=_lifespan,
-        instructions=_build_instructions(preset),
+        instructions=_build_instructions(preset, transport="stdio"),
     )
 
     for _module in [
-        ping,
         dids,
         replicas,
         scopes,
@@ -276,6 +285,7 @@ def _make_stdio_mcp(
         subscriptions,
     ]:
         _module.register(mcp)
+    ping.register(mcp, transport="stdio")
 
     register_resources(mcp, site_name, preset.nomenclature_resource)
     return mcp
@@ -326,7 +336,7 @@ def _make_site_mcp(
     mcp = _InstrumentedFastMCP(
         f"rucio-mcp-{site_name}",
         site_name=site_name,
-        instructions=_build_instructions(preset),
+        instructions=_build_instructions(preset, transport="http"),
         host=host,
         port=port,
         streamable_http_path="/",
@@ -342,19 +352,18 @@ def _make_site_mcp(
 
     register_bridge_routes(mcp, provider)
     for _module in [
-        ping,
         dids,
         replicas,
         scopes,
         rses,
         rules,
         account,
-        proxy,
         locks,
         rucio_requests,
         subscriptions,
     ]:
         _module.register(mcp)
+    ping.register(mcp, transport="http")
     register_resources(mcp, site_name, preset.nomenclature_resource)
     return mcp, provider, cache
 

@@ -196,8 +196,7 @@ def classify_error(exc: Exception) -> str:
         category = "access_denied"
         guidance = (
             "Access denied. "
-            "Use `rucio_whoami` to verify your authenticated account and "
-            "`rucio_voms_proxy_info` to check your proxy certificate status."
+            "Use `rucio_whoami` to verify your authenticated account."
         )
     elif (
         "ssl" in type_lower
@@ -208,9 +207,8 @@ def classify_error(exc: Exception) -> str:
     ):
         category = "ssl_proxy"
         guidance = (
-            "SSL or proxy certificate error. "
-            "Run `rucio_voms_proxy_info` to check your proxy certificate. "
-            "If expired, run: voms-proxy-init -voms <site>"
+            "SSL or certificate error. "
+            "Use `rucio_ping` to check server connectivity."
         )
     elif (
         "connectionerror" in type_lower
