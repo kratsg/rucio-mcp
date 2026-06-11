@@ -78,18 +78,13 @@ class TestOAuthMetadataEndpoints:
         ).json()
         assert data["issuer"].rstrip("/") == "http://localhost:8000/site/escape"
 
-    def test_root_metadata_proxies_to_first_site(self, http_client: TestClient) -> None:
-        # TypeScript MCP SDK constructs well-known URL from AS URL origin (not path),
-        # so root-level AS metadata must work for single-site setups.
+    def test_root_metadata_returns_404(self, http_client: TestClient) -> None:
+        # RFC 8414 §3.1: when all issuers have path components (e.g.
+        # http://host/site/escape), there is no host-level issuer and the bare-root
+        # AS metadata MUST NOT exist.  Serving it caused a phantom atlas issuer that
+        # broke non-path-aware clients authenticating to non-first sites.
         resp = http_client.get("/.well-known/oauth-authorization-server")
-        assert resp.status_code == 200
-
-    def test_root_metadata_content_has_required_fields(
-        self, http_client: TestClient
-    ) -> None:
-        data = http_client.get("/.well-known/oauth-authorization-server").json()
-        assert "issuer" in data
-        assert "registration_endpoint" in data
+        assert resp.status_code == 404
 
     def test_rfc8414_well_known_path_returns_metadata(
         self, http_client: TestClient
@@ -127,26 +122,142 @@ class TestOAuthMetadataEndpoints:
         assert "authorization_servers" in data or "resource" in data
 
 
-class TestRootOAuthEndpointFallback:
-    """Root-level OAuth endpoint proxies for TypeScript MCP SDK compatibility.
+class TestNoRootOAuthFallback:
+    """Root-level OAuth endpoints must not exist (RFC 8414 §3.1 compliance).
 
-    The TypeScript MCP SDK constructs OAuth endpoints using
-    ``new URL('/endpoint', asUrl)`` with a leading slash, which makes the
-    path origin-relative (strips the /site/name path from asUrl). These tests
-    verify that root-level endpoints proxy to the first site's sub-app.
+    All issuers have path components (e.g. http://host/site/escape), so there is
+    no host-level issuer.  Serving root /register, /authorize, /token proxied to
+    the first site created a phantom issuer that caused non-first sites to register
+    at the wrong provider and receive "Client ID not found" on authorize.
     """
 
-    def test_root_register_proxies_not_404(self, http_client: TestClient) -> None:
+    def test_root_register_is_404(self, http_client: TestClient) -> None:
         resp = http_client.post("/register", json={})
-        assert resp.status_code != 404
+        assert resp.status_code == 404
 
-    def test_root_token_proxies_not_404(self, http_client: TestClient) -> None:
+    def test_root_token_is_404(self, http_client: TestClient) -> None:
         resp = http_client.post("/token", json={})
-        assert resp.status_code != 404
+        assert resp.status_code == 404
 
-    def test_root_authorize_proxies_not_404(self, http_client: TestClient) -> None:
+    def test_root_authorize_is_404(self, http_client: TestClient) -> None:
         resp = http_client.get("/authorize")
-        assert resp.status_code != 404
+        assert resp.status_code == 404
+
+
+class TestMultiSiteOAuthIsolation:
+    """Regression: root AS metadata must not register clients into the wrong site provider.
+
+    Previously the root /.well-known/oauth-authorization-server proxied to sub_apps[0]
+    (the first site), so clients authenticating to a non-first site would:
+      1. GET /.well-known/oauth-authorization-server → atlas registration_endpoint
+      2. POST /site/atlas/register → client_id stored in atlas's provider
+      3. GET /site/escape/authorize?client_id=… → 400 "Client ID not found"
+    Removing the root fallback forces all clients onto path-aware per-site discovery.
+    """
+
+    @pytest.fixture
+    def atlas_rucio_cfg(self, tmp_path: Path) -> Path:
+        p = tmp_path / "atlas.cfg"
+        p.write_text(
+            textwrap.dedent("""\
+                [client]
+                rucio_host = https://rucio.atlas.cern.ch
+                auth_host = https://atlas-rucio-auth.cern.ch
+                account = gstark
+                oidc_audience = rucio
+                oidc_issuer = atlas
+                oidc_scope = openid profile offline_access
+            """)
+        )
+        return p
+
+    @pytest.fixture
+    def multi_site_app(self, atlas_rucio_cfg: Path, oidc_rucio_cfg: Path):
+        return _make_http_app(
+            sites=["atlas", "escape"],
+            resource_url="http://localhost:8000",
+            read_only=False,
+            host="127.0.0.1",
+            port=8000,
+            rucio_cfg_overrides={"atlas": atlas_rucio_cfg, "escape": oidc_rucio_cfg},
+        )
+
+    @pytest.fixture
+    def multi_site_client(self, multi_site_app):
+        return TestClient(multi_site_app, raise_server_exceptions=True)
+
+    def test_root_as_metadata_is_404(self, multi_site_client: TestClient) -> None:
+        # No phantom host-level issuer must be served.
+        resp = multi_site_client.get("/.well-known/oauth-authorization-server")
+        assert resp.status_code == 404
+
+    def test_root_register_is_404(self, multi_site_client: TestClient) -> None:
+        resp = multi_site_client.post("/register", json={})
+        assert resp.status_code == 404
+
+    def test_atlas_client_id_rejected_by_escape_authorize(
+        self, multi_site_client: TestClient
+    ) -> None:
+        # Register at atlas — client_id lands in atlas's provider.
+        reg_resp = multi_site_client.post(
+            "/site/atlas/register",
+            json={
+                "client_name": "test-client",
+                "redirect_uris": ["http://localhost:9999/cb"],
+                "grant_types": ["authorization_code", "refresh_token"],
+                "response_types": ["code"],
+                "token_endpoint_auth_method": "none",
+            },
+        )
+        assert reg_resp.status_code == 201
+        client_id = reg_resp.json()["client_id"]
+
+        # That same client_id must be unknown to escape's provider → 400.
+        resp = multi_site_client.get(
+            "/site/escape/authorize",
+            params={
+                "client_id": client_id,
+                "response_type": "code",
+                "redirect_uri": "http://localhost:9999/cb",
+                "code_challenge": "x" * 43,
+                "code_challenge_method": "S256",
+                "resource": "http://localhost:8000/site/escape",
+            },
+        )
+        assert resp.status_code == 400
+
+    def test_atlas_client_id_accepted_by_atlas_authorize(
+        self, multi_site_client: TestClient
+    ) -> None:
+        # Register at atlas — client_id must be found by atlas's own authorize.
+        reg_resp = multi_site_client.post(
+            "/site/atlas/register",
+            json={
+                "client_name": "test-client",
+                "redirect_uris": ["http://localhost:9999/cb"],
+                "grant_types": ["authorization_code", "refresh_token"],
+                "response_types": ["code"],
+                "token_endpoint_auth_method": "none",
+            },
+        )
+        assert reg_resp.status_code == 201
+        client_id = reg_resp.json()["client_id"]
+
+        # atlas/authorize must redirect (302), not return 400.
+        resp = multi_site_client.get(
+            "/site/atlas/authorize",
+            params={
+                "client_id": client_id,
+                "response_type": "code",
+                "redirect_uri": "http://localhost:9999/cb",
+                "code_challenge": "x" * 43,
+                "code_challenge_method": "S256",
+                "resource": "http://localhost:8000/site/atlas",
+            },
+            follow_redirects=False,
+        )
+        # 302 = bridge started; anything but 400 means the client_id was found.
+        assert resp.status_code == 302
 
 
 class TestUnauthenticatedAccess:

@@ -383,9 +383,6 @@ def _make_well_known_proxy_route(
       mcp registers it at ``/.well-known/oauth-authorization-server`` in the sub-app.
     - RFC 9728: client looks for ``/.well-known/oauth-protected-resource/site/name``;
       mcp registers it at ``/.well-known/oauth-protected-resource/site/name`` in the sub-app.
-    - TypeScript SDK origin-fallback: client constructs OAuth endpoints (``/register``,
-      ``/authorize``, ``/token``) relative to the AS URL's *origin*, stripping the
-      ``/site/name`` path. Root-level routes proxy to the first site's sub-app.
     """
     _raw = sub_app_path.encode()
     _methods = methods or ["GET"]
@@ -527,35 +524,18 @@ def _make_http_app(
                 f"/.well-known/oauth-protected-resource/site/{name}",
             )
         )
-    # Root-level OAuth fallback for the TypeScript MCP SDK: it constructs
-    # OAuth endpoints using new URL('/path', asUrl), which strips the /site/name
-    # path (leading slash makes it origin-relative). Proxy root-level endpoints
-    # to the first site. For multi-site deployments, only the first site's OAuth
-    # endpoints are exposed at root; additional sites need a patched SDK.
-    if sub_apps:
-        _first_sub = sub_apps[0][1]
-        routes.append(
-            _make_well_known_proxy_route(
-                "/.well-known/oauth-authorization-server",
-                _first_sub,
-                "/.well-known/oauth-authorization-server",
-            )
-        )
-        routes.append(
-            _make_well_known_proxy_route(
-                "/register", _first_sub, "/register", methods=["POST"]
-            )
-        )
-        routes.append(
-            _make_well_known_proxy_route(
-                "/authorize", _first_sub, "/authorize", methods=["GET"]
-            )
-        )
-        routes.append(
-            _make_well_known_proxy_route(
-                "/token", _first_sub, "/token", methods=["POST"]
-            )
-        )
+    # No root-level OAuth fallback. RFC 8414 §3.1: when every issuer has a path
+    # component (e.g. http://host/site/escape), there is no host-level issuer and
+    # the bare-root /.well-known/oauth-authorization-server MUST NOT be served.
+    # A root document claiming issuer=…/site/<first> is a self-contradiction (a
+    # no-path location advertising a path-ful issuer) that causes non-path-aware
+    # clients to register at the first site's provider and then authorize at a
+    # different site's provider, yielding "Client ID not found".
+    # All clients must use the path-aware per-site discovery chain:
+    #   401 → /.well-known/oauth-protected-resource/site/{name}
+    #       → authorization_servers: ["…/site/{name}"]
+    #       → /.well-known/oauth-authorization-server/site/{name}
+    #       → /site/{name}/{register,authorize,token}
     _version = _pkg_version("rucio-mcp")
 
     async def root_handler(request: Request) -> Response:
