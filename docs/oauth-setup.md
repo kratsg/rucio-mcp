@@ -256,8 +256,10 @@ the real client IP will not appear in logs.
 ### What the server does NOT do
 
 - Does **not** require operator or end-user IAM registration
-- Does **not** store long-lived refresh tokens (session TTL ≈ Rucio token
-  lifetime)
+- Does **not** issue refresh tokens — when the session expires the MCP client
+  re-runs the full OAuth flow
 - Does **not** grant Rucio access — Rucio enforces its own authorization
-- Does **not** silently re-authenticate on 401 — MCP clients re-run the OAuth
-  flow when the session token expires
+- Does **not** silently re-authenticate on 401 — `expires_in` in the `/token`
+  response matches the Rucio JWT lifetime so the MCP client re-authenticates
+  exactly when the token expires (see
+  [Session lifetime](rucio-oauth-bridge.md#session-lifetime-and-expires_in))
