@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import time
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -19,7 +21,12 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from prometheus_client import REGISTRY
 from pydantic import AnyUrl
 
-from rucio_mcp.auth.bridge_provider import BridgePoller, RucioBridgeProvider
+from rucio_mcp.auth.bridge_provider import (
+    BridgePoller,
+    RucioBridgeProvider,
+    _DEFAULT_EXPIRES_IN,
+    _jwt_expires_in,
+)
 from rucio_mcp.auth.bridge_state import BridgeSession
 from rucio_mcp.auth.rucio_cfg import RucioCfg
 
@@ -444,3 +451,78 @@ class TestBridgeAuthCounter:
         before = self._counter("failure")
         await provider_site._bg_poll("c-s3")
         assert self._counter("failure") - before == 1.0
+
+
+def _make_test_jwt(payload: dict) -> str:
+    header = base64.urlsafe_b64encode(b'{"alg":"none"}').rstrip(b"=").decode()
+    body = base64.urlsafe_b64encode(json.dumps(payload).encode()).rstrip(b"=").decode()
+    return f"{header}.{body}."
+
+
+class TestJwtExpiresIn:
+    def test_future_exp_returns_remaining_seconds(self) -> None:
+        future = int(time.time()) + 3600
+        token = _make_test_jwt({"exp": future})
+        result = _jwt_expires_in(token)
+        assert 3595 <= result <= 3600
+
+    def test_past_exp_returns_zero(self) -> None:
+        past = int(time.time()) - 60
+        token = _make_test_jwt({"exp": past})
+        assert _jwt_expires_in(token) == 0
+
+    def test_no_exp_claim_returns_default(self) -> None:
+        token = _make_test_jwt({"sub": "alice"})
+        assert _jwt_expires_in(token) == _DEFAULT_EXPIRES_IN
+
+    def test_opaque_token_returns_default(self) -> None:
+        assert _jwt_expires_in("opaque-no-dots") == _DEFAULT_EXPIRES_IN
+
+    def test_malformed_payload_returns_default(self) -> None:
+        # valid header, invalid base64 body
+        assert _jwt_expires_in("header.!!!.sig") == _DEFAULT_EXPIRES_IN
+
+
+class TestExchangeAuthorizationCodeExpiresIn:
+    async def test_expires_in_reflects_jwt_lifetime(
+        self, provider: RucioBridgeProvider, client_info: OAuthClientInformationFull
+    ) -> None:
+        future_exp = int(time.time()) + 3600
+        rucio_token = _make_test_jwt({"exp": future_exp, "sub": "alice"})
+
+        session = _make_session("exp-s1")
+        provider.store.put(session)
+        provider.store.mark_done("exp-s1", rucio_token=rucio_token, auth_code="exp-code")
+
+        auth_code = AuthorizationCode(
+            code="exp-code",
+            scopes=["openid"],
+            expires_at=time.time() + 300,
+            client_id="mcp-client-abc",
+            code_challenge="challenge-abc",
+            redirect_uri=AnyUrl("http://localhost:1234/callback"),
+            redirect_uri_provided_explicitly=True,
+        )
+        token = await provider.exchange_authorization_code(client_info, auth_code)
+        assert token.access_token == rucio_token
+        assert token.expires_in is not None
+        assert 3595 <= token.expires_in <= 3600
+
+    async def test_expires_in_opaque_token_uses_default(
+        self, provider: RucioBridgeProvider, client_info: OAuthClientInformationFull
+    ) -> None:
+        session = _make_session("exp-s2")
+        provider.store.put(session)
+        provider.store.mark_done("exp-s2", rucio_token="opaque-token", auth_code="exp-code2")
+
+        auth_code = AuthorizationCode(
+            code="exp-code2",
+            scopes=["openid"],
+            expires_at=time.time() + 300,
+            client_id="mcp-client-abc",
+            code_challenge="challenge-abc",
+            redirect_uri=AnyUrl("http://localhost:1234/callback"),
+            redirect_uri_provided_explicitly=True,
+        )
+        token = await provider.exchange_authorization_code(client_info, auth_code)
+        assert token.expires_in == _DEFAULT_EXPIRES_IN
