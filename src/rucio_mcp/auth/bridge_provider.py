@@ -16,6 +16,8 @@ Flow:
 from __future__ import annotations
 
 import asyncio
+import base64
+import json as _json
 import logging
 import secrets
 import threading
@@ -36,6 +38,25 @@ from rucio_mcp.auth.bridge_state import BridgeSession, BridgeStateStore
 from rucio_mcp.metrics import BRIDGE_AUTH
 
 _log = logging.getLogger(__name__)
+
+_DEFAULT_EXPIRES_IN = 3600  # fallback when token is opaque or has no exp claim
+
+
+def _jwt_expires_in(token: str) -> int:
+    """Return seconds until the JWT expires, or _DEFAULT_EXPIRES_IN for opaque tokens."""
+    parts = token.split(".")
+    if len(parts) != 3:
+        return _DEFAULT_EXPIRES_IN
+    try:
+        padded = parts[1] + "=" * (-len(parts[1]) % 4)
+        payload = _json.loads(base64.urlsafe_b64decode(padded))
+        exp = payload.get("exp")
+        if exp is None:
+            return _DEFAULT_EXPIRES_IN
+        remaining = int(exp) - int(time.time())
+        return max(remaining, 0)
+    except Exception:  # noqa: BLE001
+        return _DEFAULT_EXPIRES_IN
 
 
 @runtime_checkable
@@ -202,10 +223,12 @@ class RucioBridgeProvider:
                 error="invalid_grant",
                 error_description="Authorization code not found or expired",
             )
+        expires_in = _jwt_expires_in(session.rucio_token)
+        _log.debug("exchange_authorization_code: expires_in=%ds", expires_in)
         return OAuthToken(
             access_token=session.rucio_token,
             token_type="Bearer",
-            expires_in=300,
+            expires_in=expires_in,
             refresh_token=None,
         )
 
@@ -219,6 +242,7 @@ class RucioBridgeProvider:
         No signature validation is performed — the bearer IS the rucio session
         token and Rucio will reject it with 401 if it is invalid.
         """
+        _log.debug("load_access_token called, token prefix=%s…", token[:12])
         return AccessToken(
             token=token,
             client_id="rucio-bridge",

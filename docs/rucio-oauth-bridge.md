@@ -88,6 +88,34 @@ approach that works cross-domain and requires no user action beyond logging in.
 See [rucio/rucio#8568](https://github.com/rucio/rucio/discussions/8568) for the
 upstream discussion on this flow.
 
+### Session lifetime and `expires_in`
+
+The `/token` response includes `expires_in` set to the number of seconds
+remaining on the Rucio JWT (`exp − now`). MCP clients such as Claude Code honor
+this field strictly: once the countdown reaches zero the client stops attaching
+the Bearer token to requests and immediately triggers re-authentication — **the
+server is never contacted**. This means the server logs will show no
+`load_access_token` call before the 401; the 401 comes from the MCP framework's
+auth middleware, which rejects requests that arrive without a Bearer token.
+
+Refresh tokens are **not** issued. When the session expires the MCP client
+re-runs the full OAuth flow (steps 1–11 in the sequence diagram above).
+
+To inspect the current session token without making any tool calls, read the
+`X-Rucio-Auth-Token` value printed in the server log during the polling step
+(visible at `--log-level debug`) and decode the JWT payload:
+
+```bash
+echo "<token>" | python3 -c "
+import sys, base64, json
+p = sys.stdin.read().strip().split('.')[1]
+print(json.dumps(json.loads(base64.urlsafe_b64decode(p + '==')), indent=2))
+"
+```
+
+Alternatively, call the `rucio_token_info` MCP tool (HTTP transport only), which
+decodes and formats the Bearer token carried in the current request.
+
 ### In-memory state only
 
 `BridgeStateStore` holds in-flight sessions in memory with a 5-minute TTL

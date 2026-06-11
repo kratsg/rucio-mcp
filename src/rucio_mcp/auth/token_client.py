@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+
 from rucio.client import Client
 from rucio.common.exception import CannotAuthenticate
+
+_log = logging.getLogger(__name__)
 
 
 class TokenInjectedClient(Client):
@@ -40,6 +44,11 @@ class TokenInjectedClient(Client):
         self.headers["X-Rucio-Auth-Token"] = self.auth_token
 
     def _BaseClient__get_token(self) -> None:  # pylint: disable=invalid-name
+        _log.warning(
+            "__get_token called — Rucio returned 401 for bearer prefix=%s…; "
+            "token is expired or rejected",
+            self._injected_bearer[:12],
+        )
         msg = (
             "Bearer token expired or rejected by Rucio. "
             "Re-acquire via the MCP OAuth flow and reconnect."

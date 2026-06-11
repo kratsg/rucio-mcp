@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import datetime
+import json as _json
 from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
@@ -14,7 +17,7 @@ from rucio_mcp.tools._helpers import (
 )
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: FastMCP, *, transport: str = "stdio") -> None:
     """Register ping and whoami tools with the MCP server."""
 
     @mcp.tool()
@@ -54,3 +57,75 @@ def register(mcp: FastMCP) -> None:
             ]
         )
         return format_dict(result) + hints
+
+    if transport == "http":
+
+        @mcp.tool()
+        async def rucio_token_info(*, ctx: Context[Any, Any]) -> str:
+            """Show expiry and claims of the current OIDC session token.
+
+            Decodes the Bearer token carried in this request to show when the
+            session expires, who it was issued to, and by which issuer.
+            Use this to check how long your session remains valid before the
+            MCP client needs to re-authenticate.
+
+            Only available in HTTP transport mode.
+            """
+            req = ctx.request_context.request
+            if req is None:
+                return "Error: no request context available."
+            auth: str = req.headers.get("authorization", "")
+            if not auth.lower().startswith("bearer "):
+                return "Error: no Bearer token found in the request headers."
+            token = auth[7:].strip()
+
+            parts = token.split(".")
+            if len(parts) != 3:
+                return (
+                    "Token is opaque (not a JWT) — expiry cannot be decoded locally.\n"
+                    "Use `rucio_whoami` to confirm the session is still active."
+                )
+
+            try:
+                padded = parts[1] + "=" * (-len(parts[1]) % 4)
+                payload = _json.loads(base64.urlsafe_b64decode(padded))
+            except Exception as exc:  # noqa: BLE001
+                return f"Error: could not decode JWT payload: {exc}"
+
+            now = datetime.datetime.now(tz=datetime.timezone.utc)
+            lines: list[str] = []
+            if "exp" in payload:
+                exp_dt = datetime.datetime.fromtimestamp(
+                    payload["exp"], tz=datetime.timezone.utc
+                )
+                remaining = exp_dt - now
+                secs = int(remaining.total_seconds())
+                if secs > 0:
+                    mins, s = divmod(secs, 60)
+                    lines.append(
+                        f"- **expires_at:** {exp_dt.isoformat()} (in {mins}m {s:02d}s)"
+                    )
+                else:
+                    lines.append(
+                        f"- **expires_at:** {exp_dt.isoformat()} **(EXPIRED)**"
+                    )
+            if "iat" in payload:
+                iat_dt = datetime.datetime.fromtimestamp(
+                    payload["iat"], tz=datetime.timezone.utc
+                )
+                lines.append(f"- **issued_at:** {iat_dt.isoformat()}")
+            if "sub" in payload:
+                lines.append(f"- **subject:** {payload['sub']}")
+            if "iss" in payload:
+                lines.append(f"- **issuer:** {payload['iss']}")
+            if "aud" in payload:
+                lines.append(f"- **audience:** {payload['aud']}")
+
+            if not lines:
+                return (
+                    "Token is a JWT but contains no standard claims (exp/iat/sub/iss).\n"
+                    "Use `rucio_whoami` to confirm the session is still active."
+                )
+
+            hints = build_hints(["Use `rucio_whoami` to confirm account identity"])
+            return "\n".join(lines) + hints
