@@ -262,6 +262,53 @@ class TestCLIServe:
         """cms-x509 must not exist as a preset after the auth-type refactor."""
         assert "cms-x509" not in PRESETS
 
+    def test_shared_secret_flag_forwarded_to_serve(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch(
+                "sys.argv",
+                ["rucio-mcp", "serve", "--shared-secret", "s3cr3t"],
+            ),
+            patch("rucio_mcp.cli.serve", fake_serve),
+        ):
+            main()
+
+        assert captured["shared_secret"] == "s3cr3t"
+
+    def test_shared_secret_env_fallback(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch.dict("os.environ", {"RUCIO_MCP_SHARED_SECRET": "from-env"}),
+            patch("sys.argv", ["rucio-mcp", "serve"]),
+            patch("rucio_mcp.cli.serve", fake_serve),
+        ):
+            main()
+
+        assert captured["shared_secret"] == "from-env"
+
+    def test_shared_secret_defaults_to_none(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch("sys.argv", ["rucio-mcp", "serve"]),
+            patch("rucio_mcp.cli.serve", fake_serve),
+        ):
+            main()
+
+        assert captured["shared_secret"] is None
+
 
 class TestCLIPing:
     def test_ping_dispatches(self) -> None:

@@ -273,6 +273,45 @@ client with the site URL:
 
 See [docs/oauth-setup.md](docs/oauth-setup.md) for the full setup guide.
 
+### Shared-secret HTTP mode (single pre-authenticated client)
+
+To expose a **single pre-authenticated instance** (e.g. an x509/VOMS-proxy
+identity on a service host) over HTTP without the per-user OIDC bridge, start
+the server with `--shared-secret` (or `RUCIO_MCP_SHARED_SECRET`). It serves one
+env-built client (like stdio, honoring `--auth-type`) gated by a server-wide
+static bearer:
+
+```bash
+export RUCIO_ACCOUNT=<your_account>
+voms-proxy-init -voms atlas
+rucio-mcp serve \
+  --transport http \
+  --site atlas \
+  --auth-type x509 \
+  --shared-secret "$(openssl rand -hex 32)" \
+  --host 0.0.0.0 \
+  --port 9000
+```
+
+Clients send the secret as a bearer token (any other value → `401`):
+
+```json
+{
+  "mcpServers": {
+    "rucio-atlas": {
+      "type": "http",
+      "url": "http://host:9000/site/atlas/",
+      "headers": { "Authorization": "Bearer <secret>" }
+    }
+  }
+}
+```
+
+This mode serves a single `--site` and bypasses the OAuth bridge entirely (no
+`/authorize`, `/token`, or `/register`). See
+[docs/configuration.md](docs/configuration.md#hosting-a-pre-authenticated-instance-over-http-shared-secret)
+for details.
+
 <!-- --8<-- [end:http-mode] -->
 
 <!-- --8<-- [start:read-only] -->

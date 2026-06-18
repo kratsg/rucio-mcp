@@ -227,4 +227,47 @@ export RUCIO_CONFIG=/cvmfs/atlas.cern.ch/repo/ATLASLocalRootBase/x86_64/rucio-cl
 rucio-mcp serve
 ```
 
+## Hosting a pre-authenticated instance over HTTP (shared secret)
+
+The HTTP transport normally runs as an OAuth 2.1 bridge, where each user logs in
+via OIDC and the bearer is their own Rucio session token (see
+[OAuth setup](oauth-setup.md)). That model does not fit a **single
+pre-authenticated instance** — e.g. an x509/VOMS-proxy identity on a service
+host that several clients should share.
+
+For that case, start the server with `--shared-secret`. The server builds one
+Rucio client from the environment (exactly like stdio, honoring `--auth-type`)
+and gates every HTTP request behind a server-wide static bearer. This bypasses
+the OIDC bridge entirely — there are no `/authorize`, `/token`, or `/register`
+endpoints.
+
+```bash
+export RUCIO_ACCOUNT=<your_atlas_account>
+voms-proxy-init -voms atlas
+RUCIO_CONFIG=/cvmfs/.../rucio.cfg \
+  rucio-mcp serve --transport http --site atlas --auth-type x509 \
+    --shared-secret "$(openssl rand -hex 32)" --host 0.0.0.0 --port 8000
+```
+
+Clients must send the secret as a bearer token; any other (or missing) value is
+rejected with `401`:
+
+```bash
+curl -X POST http://host:8000/site/atlas/ \
+  -H 'Authorization: Bearer <secret>' \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+```
+
+Notes:
+
+- The secret can also be supplied via the `RUCIO_MCP_SHARED_SECRET` environment
+  variable instead of `--shared-secret`.
+- Shared-secret mode serves **one** site (one env config = one pre-authenticated
+  client); passing multiple `--site` flags is an error.
+- `--resource-url` is optional here (it defaults to `http://<host>:<port>`);
+  clients are configured with the bearer out-of-band rather than via OAuth
+  discovery.
+
 --8<-- "README.md:read-only"
