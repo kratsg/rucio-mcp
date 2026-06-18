@@ -25,9 +25,11 @@ from rucio_mcp.auth.bridge_provider import (
     _DEFAULT_EXPIRES_IN,
     BridgePoller,
     RucioBridgeProvider,
+    _authorize_redirect_uri,
     _jwt_expires_in,
 )
 from rucio_mcp.auth.bridge_state import BridgeSession
+from rucio_mcp.auth.cimd import CimdError
 from rucio_mcp.auth.rucio_cfg import RucioCfg
 
 _MODULE = "rucio_mcp.auth.bridge_provider"
@@ -101,12 +103,72 @@ class TestClientRegistry:
         result = await provider.get_client("nonexistent")
         assert result is None
 
-    async def test_register_then_get_roundtrip(
+    async def test_register_client_not_supported(
         self, provider: RucioBridgeProvider, client_info: OAuthClientInformationFull
     ) -> None:
-        await provider.register_client(client_info)
-        result = await provider.get_client("mcp-client-abc")
-        assert result is client_info
+        """DCR is disabled — register_client must raise NotImplementedError."""
+        with pytest.raises(NotImplementedError):
+            await provider.register_client(client_info)
+
+    async def test_non_cimd_client_id_returns_none(
+        self, provider: RucioBridgeProvider
+    ) -> None:
+        """An opaque (non-URL) client_id is unknown without DCR → None."""
+        result = await provider.get_client("opaque-dcr-style-id")
+        assert result is None
+
+    async def test_cimd_client_id_resolved_and_cached(
+        self, provider: RucioBridgeProvider
+    ) -> None:
+        """An https-URL client_id is resolved via CIMD and cached for reuse."""
+        cimd_id = "https://claude.ai/.well-known/oauth-client"
+        resolved = OAuthClientInformationFull(
+            client_id=cimd_id,
+            redirect_uris=[AnyUrl("http://localhost/callback")],
+            token_endpoint_auth_method="none",
+        )
+        with patch(
+            f"{_MODULE}.resolve_cimd_client", AsyncMock(return_value=resolved)
+        ) as mock_resolve:
+            first = await provider.get_client(cimd_id)
+            # Second lookup must hit the cache, not re-fetch the document.
+            second = await provider.get_client(cimd_id)
+
+        assert first is resolved
+        assert second is resolved
+        mock_resolve.assert_awaited_once()
+
+    async def test_cimd_passes_authorize_redirect_uri(
+        self, provider: RucioBridgeProvider
+    ) -> None:
+        """The /authorize redirect_uri contextvar is forwarded to CIMD resolution."""
+        cimd_id = "https://claude.ai/.well-known/oauth-client"
+        requested = "http://localhost:51763/callback"
+        resolved = OAuthClientInformationFull(
+            client_id=cimd_id,
+            redirect_uris=[AnyUrl(requested)],
+            token_endpoint_auth_method="none",
+        )
+        mock_resolve = AsyncMock(return_value=resolved)
+        token = _authorize_redirect_uri.set(requested)
+        try:
+            with patch(f"{_MODULE}.resolve_cimd_client", mock_resolve):
+                await provider.get_client(cimd_id)
+        finally:
+            _authorize_redirect_uri.reset(token)
+        mock_resolve.assert_awaited_once_with(cimd_id, requested)
+
+    async def test_cimd_resolution_failure_returns_none(
+        self, provider: RucioBridgeProvider
+    ) -> None:
+        """A CimdError during resolution yields None (no client), not an exception."""
+        cimd_id = "https://claude.ai/.well-known/oauth-client"
+        with patch(
+            f"{_MODULE}.resolve_cimd_client",
+            AsyncMock(side_effect=CimdError("bad document")),
+        ):
+            result = await provider.get_client(cimd_id)
+        assert result is None
 
 
 class TestAuthorize:

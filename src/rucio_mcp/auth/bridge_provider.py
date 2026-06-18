@@ -1,7 +1,8 @@
 """RucioBridgeProvider — OAuthAuthorizationServerProvider for the rucio polling bridge.
 
-MCP clients speak standard auth-code+PKCE+DCR. This provider bridges that to
-Rucio's custom /auth/oidc polling flow and returns the resulting Rucio session
+MCP clients speak standard auth-code+PKCE and are identified via CIMD (Client ID
+Metadata Documents — an https client_id URL; no DCR). This provider bridges that
+to Rucio's custom /auth/oidc polling flow and returns the resulting Rucio session
 token to the MCP client as the OAuth access_token.
 
 Flow:
@@ -17,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextvars
 import json as _json
 import logging
 import secrets
@@ -35,9 +37,18 @@ from mcp.server.auth.provider import (
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 
 from rucio_mcp.auth.bridge_state import BridgeSession, BridgeStateStore
+from rucio_mcp.auth.cimd import CimdError, is_cimd_client_id, resolve_cimd_client
 from rucio_mcp.metrics import BRIDGE_AUTH
 
 _log = logging.getLogger(__name__)
+
+# Set by _AuthorizeContextMiddleware (server.py) for the duration of each
+# /authorize request.  Gives _resolve_cimd() the requested redirect_uri so a
+# CIMD client's ephemeral-port loopback redirect can be matched port-agnostically
+# against its Client ID Metadata Document.
+_authorize_redirect_uri: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "_authorize_redirect_uri", default=None
+)
 
 _DEFAULT_EXPIRES_IN = 3600  # fallback when token is opaque or has no exp claim
 
@@ -110,18 +121,75 @@ class RucioBridgeProvider:
         self._bg_tasks: set[asyncio.Task[None]] = set()
 
     # ------------------------------------------------------------------
-    # Client registry (in-memory DCR)
+    # Client identity (CIMD only — no DCR)
     # ------------------------------------------------------------------
 
-    async def register_client(self, client_info: OAuthClientInformationFull) -> None:
-        """Store a dynamically registered client."""
-        with self._clients_lock:
-            self._clients[client_info.client_id or ""] = client_info
+    async def register_client(self, _client_info: OAuthClientInformationFull) -> None:
+        """Not supported: this server identifies clients via CIMD, not DCR.
+
+        Dynamic Client Registration is disabled
+        (``ClientRegistrationOptions(enabled=False)`` in server.py) so the SDK
+        never routes a ``/register`` request here.  The provider protocol allows
+        raising :class:`NotImplementedError` when DCR is unsupported.
+        """
+        msg = (
+            "Dynamic Client Registration is not supported; use CIMD "
+            "(an https client_id URL)"
+        )
+        raise NotImplementedError(msg)
 
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
-        """Look up a previously registered client."""
+        """Resolve a CIMD client_id URL to its client information.
+
+        1. In-memory cache hit (a previously-resolved CIMD client).
+        2. CIMD: if ``client_id`` is an https URL, dereference it (Client ID
+           Metadata Document) and cache the result.
+        3. Otherwise unknown → ``None`` (the SDK emits "Client ID not found").
+        """
         with self._clients_lock:
-            return self._clients.get(client_id)
+            client = self._clients.get(client_id)
+        if client is not None:
+            _log.debug(
+                "[%s] get_client: hit for client_id=%s", self._site_name, client_id
+            )
+            return client
+
+        if is_cimd_client_id(client_id):
+            return await self._resolve_cimd(client_id)
+
+        _log.debug(
+            "[%s] get_client: miss for non-CIMD client_id=%s",
+            self._site_name,
+            client_id,
+        )
+        return None
+
+    async def _resolve_cimd(self, client_id: str) -> OAuthClientInformationFull | None:
+        """Dereference a CIMD client_id URL, caching the resolved public client.
+
+        The requested redirect_uri is taken from the ``_authorize_redirect_uri``
+        contextvar (set by ``_AuthorizeContextMiddleware`` during /authorize) so
+        an ephemeral-port loopback redirect can be matched port-agnostically.
+        On the /token leg the contextvar is unset, but the client resolved during
+        /authorize is already cached, so no re-fetch is needed.
+        """
+        redirect_uri = _authorize_redirect_uri.get()
+        try:
+            resolved = await resolve_cimd_client(client_id, redirect_uri)
+        except CimdError as exc:
+            _log.warning(
+                "[%s] get_client: CIMD resolution failed for client_id=%s: %s",
+                self._site_name,
+                client_id,
+                exc,
+            )
+            return None
+        with self._clients_lock:
+            self._clients[client_id] = resolved
+        _log.debug(
+            "[%s] get_client: resolved CIMD client_id=%s", self._site_name, client_id
+        )
+        return resolved
 
     # ------------------------------------------------------------------
     # Authorization flow

@@ -24,17 +24,25 @@ MCP client  <--auth-code+PKCE-->  rucio-mcp (OAuth AS proxy)  <--polling-->  Ruc
 reused for all tool calls. All rucio auth types supported.
 
 **HTTP mode:** rucio-mcp acts as an **OAuth 2.1 Authorization Server proxy**
-(RFC 8414 + RFC 7591 DCR + auth-code+PKCE). It bridges MCP client auth to
-Rucio's custom OIDC polling flow (`/auth/oidc` → `/auth/oidc_redirect`). The
-resulting Rucio session token is returned verbatim as the MCP `access_token`. No
-IAM registration is required by operators or end-users.
+(RFC 8414 + CIMD + auth-code+PKCE). It bridges MCP client auth to Rucio's custom
+OIDC polling flow (`/auth/oidc` → `/auth/oidc_redirect`). The resulting Rucio
+session token is returned verbatim as the MCP `access_token`. No IAM
+registration is required by operators or end-users.
+
+Clients are identified by **CIMD** (Client ID Metadata Documents,
+`draft-ietf-oauth-client-id-metadata-document`): the `client_id` is an https URL
+the server dereferences at `/authorize`. **DCR is disabled** — there is no
+`/register` endpoint and no per-client registry. See
+https://github.com/kratsg/rucio-mcp/issues/33.
 
 ### HTTP mode auth flow
 
-1. MCP client does DCR (`POST /register`) → gets a `client_id`
-2. MCP client hits `/authorize` → `RucioBridgeProvider.authorize()` calls Rucio
-   `/auth/oidc`, stores a `BridgeSession`, starts a background async polling
-   task, and returns `302 /bridge?session=<id>`
+1. MCP client hits `/authorize` with a CIMD `client_id` (an https URL) →
+   `RucioBridgeProvider.get_client()` fetches + validates the Client ID Metadata
+   Document (self-referential, redirect_uri match)
+2. `RucioBridgeProvider.authorize()` calls Rucio `/auth/oidc`, stores a
+   `BridgeSession`, starts a background async polling task, and returns
+   `302 /bridge?session=<id>`
 3. User opens the rucio polling URL in their browser and logs in via their IdP
 4. Background task polls `/auth/oidc_redirect`; when the Rucio session token
    arrives, the session is marked done and an MCP auth code is minted
@@ -78,11 +86,17 @@ hooks:
   session token (or asyncio.TimeoutError)
 - **`auth/bridge_state.py`** — thread-safe `BridgeStateStore` with 5-min TTL;
   indexed by session_id and auth_code
+- **`auth/cimd.py`** — CIMD support: `is_cimd_client_id()`,
+  `resolve_cimd_client()` (SSRF-guarded fetch + self-reference check +
+  port-agnostic loopback redirect matching → public
+  `OAuthClientInformationFull`)
 - **`auth/bridge_provider.py`** — `BridgePoller` Protocol +
   `RucioBridgeProvider` implementing `OAuthAuthorizationServerProvider`;
-  in-memory DCR client registry; delegates polling to any `BridgePoller` (today:
-  `RucioOidcPoller`); passthrough `load_access_token` (no JWT validation — rucio
-  rejects bad tokens with 401); state exposed via `provider.store` (public)
+  `get_client()` resolves CIMD client_id URLs (cached in `_clients`);
+  `register_client()` raises `NotImplementedError` (DCR disabled); delegates
+  polling to any `BridgePoller` (today: `RucioOidcPoller`); passthrough
+  `load_access_token` (no JWT validation — rucio rejects bad tokens with 401);
+  state exposed via `provider.store` (public)
 - **`auth/bridge_routes.py`** — `GET /bridge` (HTML interstitial + JS poller)
   and `GET /bridge/status` (JSON pending/done/error); registered via
   `mcp.custom_route()`; JS fetch uses a relative URL (`bridge/status`) so the
@@ -119,6 +133,7 @@ src/rucio_mcp/
 │   ├── rucio_cfg.py          # RucioCfg dataclass — reads [client] from rucio.cfg (incl. auth_type)
 │   ├── rucio_oidc_poller.py  # RucioOidcPoller — async /auth/oidc + /auth/oidc_redirect
 │   ├── bridge_state.py       # BridgeSession + BridgeStateStore (in-memory, 5-min TTL)
+│   ├── cimd.py               # CIMD: resolve https client_id URL → public client (no DCR)
 │   ├── bridge_provider.py    # BridgePoller Protocol + RucioBridgeProvider
 │   └── bridge_routes.py      # GET /bridge (HTML) + GET /bridge/status (JSON)
 ├── data/
@@ -173,7 +188,8 @@ tests/
 │   ├── test_rucio_cfg.py        # RucioCfg.from_path()
 │   ├── test_rucio_oidc_poller.py # RucioOidcPoller (httpx mocks, no network)
 │   ├── test_bridge_state.py     # BridgeStateStore TTL + state transitions
-│   ├── test_bridge_provider.py  # RucioBridgeProvider (mocked poller)
+│   ├── test_cimd.py             # CIMD detection, SSRF guard, doc fetch/build, redirect match
+│   ├── test_bridge_provider.py  # RucioBridgeProvider (mocked poller, CIMD resolution)
 │   ├── test_bridge_routes.py    # /bridge + /bridge/status (Starlette TestClient)
 │   ├── test_session_cache.py    # SessionCache (TTL eviction, thread safety)
 │   └── test_token_client.py     # TokenInjectedClient method overrides
