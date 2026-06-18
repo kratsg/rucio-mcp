@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 from starlette.testclient import TestClient
 
 from rucio_mcp.metrics import BridgeStatsCollector
-from rucio_mcp.server import _make_http_app, serve
+from rucio_mcp.server import _make_http_app, _make_shared_secret_app, serve
 
 
 @pytest.fixture
@@ -618,3 +618,132 @@ class TestHealthzEndpoint:
             {"method": "GET", "path_template": "/healthz"},
         )
         assert before == after  # excluded — counter must not move
+
+
+class TestSharedSecretMode:
+    """HTTP transport gated by a server-wide static bearer secret.
+
+    Serves a single pre-built env client (patched here) behind a TokenVerifier;
+    no OAuth bridge, no OIDC, single site.
+    """
+
+    @pytest.fixture
+    def shared_secret_client(self):
+        with patch("rucio_mcp.server.Client", MagicMock()):
+            app = _make_shared_secret_app(
+                site_name="escape",
+                resource_url="http://localhost:8000",
+                read_only=False,
+                secret="s3cr3t",
+                host="127.0.0.1",
+                port=8000,
+            )
+            with TestClient(app, raise_server_exceptions=True) as client:
+                yield client
+
+    def test_no_auth_returns_401(self, shared_secret_client: TestClient) -> None:
+        resp = shared_secret_client.post(
+            "/site/escape/",
+            json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
+        )
+        assert resp.status_code == 401
+
+    def test_401_has_www_authenticate_header(
+        self, shared_secret_client: TestClient
+    ) -> None:
+        resp = shared_secret_client.post(
+            "/site/escape/",
+            json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
+        )
+        assert "WWW-Authenticate" in resp.headers
+
+    def test_wrong_secret_returns_401(self, shared_secret_client: TestClient) -> None:
+        resp = shared_secret_client.post(
+            "/site/escape/",
+            headers={"Authorization": "Bearer wrong"},
+            json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
+        )
+        assert resp.status_code == 401
+
+    def test_correct_secret_passes_auth(self, shared_secret_client: TestClient) -> None:
+        # A valid bearer clears the auth gate; the streamable layer may still
+        # reject the (handshake-less) request, but it must NOT be a 401.
+        resp = shared_secret_client.post(
+            "/site/escape/",
+            headers={
+                "Authorization": "Bearer s3cr3t",
+                "Accept": "application/json, text/event-stream",
+            },
+            json={"jsonrpc": "2.0", "method": "tools/list", "id": 1},
+        )
+        assert resp.status_code != 401
+
+    def test_no_authorization_server_metadata(
+        self, shared_secret_client: TestClient
+    ) -> None:
+        # No OAuth AS in shared-secret mode → AS metadata must not exist.
+        resp = shared_secret_client.get(
+            "/site/escape/.well-known/oauth-authorization-server"
+        )
+        assert resp.status_code == 404
+
+    def test_no_authorize_endpoint(self, shared_secret_client: TestClient) -> None:
+        resp = shared_secret_client.get("/site/escape/authorize")
+        assert resp.status_code == 404
+
+    def test_no_register_endpoint(self, shared_secret_client: TestClient) -> None:
+        resp = shared_secret_client.post("/site/escape/register", json={})
+        assert resp.status_code == 404
+
+    def test_no_bridge_route(self, shared_secret_client: TestClient) -> None:
+        resp = shared_secret_client.get("/site/escape/bridge")
+        assert resp.status_code == 404
+
+    def test_healthz_returns_200(self, shared_secret_client: TestClient) -> None:
+        assert shared_secret_client.get("/healthz").status_code == 200
+
+    def test_root_landing_returns_200(self, shared_secret_client: TestClient) -> None:
+        resp = shared_secret_client.get("/")
+        assert resp.status_code == 200
+        assert "escape" in resp.text
+
+
+class TestServeSharedSecretValidation:
+    def test_multiple_sites_with_shared_secret_exits_nonzero(self) -> None:
+        with pytest.raises(SystemExit) as exc_info:
+            serve(
+                transport="http",
+                resource_url="http://localhost:8000",
+                sites=["escape", "atlas"],
+                shared_secret="s3cr3t",
+            )
+        assert exc_info.value.code != 0
+
+    def test_x509_cfg_accepted_in_shared_secret_mode(self, tmp_path: Path) -> None:
+        # Unlike OIDC HTTP mode, shared-secret mode honors --auth-type and serves
+        # a pre-authenticated (e.g. x509) client, so an x509 cfg must NOT exit.
+        cfg = tmp_path / "rucio.cfg"
+        cfg.write_text(
+            textwrap.dedent("""\
+                [client]
+                rucio_host = https://rucio.atlas.cern.ch
+                auth_host = https://atlas-auth.cern.ch
+                account = gstark
+                auth_type = x509_proxy
+            """)
+        )
+        with (
+            patch("rucio_mcp.server._make_shared_secret_app") as mock_app,
+            patch("rucio_mcp.server.start_metrics_server"),
+            patch("rucio_mcp.server.uvicorn.run") as mock_run,
+        ):
+            serve(
+                transport="http",
+                resource_url="http://localhost:8000",
+                sites=["atlas"],
+                shared_secret="s3cr3t",
+                rucio_cfg=cfg,
+                auth_type="x509",
+            )
+        assert mock_app.called
+        assert mock_run.called

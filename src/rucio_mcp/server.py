@@ -37,6 +37,7 @@ from rucio_mcp.auth.factory import BearerTokenClientFactory, EnvBasedClientFacto
 from rucio_mcp.auth.rucio_cfg import RucioCfg
 from rucio_mcp.auth.rucio_oidc_poller import RucioOidcPoller
 from rucio_mcp.auth.session_cache import SessionCache
+from rucio_mcp.auth.shared_secret import SharedSecretVerifier
 from rucio_mcp.landing import make_landing_html
 from rucio_mcp.metrics import (
     TOOL_CALL_DURATION,
@@ -374,6 +375,146 @@ def _make_site_mcp(
     return mcp, provider, cache
 
 
+def _make_shared_secret_mcp(
+    *,
+    site_name: str,
+    read_only: bool,
+    resource_url: str,
+    secret: str,
+    host: str,
+    port: int,
+) -> _InstrumentedFastMCP:
+    """Build a single-site FastMCP for HTTP transport gated by a static bearer.
+
+    Serves one pre-authenticated rucio client built from env vars (exactly like
+    stdio, e.g. an x509 proxy instance), behind a server-wide shared secret
+    enforced by ``SharedSecretVerifier``.  No OAuth bridge, OIDC poller, or
+    per-session client cache is involved — every request shares the one client.
+    """
+
+    @asynccontextmanager
+    async def _lifespan(_server: FastMCP) -> AsyncGenerator[dict[str, Any], None]:
+        factory = EnvBasedClientFactory(client=Client())
+        try:
+            yield {"client_factory": factory, "read_only": read_only}
+        finally:
+            factory.close()
+
+    preset = PRESETS.get(site_name, PRESETS["escape"])
+    mcp = _InstrumentedFastMCP(
+        f"rucio-mcp-{site_name}",
+        site_name=site_name,
+        # The backend auth model is env-based (like stdio), not the OIDC bridge,
+        # so use the stdio instructions/tool set; the bearer is a static gate,
+        # not a decodable session token (no rucio_token_info tool).
+        instructions=_build_instructions(preset, transport="stdio"),
+        host=host,
+        port=port,
+        streamable_http_path="/",
+        lifespan=_lifespan,
+        token_verifier=SharedSecretVerifier(secret),
+        auth=AuthSettings(
+            issuer_url=AnyHttpUrl(resource_url),
+            # No OAuth authorization server backs this resource; clients present
+            # the static bearer out-of-band, so do not advertise a (non-existent)
+            # protected-resource discovery chain.
+            resource_server_url=None,
+            client_registration_options=ClientRegistrationOptions(enabled=False),
+            required_scopes=[],
+        ),
+    )
+
+    for _module in [
+        dids,
+        replicas,
+        scopes,
+        rses,
+        rules,
+        account,
+        proxy,
+        locks,
+        rucio_requests,
+        subscriptions,
+    ]:
+        _module.register(mcp)
+    ping.register(mcp, transport="stdio")
+    register_resources(mcp, site_name, preset.nomenclature_resource)
+    return mcp
+
+
+def _make_shared_secret_app(
+    *,
+    site_name: str,
+    resource_url: str,
+    read_only: bool,
+    secret: str,
+    host: str,
+    port: int,
+) -> Starlette:
+    """Build a single-site Starlette app for shared-secret HTTP transport.
+
+    Mounts the FastMCP streamable app under ``/site/{name}/`` (parity with OIDC
+    deployments) plus ``/healthz`` and a ``/`` landing page.  No OAuth metadata,
+    bridge routes, or CIMD middleware — the only auth is the static bearer.
+    """
+    mcp = _make_shared_secret_mcp(
+        site_name=site_name,
+        read_only=read_only,
+        resource_url=resource_url.rstrip("/") + f"/site/{site_name}",
+        secret=secret,
+        host=host,
+        port=port,
+    )
+    sub_app = mcp.streamable_http_app()
+
+    @asynccontextmanager
+    async def _combined_lifespan(_app: Starlette) -> AsyncGenerator[None, None]:
+        # Mounted sub-apps don't get lifespan propagation, so start the
+        # session_manager explicitly from the parent lifespan.
+        async with mcp.session_manager.run():
+            yield
+
+    _version = _pkg_version("rucio-mcp")
+
+    async def root_handler(request: Request) -> Response:
+        html = make_landing_html(
+            sites=request.app.state.sites,
+            resource_url=request.app.state.resource_url,
+            version=_version,
+            read_only=request.app.state.read_only,
+        )
+        return Response(html, media_type="text/html")
+
+    async def healthz_handler(_request: Request) -> Response:
+        return PlainTextResponse("ok")
+
+    routes: list[BaseRoute] = [
+        Mount(f"/site/{site_name}", app=sub_app),
+        Route("/healthz", endpoint=healthz_handler, methods=["GET"]),
+        Route("/", endpoint=root_handler, methods=["GET"]),
+    ]
+    site_prefixes = frozenset({f"/site/{site_name}"})
+    app = Starlette(
+        routes=routes,
+        lifespan=_combined_lifespan,
+        middleware=[
+            Middleware(_SitePathNormalizerMiddleware, site_prefixes=site_prefixes),
+            Middleware(
+                PrometheusMiddleware,
+                filter_unhandled_paths=True,
+                excluded_paths=frozenset({"/healthz"}),
+                site_names=frozenset({site_name}),
+            ),
+        ],
+    )
+    # See _make_http_app: prevent 307 slash redirects that loop behind nginx.
+    app.router.redirect_slashes = False
+    app.state.sites = [site_name]
+    app.state.resource_url = resource_url
+    app.state.read_only = read_only
+    return app
+
+
 def _augment_as_metadata(body: bytes) -> bytes:
     """Add CIMD advertisement to the SDK's AS metadata JSON.
 
@@ -708,6 +849,7 @@ def serve(
     metrics_port: int = 9001,
     sites: list[str] | None = None,
     resource_url: str | None = None,
+    shared_secret: str | None = None,
     rucio_cfg: Path | None = None,
     auth_type: str | None = None,
     poll_timeout: float = 180.0,
@@ -724,7 +866,37 @@ def serve(
         _make_stdio_mcp(read_only=read_only, site_name=sites[0]).run(transport="stdio")
         return
 
-    # HTTP transport
+    # HTTP transport, shared-secret mode: serve one pre-authenticated env client
+    # (e.g. x509) behind a static bearer. Distinct from the OIDC bridge below.
+    if shared_secret:
+        if len(sites) > 1:
+            sys.stderr.write(
+                "[rucio-mcp] Error: shared-secret mode serves a single "
+                "pre-authenticated client; specify exactly one --site.\n"
+            )
+            sys.exit(1)
+        cfg_path = _resolve_cfg_path(sites[0], rucio_cfg)
+        _preflight_check(cfg_path, auth_type_override=auth_type)
+        app = _make_shared_secret_app(
+            site_name=sites[0],
+            resource_url=resource_url or f"http://{host}:{port}",
+            read_only=read_only,
+            secret=shared_secret,
+            host=host,
+            port=port,
+        )
+        start_metrics_server(metrics_port, {})
+        uvicorn.run(
+            app,
+            host=host,
+            port=port,
+            proxy_headers=True,
+            forwarded_allow_ips=forwarded_allow_ips,
+            log_level=log_level,
+        )
+        return
+
+    # HTTP transport (OIDC bridge)
     if auth_type is not None:
         sys.stderr.write(
             "[rucio-mcp] WARNING: --auth-type is ignored in HTTP mode "

@@ -82,6 +82,17 @@ def main() -> None:
         help="Public URL of this MCP server. Required for HTTP transport.",
     )
     serve_parser.add_argument(
+        "--shared-secret",
+        default=os.environ.get("RUCIO_MCP_SHARED_SECRET"),
+        help=(
+            "Enable shared-secret HTTP mode: serve a single pre-authenticated "
+            "rucio client (built from env, e.g. x509) behind a server-wide static "
+            "bearer. HTTP requests must carry 'Authorization: Bearer <secret>'. "
+            "Bypasses the OIDC OAuth bridge. Requires --transport http. "
+            "Can also be set via RUCIO_MCP_SHARED_SECRET."
+        ),
+    )
+    serve_parser.add_argument(
         "--rucio-cfg",
         type=Path,
         default=None,
@@ -140,6 +151,7 @@ def main() -> None:
             metrics_port=args.metrics_port,
             sites=sites,
             resource_url=args.resource_url,
+            shared_secret=args.shared_secret,
             rucio_cfg=args.rucio_cfg,
             auth_type=args.auth_type,
             poll_timeout=args.poll_timeout,

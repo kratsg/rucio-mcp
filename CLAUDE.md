@@ -29,6 +29,17 @@ OIDC polling flow (`/auth/oidc` → `/auth/oidc_redirect`). The resulting Rucio
 session token is returned verbatim as the MCP `access_token`. No IAM
 registration is required by operators or end-users.
 
+**Shared-secret HTTP mode:** when `serve` is given `--shared-secret` (env
+`RUCIO_MCP_SHARED_SECRET`), HTTP transport switches to a distinct,
+mutually-exclusive model: it serves a **single env-built `Client`** (exactly
+like stdio, honoring `--auth-type` — e.g. a pre-authenticated x509 instance)
+gated by a server-wide static bearer. A FastMCP `TokenVerifier`
+(`auth/shared_secret.py::SharedSecretVerifier`, constant-time compare) enforces
+the secret; there is **no** OAuth bridge, OIDC poller, CIMD, `/bridge`,
+`/authorize`, `/token`, or `/register`. Single site only (one env config = one
+client). Built by `_make_shared_secret_mcp` / `_make_shared_secret_app` in
+`server.py`; reuses `EnvBasedClientFactory`.
+
 Clients are identified by **CIMD** (Client ID Metadata Documents,
 `draft-ietf-oauth-client-id-metadata-document`): the `client_id` is an https URL
 the server dereferences at `/authorize`. **DCR is disabled** — there is no
@@ -117,8 +128,9 @@ steps in `docs/contributing.md` § "Contributing a new site".
 
 ```
 src/rucio_mcp/
-├── cli.py          # argparse: `rucio-mcp serve [--transport {stdio,http}] [--site SITE] [--metrics-port PORT] ...`
-├── server.py       # FastMCP setup; _InstrumentedFastMCP; _make_stdio_mcp / _make_site_mcp / _make_http_app; serve()
+├── cli.py          # argparse: `rucio-mcp serve [--transport {stdio,http}] [--site SITE] [--shared-secret SECRET] [--metrics-port PORT] ...`
+├── server.py       # FastMCP setup; _InstrumentedFastMCP; _make_stdio_mcp / _make_site_mcp / _make_http_app;
+│                   # _make_shared_secret_mcp / _make_shared_secret_app (shared-secret HTTP); serve()
 ├── metrics.py      # Prometheus metrics: HTTP counters (PrometheusMiddleware), tool-call counter +
 │                   # duration histogram (TOOL_CALLS / TOOL_CALL_DURATION), BridgeStatsCollector,
 │                   # start_metrics_server() — binds a dedicated port via prometheus_client.start_http_server
@@ -134,6 +146,7 @@ src/rucio_mcp/
 │   ├── rucio_oidc_poller.py  # RucioOidcPoller — async /auth/oidc + /auth/oidc_redirect
 │   ├── bridge_state.py       # BridgeSession + BridgeStateStore (in-memory, 5-min TTL)
 │   ├── cimd.py               # CIMD: resolve https client_id URL → public client (no DCR)
+│   ├── shared_secret.py      # SharedSecretVerifier (TokenVerifier) — static bearer gate for shared-secret HTTP
 │   ├── bridge_provider.py    # BridgePoller Protocol + RucioBridgeProvider
 │   └── bridge_routes.py      # GET /bridge (HTML) + GET /bridge/status (JSON)
 ├── data/
@@ -192,6 +205,7 @@ tests/
 │   ├── test_bridge_provider.py  # RucioBridgeProvider (mocked poller, CIMD resolution)
 │   ├── test_bridge_routes.py    # /bridge + /bridge/status (Starlette TestClient)
 │   ├── test_session_cache.py    # SessionCache (TTL eviction, thread safety)
+│   ├── test_shared_secret.py    # SharedSecretVerifier (constant-time bearer match)
 │   └── test_token_client.py     # TokenInjectedClient method overrides
 └── integration/test_live.py  # requires live rucio access, run with --runslow
 ```
