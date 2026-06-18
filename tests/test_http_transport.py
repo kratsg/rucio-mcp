@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import textwrap
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from mcp.shared.auth import OAuthClientInformationFull
 from prometheus_client import REGISTRY, Counter, generate_latest
 from prometheus_client.registry import CollectorRegistry
+from pydantic import AnyUrl
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -68,7 +70,31 @@ class TestOAuthMetadataEndpoints:
         assert "issuer" in data
         assert "authorization_endpoint" in data
         assert "token_endpoint" in data
-        assert "registration_endpoint" in data
+
+    def test_authorization_server_metadata_advertises_cimd(
+        self, http_client: TestClient
+    ) -> None:
+        # Assert on the RFC 8414 §3 canonical location — the URL clients actually
+        # construct during discovery (well-known segment inserted between host and
+        # the issuer's path).  Claude selects CIMD when the AS metadata advertises
+        # both client_id_metadata_document_supported and "none" in
+        # token_endpoint_auth_methods_supported (public client, PKCE-only).
+        # The directly-mounted artifact path is proven identical by
+        # test_rfc8414_metadata_content_matches_site_metadata.
+        data = http_client.get(
+            "/.well-known/oauth-authorization-server/site/escape"
+        ).json()
+        assert data.get("client_id_metadata_document_supported") is True
+        assert "none" in data.get("token_endpoint_auth_methods_supported", [])
+
+    def test_authorization_server_metadata_has_no_registration_endpoint(
+        self, http_client: TestClient
+    ) -> None:
+        # DCR is disabled — no /register endpoint is advertised.
+        data = http_client.get(
+            "/.well-known/oauth-authorization-server/site/escape"
+        ).json()
+        assert "registration_endpoint" not in data
 
     def test_authorization_server_issuer_matches_site_url(
         self, http_client: TestClient
@@ -145,14 +171,13 @@ class TestNoRootOAuthFallback:
 
 
 class TestMultiSiteOAuthIsolation:
-    """Regression: root AS metadata must not register clients into the wrong site provider.
+    """Per-site discovery + CIMD-only client identity across multiple sites.
 
-    Previously the root /.well-known/oauth-authorization-server proxied to sub_apps[0]
-    (the first site), so clients authenticating to a non-first site would:
-      1. GET /.well-known/oauth-authorization-server → atlas registration_endpoint
-      2. POST /site/atlas/register → client_id stored in atlas's provider
-      3. GET /site/escape/authorize?client_id=… → 400 "Client ID not found"
-    Removing the root fallback forces all clients onto path-aware per-site discovery.
+    RFC 8414 §3.1: all issuers have path components (e.g. http://host/site/escape),
+    so there is no host-level issuer — the bare-root AS metadata and OAuth
+    endpoints MUST NOT be served (regression guard for PR #29).  DCR is disabled
+    entirely; clients are identified by CIMD (an https client_id URL), which is
+    validated independently per site.
     """
 
     @pytest.fixture
@@ -195,68 +220,40 @@ class TestMultiSiteOAuthIsolation:
         resp = multi_site_client.post("/register", json={})
         assert resp.status_code == 404
 
-    def test_atlas_client_id_rejected_by_escape_authorize(
+    def test_site_register_is_404(self, multi_site_client: TestClient) -> None:
+        # DCR is disabled — no per-site /register endpoint exists either.
+        resp = multi_site_client.post("/site/atlas/register", json={})
+        assert resp.status_code == 404
+
+    def test_cimd_client_id_accepted_by_authorize(
         self, multi_site_client: TestClient
     ) -> None:
-        # Register at atlas — client_id lands in atlas's provider.
-        reg_resp = multi_site_client.post(
-            "/site/atlas/register",
-            json={
-                "client_name": "test-client",
-                "redirect_uris": ["http://localhost:9999/cb"],
-                "grant_types": ["authorization_code", "refresh_token"],
-                "response_types": ["code"],
-                "token_endpoint_auth_method": "none",
-            },
+        # A CIMD client_id (https URL) is resolved at /authorize; the document
+        # fetch is patched.  302 (bridge or error redirect) — not a 400 — proves
+        # the client_id was accepted rather than rejected as unknown.
+        cimd_id = "https://claude.ai/.well-known/oauth-client"
+        redirect = "http://localhost:9999/cb"
+        resolved = OAuthClientInformationFull(
+            client_id=cimd_id,
+            redirect_uris=[AnyUrl(redirect)],
+            token_endpoint_auth_method="none",
         )
-        assert reg_resp.status_code == 201
-        client_id = reg_resp.json()["client_id"]
-
-        # That same client_id must be unknown to escape's provider → 400.
-        resp = multi_site_client.get(
-            "/site/escape/authorize",
-            params={
-                "client_id": client_id,
-                "response_type": "code",
-                "redirect_uri": "http://localhost:9999/cb",
-                "code_challenge": "x" * 43,
-                "code_challenge_method": "S256",
-                "resource": "http://localhost:8000/site/escape",
-            },
-        )
-        assert resp.status_code == 400
-
-    def test_atlas_client_id_accepted_by_atlas_authorize(
-        self, multi_site_client: TestClient
-    ) -> None:
-        # Register at atlas — client_id must be found by atlas's own authorize.
-        reg_resp = multi_site_client.post(
-            "/site/atlas/register",
-            json={
-                "client_name": "test-client",
-                "redirect_uris": ["http://localhost:9999/cb"],
-                "grant_types": ["authorization_code", "refresh_token"],
-                "response_types": ["code"],
-                "token_endpoint_auth_method": "none",
-            },
-        )
-        assert reg_resp.status_code == 201
-        client_id = reg_resp.json()["client_id"]
-
-        # atlas/authorize must redirect (302), not return 400.
-        resp = multi_site_client.get(
-            "/site/atlas/authorize",
-            params={
-                "client_id": client_id,
-                "response_type": "code",
-                "redirect_uri": "http://localhost:9999/cb",
-                "code_challenge": "x" * 43,
-                "code_challenge_method": "S256",
-                "resource": "http://localhost:8000/site/atlas",
-            },
-            follow_redirects=False,
-        )
-        # 302 = bridge started; anything but 400 means the client_id was found.
+        with patch(
+            "rucio_mcp.auth.bridge_provider.resolve_cimd_client",
+            AsyncMock(return_value=resolved),
+        ):
+            resp = multi_site_client.get(
+                "/site/atlas/authorize",
+                params={
+                    "client_id": cimd_id,
+                    "response_type": "code",
+                    "redirect_uri": redirect,
+                    "code_challenge": "x" * 43,
+                    "code_challenge_method": "S256",
+                    "resource": "http://localhost:8000/site/atlas",
+                },
+                follow_redirects=False,
+            )
         assert resp.status_code == 302
 
 

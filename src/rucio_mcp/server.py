@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import configparser
+import json
 import os
 import sys
 import time
@@ -11,6 +12,7 @@ from importlib.metadata import version as _pkg_version
 from importlib.resources import files as _pkg_files
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import parse_qs
 
 import uvicorn
 
@@ -18,6 +20,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, MutableMapping
 
     from starlette.requests import Request
+    from starlette.types import ASGIApp
 
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
 from mcp.server.fastmcp import FastMCP
@@ -28,7 +31,7 @@ from starlette.middleware import Middleware
 from starlette.responses import PlainTextResponse, Response
 from starlette.routing import BaseRoute, Mount, Route
 
-from rucio_mcp.auth.bridge_provider import RucioBridgeProvider
+from rucio_mcp.auth.bridge_provider import RucioBridgeProvider, _authorize_redirect_uri
 from rucio_mcp.auth.bridge_routes import register_bridge_routes
 from rucio_mcp.auth.factory import BearerTokenClientFactory, EnvBasedClientFactory
 from rucio_mcp.auth.rucio_cfg import RucioCfg
@@ -345,7 +348,10 @@ def _make_site_mcp(
         auth=AuthSettings(
             issuer_url=AnyHttpUrl(resource_url),
             resource_server_url=AnyHttpUrl(resource_url),
-            client_registration_options=ClientRegistrationOptions(enabled=True),
+            # DCR disabled: this server authenticates clients via CIMD (Client ID
+            # Metadata Documents) only — no /register endpoint, no per-client
+            # registry.  See https://github.com/kratsg/rucio-mcp/issues/33.
+            client_registration_options=ClientRegistrationOptions(enabled=False),
             required_scopes=[],
         ),
     )
@@ -368,9 +374,77 @@ def _make_site_mcp(
     return mcp, provider, cache
 
 
+def _augment_as_metadata(body: bytes) -> bytes:
+    """Add CIMD advertisement to the SDK's AS metadata JSON.
+
+    The mcp SDK's ``build_metadata`` does not emit
+    ``client_id_metadata_document_supported`` and hard-codes
+    ``token_endpoint_auth_methods_supported`` without ``"none"``.  Claude selects
+    CIMD only when both are present (the CIMD client authenticates as a public
+    client — PKCE only, no secret), so we patch them in here.  See
+    https://github.com/kratsg/rucio-mcp/issues/33.
+    """
+    try:
+        meta = json.loads(body)
+    except ValueError:
+        return body
+    meta["client_id_metadata_document_supported"] = True
+    methods = meta.get("token_endpoint_auth_methods_supported") or []
+    if "none" not in methods:
+        meta["token_endpoint_auth_methods_supported"] = ["none", *methods]
+    return json.dumps(meta).encode()
+
+
+class _CimdMetadataMiddleware:
+    """Rewrite the AS metadata response to advertise CIMD support.
+
+    Wraps each per-site sub-app so that both the directly-mounted location
+    (``/site/{name}/.well-known/oauth-authorization-server``) and the RFC 8414
+    proxied location return the same CIMD-augmented document.  Buffers the
+    response body to recompute Content-Length after the rewrite.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self._app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        path = scope.get("path", "")
+        if scope.get("type") != "http" or not path.endswith(
+            "/.well-known/oauth-authorization-server"
+        ):
+            await self._app(scope, receive, send)
+            return
+
+        start_message: dict[str, Any] = {}
+        body_chunks: list[bytes] = []
+
+        async def _buffer(message: MutableMapping[str, Any]) -> None:
+            if message["type"] == "http.response.start":
+                start_message.update(message)
+            elif message["type"] == "http.response.body":
+                body_chunks.append(message.get("body", b""))
+                if message.get("more_body"):
+                    return
+                body = b"".join(body_chunks)
+                if start_message.get("status") == 200:
+                    body = _augment_as_metadata(body)
+                headers = [
+                    (k, v)
+                    for k, v in start_message.get("headers", [])
+                    if k.lower() != b"content-length"
+                ]
+                headers.append((b"content-length", str(len(body)).encode()))
+                await send({**start_message, "headers": headers})
+                await send(
+                    {"type": "http.response.body", "body": body, "more_body": False}
+                )
+
+        await self._app(scope, receive, _buffer)
+
+
 def _make_well_known_proxy_route(
     parent_path: str,
-    sub_app: Starlette,
+    sub_app: ASGIApp,
     sub_app_path: str,
     methods: list[str] | None = None,
 ) -> Route:
@@ -383,6 +457,10 @@ def _make_well_known_proxy_route(
       mcp registers it at ``/.well-known/oauth-authorization-server`` in the sub-app.
     - RFC 9728: client looks for ``/.well-known/oauth-protected-resource/site/name``;
       mcp registers it at ``/.well-known/oauth-protected-resource/site/name`` in the sub-app.
+
+    The AS metadata served through *sub_app* is CIMD-augmented by
+    ``_CimdMetadataMiddleware`` (which wraps each sub-app), so the proxied
+    document matches the directly-mounted one.
     """
     _raw = sub_app_path.encode()
     _methods = methods or ["GET"]
@@ -420,6 +498,38 @@ def _make_well_known_proxy_route(
         )
 
     return Route(parent_path, endpoint=handler, methods=_methods)
+
+
+class _AuthorizeContextMiddleware:
+    """ASGI middleware that exposes the /authorize redirect_uri to the provider.
+
+    Wraps each per-site sub-app (after ``streamable_http_app()`` is called).
+    For every ``/authorize`` request it extracts the ``redirect_uri`` query
+    parameter and stores it in the ``_authorize_redirect_uri`` contextvar for
+    the lifetime of that request.
+
+    ``RucioBridgeProvider._resolve_cimd()`` reads this contextvar so that a
+    CIMD client's ephemeral-port loopback ``redirect_uri`` can be matched
+    port-agnostically against its Client ID Metadata Document.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self._app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        # Starlette 1.x Mounts do not strip the prefix — inner apps see the full
+        # path (e.g. /site/atlas/authorize), so match with endswith not ==.
+        if scope.get("type") == "http" and scope.get("path", "").endswith("/authorize"):
+            qs = parse_qs(scope.get("query_string", b"").decode())
+            redirect_uris = qs.get("redirect_uri", [])
+            if redirect_uris:
+                token = _authorize_redirect_uri.set(redirect_uris[0])
+                try:
+                    await self._app(scope, receive, send)
+                finally:
+                    _authorize_redirect_uri.reset(token)
+                return
+        await self._app(scope, receive, send)
 
 
 class _SitePathNormalizerMiddleware:
@@ -495,7 +605,19 @@ def _make_http_app(
     # The returned sub-Starletttes are mounted under /site/{name}; their own
     # lifespans are NOT run (mounted sub-apps don't get lifespan propagation),
     # so we start each session_manager explicitly from the parent lifespan below.
-    sub_apps = [(name, mcp.streamable_http_app()) for name, mcp in site_mcps]
+    # Each sub-app is wrapped with:
+    #   • _CimdMetadataMiddleware — advertise CIMD in the AS metadata, and
+    #   • _AuthorizeContextMiddleware — expose the /authorize redirect_uri to
+    #     RucioBridgeProvider.get_client() for CIMD redirect matching.
+    sub_apps = [
+        (
+            name,
+            _CimdMetadataMiddleware(
+                _AuthorizeContextMiddleware(mcp.streamable_http_app())
+            ),
+        )
+        for name, mcp in site_mcps
+    ]
 
     @asynccontextmanager
     async def _combined_lifespan(_app: Starlette) -> AsyncGenerator[None, None]:
