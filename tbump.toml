@@ -35,6 +35,21 @@ search = "Bump version: {current_version} → "
 [[file]]
 src = "README.md"
 
+# Helm chart: track the rucio-mcp app version the chart deploys. The chart's own
+# `version` (chart version) is managed separately, so each entry uses a search
+# pattern to bump only the app-version line.
+[[file]]
+src = "charts/rucio-mcp/Chart.yaml"
+search = 'appVersion: "{current_version}"'
+
+[[file]]
+src = "charts/rucio-mcp/values.yaml"
+search = 'version: "{current_version}"'
+
+[[file]]
+src = "charts/rucio-mcp/README.md"
+search = '`{current_version}`'
+
 [[field]]
 # the name of the field
 name = "candidate"

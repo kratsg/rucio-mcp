@@ -1,0 +1,48 @@
+rucio-mcp has been deployed in {{ .Values.auth.mode }} mode.
+
+Sites served:
+{{- range .Values.auth.sites }}
+  - {{ . }}  (MCP endpoint: /site/{{ . }}/)
+{{- end }}
+
+{{- if .Values.ingress.enabled }}
+
+Public URL: https://{{ .Values.ingress.host }}
+  Per-site MCP endpoint, e.g.: https://{{ .Values.ingress.host }}/site/{{ first .Values.auth.sites }}/
+{{- else }}
+
+No ingress configured. Reach the service in-cluster:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "rucio-mcp.fullname" . }} 8080:{{ .Values.service.port }}
+  # then http://127.0.0.1:8080/site/{{ first .Values.auth.sites }}/
+{{- end }}
+
+{{- if eq .Values.auth.mode "oidc" }}
+
+OIDC bridge mode: each user authenticates via their IdP. Point an MCP client at
+the per-site URL above; it will discover the OAuth endpoints automatically.
+{{- else }}
+
+Shared-secret mode: clients must send the bearer token.
+{{- if .Values.auth.sharedSecret.existingSecret }}
+  Token source: existing Secret {{ .Values.auth.sharedSecret.existingSecret }} (key "shared-secret").
+{{- else }}
+  Retrieve the generated token with:
+    kubectl -n {{ .Release.Namespace }} get secret {{ include "rucio-mcp.sharedSecretName" . }} \
+      -o jsonpath='{.data.shared-secret}' | base64 -d; echo
+{{- end }}
+
+  Example MCP client config:
+    {
+      "mcpServers": {
+        "rucio-{{ first .Values.auth.sites }}": {
+          "type": "http",
+          "url": "https://{{ .Values.ingress.host }}/site/{{ first .Values.auth.sites }}/",
+          "headers": { "Authorization": "Bearer <token>" }
+        }
+      }
+    }
+{{- end }}
+
+Verify the rollout:
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "rucio-mcp.fullname" . }}
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}

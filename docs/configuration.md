@@ -270,4 +270,6 @@ Notes:
   clients are configured with the bearer out-of-band rather than via OAuth
   discovery.
 
+To run either HTTP mode on Kubernetes, see [Deploying with Helm](helm.md).
+
 --8<-- "README.md:read-only"

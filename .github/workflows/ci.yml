@@ -29,16 +29,19 @@ jobs:
         with:
           pixi-version: v0.68.1
           cache: true
-          cache-key: dev
+          cache-key: dev-helm
           cache-write:
             ${{ github.event_name == 'push' && github.ref_name == 'main' }}
-          environments: dev
+          environments: dev helm
 
       - name: Run pre-commit
         run: pixi run pre-commit --hook-stage manual
 
       - name: Run PyLint
         run: pixi run pylint --output-format=github
+
+      - name: Run helm lint
+        run: pixi run helm-lint
 
   build:
     name: Build package

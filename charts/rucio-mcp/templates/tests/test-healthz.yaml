@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "rucio-mcp.fullname" . }}-test-healthz"
+  labels:
+    {{- include "rucio-mcp.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: healthz
+      image: busybox:1.36
+      command: ["wget"]
+      args:
+        - "-qO-"
+        - "http://{{ include "rucio-mcp.fullname" . }}:{{ .Values.service.port }}/healthz"

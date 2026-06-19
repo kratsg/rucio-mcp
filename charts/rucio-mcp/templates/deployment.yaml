@@ -1,0 +1,155 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rucio-mcp.fullname" . }}
+  labels:
+    {{- include "rucio-mcp.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "rucio-mcp.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        # Restart pods when the rendered pixi manifest changes.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "rucio-mcp.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if or .Values.serviceAccount.create .Values.serviceAccount.name }}
+      serviceAccountName: {{ include "rucio-mcp.serviceAccountName" . }}
+      {{- end }}
+      initContainers:
+        - name: pixi-install
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              cp /pixi-config/pixi.toml /workspace/pixi.toml
+              {{- if .Values.rucioMcp.pixiLockContent }}
+              cp /pixi-config/pixi.lock /workspace/pixi.lock
+              {{- end }}
+              pixi install --manifest-path /workspace/pixi.toml
+          volumeMounts:
+            - name: pixi-config
+              mountPath: /pixi-config
+            - name: workspace
+              mountPath: /workspace
+          resources:
+            {{- toYaml .Values.initResources | nindent 12 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              eval "$(pixi shell-hook --manifest-path /workspace/pixi.toml --shell bash)"
+              exec rucio-mcp serve {{ include "rucio-mcp.serveArgs" . }}
+          env:
+            {{- if eq .Values.auth.mode "sharedSecret" }}
+            {{- $ss := .Values.auth.sharedSecret }}
+            - name: RUCIO_ACCOUNT
+              value: {{ $ss.rucioAccount | quote }}
+            - name: RUCIO_AUTH_TYPE
+              value: {{ $ss.authType | quote }}
+            - name: RUCIO_MCP_SHARED_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "rucio-mcp.sharedSecretName" . }}
+                  key: shared-secret
+            {{- if eq $ss.authType "x509_proxy" }}
+            - name: X509_USER_PROXY
+              value: {{ printf "%s/%s" $ss.x509.mountPath $ss.x509.proxyKey | quote }}
+            {{- else if eq $ss.authType "x509" }}
+            - name: RUCIO_CLIENT_CERT
+              value: {{ printf "%s/%s" $ss.x509.mountPath $ss.x509.certKey | quote }}
+            - name: RUCIO_CLIENT_KEY
+              value: {{ printf "%s/%s" $ss.x509.mountPath $ss.x509.keyKey | quote }}
+            {{- end }}
+            {{- if $ss.x509CertDir }}
+            - name: X509_CERT_DIR
+              value: {{ $ss.x509CertDir | quote }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.server.port }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.server.metricsPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            {{- if and (eq .Values.auth.mode "sharedSecret") .Values.auth.sharedSecret.x509.existingSecret }}
+            - name: x509-creds
+              mountPath: {{ .Values.auth.sharedSecret.x509.mountPath }}
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: pixi-config
+          configMap:
+            name: {{ include "rucio-mcp.fullname" . }}-pixi
+            items:
+              - key: pixi.toml
+                path: pixi.toml
+              {{- if .Values.rucioMcp.pixiLockContent }}
+              - key: pixi.lock
+                path: pixi.lock
+              {{- end }}
+        - name: workspace
+          emptyDir: {}
+        {{- if and (eq .Values.auth.mode "sharedSecret") .Values.auth.sharedSecret.x509.existingSecret }}
+        - name: x509-creds
+          secret:
+            secretName: {{ .Values.auth.sharedSecret.x509.existingSecret }}
+            defaultMode: 0400
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

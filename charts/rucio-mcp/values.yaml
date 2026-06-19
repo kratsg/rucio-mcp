@@ -1,0 +1,154 @@
+# Default values for rucio-mcp.
+# This chart deploys rucio-mcp over HTTP transport in one of two auth models,
+# selected by auth.mode (see the "auth" block below).
+
+# -- Container image. There is no published rucio-mcp image; the chart runs the
+# prefix-dev pixi image and installs rucio-mcp at pod startup (see initContainer).
+image:
+  repository: ghcr.io/prefix-dev/pixi
+  tag: "0.69.0-jammy"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# -- rucio-mcp release pinned into the rendered pixi.toml at /workspace.
+rucioMcp:
+  # Conda-forge version of rucio-mcp to install (==<version>).
+  version: "0.6.0"
+  # Extra conda-forge dependencies merged into the rendered pixi.toml, as a
+  # name -> version-spec map. rucio-mcp already pulls in ca-policy-lcg; pin it
+  # here (e.g. {ca-policy-lcg: "*"}) only to force the latest CA bundle.
+  extraPixiDependencies: {}
+  # Frozen pixi.lock content for reproducible installs. Empty by default (a
+  # release must exist before it can be locked). Supply with, e.g.:
+  #   helm install ... --set-file rucioMcp.pixiLockContent=pixi.lock
+  # When set, the lock is mounted alongside pixi.toml and pixi installs from it.
+  pixiLockContent: ""
+
+replicaCount: 1
+
+# -- Disable all write tools (recommended for shared/hosted deployments).
+readOnly: true
+
+# -- rucio-mcp log level: debug | info | warning | error.
+logLevel: info
+
+# -- IPs trusted for X-Forwarded-* headers. "*" trusts the in-cluster ingress.
+forwardedAllowIps: "*"
+
+server:
+  # Bind address inside the pod.
+  host: "0.0.0.0"
+  # Container port for the MCP HTTP endpoint.
+  port: 9000
+  # Container port for the Prometheus /metrics endpoint.
+  metricsPort: 9001
+  # Public URL clients reach the server at; required for oidc mode (used to
+  # build OAuth redirect URIs). If empty, it is derived as https://<ingress.host>.
+  resourceUrl: ""
+
+# Auth model — the core switch between the two supported deployment shapes.
+auth:
+  # "oidc": multi-user OAuth 2.1 bridge (each user logs in via OIDC).
+  # "sharedSecret": single env-built client gated by a static bearer token.
+  mode: oidc
+
+  # Site preset(s) to serve. oidc mode allows several; sharedSecret mode
+  # requires exactly one (one env config = one pre-authenticated client).
+  sites:
+    - atlas
+    - cms
+    - dune
+    - escape
+
+  # Settings used only when mode == "sharedSecret".
+  sharedSecret:
+    # --auth-type for the env-built Rucio client (x509 | x509_proxy | userpass | gss | oidc).
+    authType: x509
+    # RUCIO_ACCOUNT for the pre-authenticated client (required).
+    rucioAccount: ""
+    # Name of a Secret holding the bearer under key "shared-secret". If empty,
+    # the chart creates one from secretValue below.
+    existingSecret: ""
+    # Bearer value, used only when existingSecret is empty. Generate with, e.g.,
+    # `openssl rand -hex 32`. Prefer existingSecret in production.
+    secretValue: ""
+    # x509 credential material, supplied via a user-managed Secret.
+    x509:
+      # Name of an existing Secret containing the cert/key or proxy files.
+      # Required when authType is x509 or x509_proxy.
+      existingSecret: ""
+      # Key in existingSecret holding the VOMS proxy -> X509_USER_PROXY (authType: x509_proxy).
+      proxyKey: ""
+      # Keys holding the bare cert/key -> RUCIO_CLIENT_CERT / RUCIO_CLIENT_KEY (authType: x509).
+      certKey: ""
+      keyKey: ""
+      # Directory the Secret is mounted at (read-only).
+      mountPath: /etc/grid-security/rucio
+    # Optional override for X509_CERT_DIR (the CA trust dir). Usually unset —
+    # rucio-mcp's bundled ca-policy-lcg sets it automatically.
+    x509CertDir: ""
+
+# -- Extra environment variables for the main container (free-form list of
+# corev1.EnvVar). Use for auth models the chart does not template (e.g. userpass
+# via secretKeyRef).
+extraEnv: []
+
+ingress:
+  enabled: true
+  className: nginx
+  # External hostname. Also used to derive server.resourceUrl in oidc mode.
+  host: ""
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+  tls:
+    enabled: true
+    # TLS Secret name. Defaults to <fullname>-tls when empty.
+    secretName: ""
+
+service:
+  type: ClusterIP
+  # External service port mapped to server.port.
+  port: 80
+
+serviceAccount:
+  create: false
+  name: ""
+  annotations: {}
+
+serviceMonitor:
+  # Requires the Prometheus Operator CRDs.
+  enabled: true
+  interval: 30s
+
+grafanaDashboard:
+  # Ship the Grafana dashboard as a ConfigMap discovered by the Grafana sidecar.
+  enabled: false
+  # Namespace for the dashboard ConfigMap. Empty = release namespace; set to the
+  # namespace your Grafana sidecar watches (e.g. "prom") if it differs.
+  namespace: ""
+  label:
+    grafana_dashboard: "1"
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+# Resources for the pixi-install init container (install is the heavy step).
+initResources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+podAnnotations: {}
+podLabels: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
