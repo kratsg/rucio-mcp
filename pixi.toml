@@ -67,6 +67,13 @@ docs-serve = { cmd = "zensical serve", depends-on = ["docs-build"], description 
 docs-clean = { cmd = "rm -rf site", description = "Clean documentation build artifacts", inputs = ["site"] }
 check-docstrings = { cmd = "pydocstyle src/rucio_mcp/", description = "Check docstring style" }
 
+[feature.helm.dependencies]
+kubernetes-helm = "*"
+
+[feature.helm.tasks]
+helm-lint = { cmd = "helm lint charts/rucio-mcp --set ingress.host=rucio-mcp.example.com", description = "Lint the rucio-mcp Helm chart" }
+helm-template = { cmd = "helm template r charts/rucio-mcp --set ingress.host=rucio-mcp.example.com", description = "Render the chart with default (OIDC) values" }
+
 [feature.dev.dependencies]
 pre-commit = "*"
 identify = ">=1.4.20"  # ruff-check
@@ -89,6 +96,7 @@ build-check = { cmd = "twine check --strict ./dist/*", depends-on = ["build"], d
 [environments]
 docs = ["docs"]
 dev = ["dev"]
+helm = { features = ["helm"], no-default-feature = true }
 py310 = ["test", "py310"]
 py311 = ["test", "py311"]
 py312 = ["test", "py312"]

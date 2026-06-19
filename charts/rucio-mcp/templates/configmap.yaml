@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rucio-mcp.fullname" . }}-pixi
+  labels:
+    {{- include "rucio-mcp.labels" . | nindent 4 }}
+data:
+  pixi.toml: |
+    [workspace]
+    channels = ["conda-forge"]
+    name = "rucio-mcp"
+    platforms = ["linux-64", "linux-aarch64"]
+    version = "0.1.0"
+
+    [dependencies]
+    rucio-mcp = "=={{ .Values.rucioMcp.version }}"
+    {{- range $name, $spec := .Values.rucioMcp.extraPixiDependencies }}
+    {{ $name }} = "{{ $spec }}"
+    {{- end }}
+  {{- if .Values.rucioMcp.pixiLockContent }}
+  pixi.lock: |
+    {{- .Values.rucioMcp.pixiLockContent | nindent 4 }}
+  {{- end }}

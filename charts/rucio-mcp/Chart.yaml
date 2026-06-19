@@ -1,0 +1,23 @@
+apiVersion: v2
+name: rucio-mcp
+description: |
+  MCP server exposing ATLAS Rucio data management operations as tools for LLMs,
+  served over HTTP transport. Supports the OIDC bridge (multi-user) and the
+  x509 + shared-secret (single pre-authenticated client) auth models.
+type: application
+# Chart version — bump on chart changes, independent of the app version.
+version: 0.1.0
+# rucio-mcp release the chart deploys by default (pinned into the rendered
+# pixi.toml). Override with rucioMcp.version in values.
+appVersion: "0.6.0"
+keywords:
+  - rucio
+  - mcp
+  - atlas
+  - data-management
+home: https://github.com/kratsg/rucio-mcp
+sources:
+  - https://github.com/kratsg/rucio-mcp
+maintainers:
+  - name: Giordon Stark
+    email: kratsg@gmail.com
