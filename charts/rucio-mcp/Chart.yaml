@@ -7,7 +7,7 @@ description: |
 type: application
 # Chart version — bump on chart changes, independent of the app version.
 version: 0.1.0
-icon: https://github.com/kratsg/rucio-mcp/blob/main/src/rucio_mcp/data/media/images/rucio_icon.svg
+icon: https://raw.githubusercontent.com/kratsg/rucio-mcp/main/src/rucio_mcp/data/media/images/rucio_icon.svg
 # rucio-mcp release the chart deploys by default (pinned into the rendered
 # pixi.toml). Override with rucioMcp.version in values.
 appVersion: "0.6.0"
