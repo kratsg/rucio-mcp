@@ -78,8 +78,8 @@ class TestRucioListReplicas:
         mock_ctx: MagicMock,
     ) -> None:
         fn = registered_tools["rucio_list_replicas"]
-        result = await fn("nodidformat", ctx=mock_ctx)
-        assert "scope:name" in result
+        result = await fn("a:b:c", ctx=mock_ctx)
+        assert "Cannot extract scope" in result
 
     async def test_no_replicas(
         self,
@@ -227,8 +227,8 @@ class TestRucioListContainerReplicas:
         mock_ctx: MagicMock,
     ) -> None:
         fn = registered_tools["rucio_list_container_replicas"]
-        result = await fn("nodidformat", ctx=mock_ctx)
-        assert "scope:name" in result
+        result = await fn("a:b:c", ctx=mock_ctx)
+        assert "Cannot extract scope" in result
 
     async def test_client_error(
         self,

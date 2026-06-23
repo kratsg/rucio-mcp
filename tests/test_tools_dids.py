@@ -19,14 +19,37 @@ class TestParseDid:
     def test_valid_did(self) -> None:
         assert parse_did("mc16_13TeV:foo.bar") == ("mc16_13TeV", "foo.bar")
 
-    def test_name_with_colon_uses_first_only(self) -> None:
-        scope, name = parse_did("mc16_13TeV:foo:bar")
-        assert scope == "mc16_13TeV"
-        assert name == "foo:bar"
+    def test_multi_colon_raises(self) -> None:
+        # rucio's canonical convention requires exactly one colon separator
+        with pytest.raises(ValueError, match="exactly one colon"):
+            parse_did("mc16_13TeV:foo:bar")
 
-    def test_missing_colon_raises(self) -> None:
-        with pytest.raises(ValueError, match="scope:name"):
-            parse_did("nodidformat")
+    def test_no_colon_dotted_did(self) -> None:
+        # ATLAS-style dotted DIDs without a colon: scope is the first dot-part
+        assert parse_did("mc16_13TeV.foo.bar") == ("mc16_13TeV", "mc16_13TeV.foo.bar")
+
+    def test_no_colon_user_prefix(self) -> None:
+        # user.* DIDs use the first two dot-parts as scope
+        assert parse_did("user.jdoe.ds") == ("user.jdoe", "user.jdoe.ds")
+
+    def test_no_colon_group_prefix(self) -> None:
+        # group.* DIDs use the first two dot-parts as scope
+        assert parse_did("group.phys-higgs.x") == (
+            "group.phys-higgs",
+            "group.phys-higgs.x",
+        )
+
+    def test_no_colon_trailing_slash_stripped(self) -> None:
+        # rucio strips a single trailing slash from the name
+        assert parse_did("mc16_13TeV.foo/")[1] == "mc16_13TeV.foo"
+
+    def test_empty_scope_raises(self) -> None:
+        with pytest.raises(ValueError, match="empty scope or name"):
+            parse_did(":name")
+
+    def test_empty_name_raises(self) -> None:
+        with pytest.raises(ValueError, match="empty scope or name"):
+            parse_did("scope:")
 
 
 @pytest.fixture
@@ -89,8 +112,8 @@ class TestRucioListDids:
         mock_ctx: MagicMock,
     ) -> None:
         fn = registered_tools["rucio_list_dids"]
-        result = await fn("nodidformat", ctx=mock_ctx)
-        assert "scope:name" in result
+        result = await fn("a:b:c", ctx=mock_ctx)
+        assert "Cannot extract scope" in result
 
     async def test_client_error(
         self,
@@ -178,8 +201,8 @@ class TestRucioGetDid:
         mock_ctx: MagicMock,
     ) -> None:
         fn = registered_tools["rucio_get_did"]
-        result = await fn("invalid", ctx=mock_ctx)
-        assert "scope:name" in result
+        result = await fn("a:b:c", ctx=mock_ctx)
+        assert "Cannot extract scope" in result
 
 
 class TestRucioListContent:

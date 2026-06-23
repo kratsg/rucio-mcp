@@ -1,11 +1,39 @@
 from __future__ import annotations
 
-from typing import Any
+import os
+from importlib.resources import files as _pkg_files
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
 import pytest
 
 from rucio_mcp.auth.factory import EnvBasedClientFactory
+
+if TYPE_CHECKING:
+    from collections.abc import Generator
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _rucio_config_env() -> Generator[None, None, None]:
+    """Set RUCIO_CONFIG to the bundled atlas preset for the test session.
+
+    rucio.common.utils.extract_scope (used by parse_did) initialises
+    ScopeExtractionAlgorithms on each call, which reads the rucio config to
+    check for multi-VO / policy-package settings.  Without a config file it
+    raises ConfigNotFound.  Pointing RUCIO_CONFIG at the bundled atlas.cfg
+    gives it a valid [client]-only file; the config_get_bool('common',
+    'multi_vo') call then raises NoSectionError, which is caught, and the
+    built-in default scope-extraction algorithm is used.
+    """
+    cfg = Path(str(_pkg_files("rucio_mcp.data").joinpath("atlas.cfg")))
+    old = os.environ.get("RUCIO_CONFIG")
+    os.environ["RUCIO_CONFIG"] = str(cfg)
+    yield
+    if old is None:
+        os.environ.pop("RUCIO_CONFIG", None)
+    else:
+        os.environ["RUCIO_CONFIG"] = old
 
 
 @pytest.fixture
