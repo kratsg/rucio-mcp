@@ -78,6 +78,23 @@ PRESETS: dict[str, Preset] = {
                               --site dune
         """).rstrip(),
     ),
+    "belleii": Preset(
+        name="belleii",
+        description="Belle II at BNL SDCC (OIDC — stdio and HTTP mode)",
+        config_resource="belleii.cfg",
+        post_init_hint=textwrap.dedent("""\
+            Next steps:
+              export RUCIO_ACCOUNT=<your-belleii-account>
+
+            For stdio mode (OIDC polling):
+              rucio-mcp serve --site belleii
+
+            For HTTP mode (OAuth bridge):
+              rucio-mcp serve --transport http \\
+                              --resource-url http://localhost:8000 \\
+                              --site belleii
+        """).rstrip(),
+    ),
     "escape": Preset(
         name="escape",
         description="ESCAPE Virtual Research Environment at CERN (OIDC — stdio and HTTP mode)",
