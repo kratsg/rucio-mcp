@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 import itertools
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 from rucio.common.exception import RucioException
 from rucio.common.utils import extract_scope
 
 from rucio_mcp.metrics import TOOL_ERRORS, current_tool_labels
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 T = TypeVar("T")
 
 
-def parse_did(did: str) -> tuple[str, str]:
+def parse_did(did: str, scopes: Sequence[str] | None = None) -> tuple[str, str]:
     """Split a DID string into ``(scope, name)`` using Rucio's scope extraction.
 
     Delegates to :func:`rucio.common.utils.extract_scope`, which honours the
@@ -26,6 +29,9 @@ def parse_did(did: str) -> tuple[str, str]:
 
     Args:
         did: A data identifier string.
+        scopes: Optional list of valid scopes.  Passed through to
+            ``extract_scope`` for sites with a custom policy package that uses
+            it (e.g. Belle II).  The built-in algorithms ignore this parameter.
 
     Returns:
         A ``(scope, name)`` tuple.
@@ -35,10 +41,15 @@ def parse_did(did: str) -> tuple[str, str]:
             (e.g. more than one colon, or empty scope/name component).
     """
     try:
-        scope, name = extract_scope(did)
+        scope, name = extract_scope(did, scopes=scopes)
     except RucioException as exc:
         raise ValueError(str(exc)) from exc
     return scope, name
+
+
+def get_scopes(ctx: Any) -> list[str] | None:
+    """Return the pre-fetched scope list from the lifespan context, or None."""
+    return cast("list[str] | None", ctx.request_context.lifespan_context.get("scopes"))
 
 
 def human_bytes(n: float | None) -> str:

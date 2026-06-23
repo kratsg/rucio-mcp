@@ -18,6 +18,7 @@ from rucio_mcp.tools._helpers import (
     format_dict,
     format_list,
     get_rucio_client,
+    get_scopes,
 )
 
 
@@ -77,6 +78,29 @@ class TestFormatList:
         result = format_list([{"key": "value"}])
         assert "| key |" in result
         assert "| value |" in result
+
+
+class TestGetScopes:
+    def test_returns_none_when_key_absent(self) -> None:
+        ctx = MagicMock()
+        ctx.request_context.lifespan_context = {"client_factory": MagicMock()}
+        assert get_scopes(ctx) is None
+
+    def test_returns_scopes_when_present(self) -> None:
+        ctx = MagicMock()
+        ctx.request_context.lifespan_context = {
+            "client_factory": MagicMock(),
+            "scopes": ["scope_a", "scope_b"],
+        }
+        assert get_scopes(ctx) == ["scope_a", "scope_b"]
+
+    def test_returns_none_when_explicitly_none(self) -> None:
+        ctx = MagicMock()
+        ctx.request_context.lifespan_context = {
+            "client_factory": MagicMock(),
+            "scopes": None,
+        }
+        assert get_scopes(ctx) is None
 
 
 class TestGetRucioClient:

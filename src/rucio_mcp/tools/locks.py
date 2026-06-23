@@ -11,6 +11,7 @@ from rucio_mcp.tools._helpers import (
     classify_error,
     format_list,
     get_rucio_client,
+    get_scopes,
     paginate_iter,
     parse_did,
 )
@@ -40,7 +41,7 @@ def register(mcp: FastMCP) -> None:
             offset: Number of locks to skip for pagination.
         """
         try:
-            scope, name = parse_did(did)
+            scope, name = parse_did(did, scopes=get_scopes(ctx))
         except ValueError as exc:
             return str(exc)
 
