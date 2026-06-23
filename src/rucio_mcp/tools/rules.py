@@ -13,6 +13,7 @@ from rucio_mcp.tools._helpers import (
     format_dict,
     format_list,
     get_rucio_client,
+    get_scopes,
     paginate_iter,
     parse_did,
 )
@@ -69,7 +70,7 @@ def register(mcp: FastMCP) -> None:
             did: The data identifier in ``scope:name`` format.
         """
         try:
-            scope, name = parse_did(did)
+            scope, name = parse_did(did, scopes=get_scopes(ctx))
         except ValueError as exc:
             return str(exc)
 
@@ -168,7 +169,7 @@ def register(mcp: FastMCP) -> None:
             offset: Number of entries to skip for pagination.
         """
         try:
-            scope, name = parse_did(did)
+            scope, name = parse_did(did, scopes=get_scopes(ctx))
         except ValueError as exc:
             return str(exc)
 
@@ -298,9 +299,10 @@ def register(mcp: FastMCP) -> None:
 
         did_list = dids.split()
         parsed = []
+        scopes = get_scopes(ctx)
         for did in did_list:
             try:
-                scope, name = parse_did(did)
+                scope, name = parse_did(did, scopes=scopes)
             except ValueError as exc:
                 return str(exc)
             parsed.append({"scope": scope, "name": name})
