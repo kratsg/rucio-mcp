@@ -63,8 +63,8 @@ class TestRucioGetDatasetLocks:
         mock_ctx: MagicMock,
     ) -> None:
         fn = registered_tools["rucio_get_dataset_locks"]
-        result = await fn("nodidformat", ctx=mock_ctx)
-        assert "scope:name" in result
+        result = await fn("a:b:c", ctx=mock_ctx)
+        assert "Cannot extract scope" in result
 
     async def test_no_locks(
         self,

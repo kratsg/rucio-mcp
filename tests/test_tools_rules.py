@@ -74,8 +74,8 @@ class TestRucioListDidRules:
         mock_ctx: MagicMock,
     ) -> None:
         fn = registered_tools["rucio_list_did_rules"]
-        result = await fn("nodidformat", ctx=mock_ctx)
-        assert "scope:name" in result
+        result = await fn("a:b:c", ctx=mock_ctx)
+        assert "Cannot extract scope" in result
 
     async def test_client_error(
         self,
@@ -147,8 +147,8 @@ class TestRucioListRuleHistory:
         mock_ctx: MagicMock,
     ) -> None:
         fn = registered_tools["rucio_list_rule_history"]
-        result = await fn("nodidformat", ctx=mock_ctx)
-        assert "scope:name" in result
+        result = await fn("a:b:c", ctx=mock_ctx)
+        assert "Cannot extract scope" in result
 
     async def test_no_history(
         self,
@@ -252,8 +252,8 @@ class TestRucioAddRule:
         mock_ctx: MagicMock,
     ) -> None:
         fn = registered_tools["rucio_add_rule"]
-        result = await fn("nodidformat", copies=1, rse_expression="X", ctx=mock_ctx)
-        assert "scope:name" in result
+        result = await fn("a:b:c", copies=1, rse_expression="X", ctx=mock_ctx)
+        assert "Cannot extract scope" in result
 
     async def test_client_error(
         self,

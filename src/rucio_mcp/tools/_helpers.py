@@ -5,27 +5,39 @@ from __future__ import annotations
 import itertools
 from typing import Any, TypeVar
 
+from rucio.common.exception import RucioException
+from rucio.common.utils import extract_scope
+
 from rucio_mcp.metrics import TOOL_ERRORS, current_tool_labels
 
 T = TypeVar("T")
 
 
 def parse_did(did: str) -> tuple[str, str]:
-    """Split a ``scope:name`` DID string into its components.
+    """Split a DID string into ``(scope, name)`` using Rucio's scope extraction.
+
+    Delegates to :func:`rucio.common.utils.extract_scope`, which honours the
+    site's configured ``extract_scope`` policy package (``[common]`` or
+    ``[policy]`` section in ``rucio.cfg``).  When no policy is configured the
+    built-in default algorithm is used: single-colon DIDs are split on the
+    colon; colon-less dotted DIDs extract the scope from the leading dot-part(s)
+    (with ``user.*`` / ``group.*`` using the first two parts); a trailing ``/``
+    is stripped from the name.
 
     Args:
-        did: A data identifier in ``scope:name`` format.
+        did: A data identifier string.
 
     Returns:
         A ``(scope, name)`` tuple.
 
     Raises:
-        ValueError: If the DID does not contain a ``:`` separator.
+        ValueError: If the scope/name cannot be extracted from ``did``
+            (e.g. more than one colon, or empty scope/name component).
     """
-    if ":" not in did:
-        msg = f"Invalid DID '{did}': expected 'scope:name' format."
-        raise ValueError(msg)
-    scope, name = did.split(":", 1)
+    try:
+        scope, name = extract_scope(did)
+    except RucioException as exc:
+        raise ValueError(str(exc)) from exc
     return scope, name
 
 
