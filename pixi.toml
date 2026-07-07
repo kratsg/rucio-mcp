@@ -42,6 +42,9 @@ python = "<3.13,>=3.12"
 [feature.py313.dependencies]
 python = "<3.14,>=3.13"
 
+[feature.py314.dependencies]
+python = "<3.15,>=3.14"
+
 [feature.test.dependencies]
 pytest = ">=9"
 pytest-cov = ">=3"
@@ -51,7 +54,6 @@ pytest-asyncio = ">=0.24"
 test = { cmd = "pytest -m 'not slow'", description = "Run quick tests (skip slow)" }
 test-cov = { cmd = "pytest -m 'not slow' --cov=rucio_mcp --cov-report=term --cov-report=html", description = "Run quick tests with coverage" }
 test-docstrings = { cmd = "pytest --doctest-modules src/rucio_mcp", description = "Run doctests in source modules" }
-test-docs = { cmd = "pytest README.md docs", description = "Run doctests in docs and README.md" }
 test-slow = { cmd = "pytest --runslow", description = "Run tests including slow tests" }
 test-all = { cmd = "pytest --cov=rucio_mcp", description = "Run all tests with coverage" }
 
@@ -101,6 +103,7 @@ py310 = ["test", "py310"]
 py311 = ["test", "py311"]
 py312 = ["test", "py312"]
 py313 = ["test", "py313"]
+py314 = ["test", "py314"]
 
 [tasks]
 # Composite tasks that span multiple features
