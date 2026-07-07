@@ -11,7 +11,7 @@ from rucio_mcp.tools._helpers import parse_did
 from rucio_mcp.tools.dids import register
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Iterator
     from unittest.mock import MagicMock
 
 
@@ -232,6 +232,28 @@ class TestRucioListContent:
         result = await fn("mc16_13TeV:empty", ctx=mock_ctx)
         assert "No contents" in result
 
+    async def test_does_not_materialize_full_iterator(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        """Regression: the tool must pass the client iterator straight to
+        paginate_iter instead of list()-ing it first, otherwise a huge
+        container is fully consumed to serve a small page."""
+        consumed = 0
+
+        def _huge_content() -> Iterator[dict[str, str]]:
+            nonlocal consumed
+            for i in range(100_000):
+                consumed += 1
+                yield {"scope": "mc16_13TeV", "name": f"item{i}", "type": "DATASET"}
+
+        mock_rucio_client.list_content.return_value = _huge_content()
+        fn = registered_tools["rucio_list_content"]
+        await fn("mc16_13TeV:container1", limit=2, ctx=mock_ctx)
+        assert consumed <= 3  # offset(0) + limit(2) + 1
+
 
 class TestRucioListFiles:
     async def test_returns_files_short(
@@ -296,6 +318,94 @@ class TestRucioListFiles:
         fn = registered_tools["rucio_list_files"]
         result = await fn("mc16_13TeV:dataset1", ctx=mock_ctx)
         assert "rucio_list_replicas" in result
+
+    async def test_does_not_materialize_full_iterator(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        """Regression: a 500k-file dataset must not be fully downloaded to
+        serve a small page — the client iterator is fed to paginate_iter
+        directly instead of being list()-ed first."""
+        consumed = 0
+
+        def _huge_files() -> Iterator[dict[str, str]]:
+            nonlocal consumed
+            for i in range(100_000):
+                consumed += 1
+                yield {"scope": "mc16_13TeV", "name": f"file{i}.pool.root"}
+
+        mock_rucio_client.list_files.return_value = _huge_files()
+        fn = registered_tools["rucio_list_files"]
+        await fn("mc16_13TeV:dataset1", limit=2, ctx=mock_ctx)
+        assert consumed <= 3  # offset(0) + limit(2) + 1
+
+
+class TestRucioListParentDids:
+    async def test_returns_parents(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_parent_dids.return_value = iter(
+            [{"scope": "mc16_13TeV", "name": "parent.container", "type": "CONTAINER"}]
+        )
+        fn = registered_tools["rucio_list_parent_dids"]
+        result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
+        assert "parent.container" in result
+
+    async def test_no_parents(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_parent_dids.return_value = iter([])
+        fn = registered_tools["rucio_list_parent_dids"]
+        result = await fn("mc16_13TeV:orphan", ctx=mock_ctx)
+        assert "No parent DIDs" in result
+
+    async def test_invalid_did(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+    ) -> None:
+        fn = registered_tools["rucio_list_parent_dids"]
+        result = await fn("a:b:c", ctx=mock_ctx)
+        assert "Cannot extract scope" in result
+
+    async def test_client_error(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_parent_dids.side_effect = RuntimeError("server error")
+        fn = registered_tools["rucio_list_parent_dids"]
+        result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
+        assert "Error" in result
+
+    async def test_does_not_materialize_full_iterator(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        """Regression: pass the client iterator straight to paginate_iter."""
+        consumed = 0
+
+        def _huge_parents() -> Iterator[dict[str, str]]:
+            nonlocal consumed
+            for i in range(100_000):
+                consumed += 1
+                yield {"scope": "mc16_13TeV", "name": f"parent{i}"}
+
+        mock_rucio_client.list_parent_dids.return_value = _huge_parents()
+        fn = registered_tools["rucio_list_parent_dids"]
+        await fn("mc16_13TeV:some.dataset", limit=2, ctx=mock_ctx)
+        assert consumed <= 3  # offset(0) + limit(2) + 1
 
 
 class TestRucioGetMetadata:

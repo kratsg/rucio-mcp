@@ -10,7 +10,7 @@ from mcp.server.fastmcp import FastMCP
 from rucio_mcp.tools.rules import register
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Iterator
     from unittest.mock import MagicMock
 
 
@@ -87,6 +87,43 @@ class TestRucioListDidRules:
         fn = registered_tools["rucio_list_did_rules"]
         result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
         assert "Error" in result
+
+    async def test_pagination_footer_on_overflow(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_did_rules.return_value = iter(
+            [{"id": f"rule{i}", "state": "OK"} for i in range(3)]
+        )
+        fn = registered_tools["rucio_list_did_rules"]
+        result = await fn("mc16_13TeV:some.dataset", limit=2, ctx=mock_ctx)
+        assert "rule0" in result
+        assert "rule1" in result
+        assert "rule2" not in result
+        assert "offset=2" in result
+
+    async def test_does_not_materialize_full_iterator(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        """Regression: pass the client iterator straight to paginate_iter
+        instead of list()-ing all rules for the DID up front."""
+        consumed = 0
+
+        def _huge_rules() -> Iterator[dict[str, str]]:
+            nonlocal consumed
+            for i in range(100_000):
+                consumed += 1
+                yield {"id": f"rule{i}", "state": "OK"}
+
+        mock_rucio_client.list_did_rules.return_value = _huge_rules()
+        fn = registered_tools["rucio_list_did_rules"]
+        await fn("mc16_13TeV:some.dataset", limit=2, ctx=mock_ctx)
+        assert consumed <= 3  # offset(0) + limit(2) + 1
 
 
 class TestRucioGetReplicationRule:
@@ -173,6 +210,29 @@ class TestRucioListRuleHistory:
         fn = registered_tools["rucio_list_rule_history"]
         result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
         assert "rucio_list_did_rules" in result
+
+    async def test_does_not_materialize_full_iterator(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        """Regression: a long-lived DID's full rule history must not be
+        fully downloaded to serve a small page."""
+        consumed = 0
+
+        def _huge_history() -> Iterator[dict[str, str]]:
+            nonlocal consumed
+            for i in range(100_000):
+                consumed += 1
+                yield {"id": "abc123", "state": "OK", "sequence_number": str(i)}
+
+        mock_rucio_client.list_replication_rule_full_history.return_value = (
+            _huge_history()
+        )
+        fn = registered_tools["rucio_list_rule_history"]
+        await fn("mc16_13TeV:some.dataset", limit=2, ctx=mock_ctx)
+        assert consumed <= 3  # offset(0) + limit(2) + 1
 
 
 class TestRucioAddRule:
