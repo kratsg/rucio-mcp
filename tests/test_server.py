@@ -19,6 +19,7 @@ from rucio_mcp.server import (
     _make_site_mcp,
     _make_stdio_mcp,
     _preflight_check,
+    _resolve_cfg_path,
     ping_server,
     serve,
 )
@@ -297,6 +298,22 @@ class TestServeHTTP:
         err = capsys.readouterr().err
         assert "--auth-type" in err
 
+    def test_serve_no_auth_type_warning_when_flag_omitted_http(self, capsys) -> None:
+        """No --auth-type warning when the flag is omitted (auth_type=None) in HTTP mode."""
+        with (
+            patch("rucio_mcp.server._make_http_app") as mock_make,
+            patch("rucio_mcp.server.start_metrics_server"),
+            patch("uvicorn.run"),
+        ):
+            mock_make.return_value = MagicMock()
+            serve(
+                transport="http",
+                resource_url="http://localhost:8000",
+                sites=["escape"],
+                auth_type=None,
+            )
+        assert "--auth-type" not in capsys.readouterr().err
+
     def test_stdio_calls_preflight_http_does_not(self) -> None:
         """stdio path calls _preflight_check; http path does not."""
         with (
@@ -475,6 +492,94 @@ class TestInstrumentedFastMCP:
             or 0.0
         )
         assert after_count - before_count == 1.0
+
+
+class TestResolveCfgPath:
+    def test_warns_when_rucio_config_overridden_by_preset(self, capsys) -> None:
+        """A set RUCIO_CONFIG that the bundled preset overrides must produce a warning."""
+        with patch.dict(
+            "os.environ", {"RUCIO_CONFIG": "/cvmfs/my/rucio.cfg"}, clear=True
+        ):
+            _resolve_cfg_path("atlas", None)
+        err = capsys.readouterr().err
+        assert "RUCIO_CONFIG" in err
+        assert "--rucio-cfg" in err
+
+    def test_no_warning_when_override_passed(self, tmp_path, capsys) -> None:
+        """No warning when the user explicitly passes --rucio-cfg."""
+        with patch.dict(
+            "os.environ", {"RUCIO_CONFIG": "/cvmfs/my/rucio.cfg"}, clear=True
+        ):
+            _resolve_cfg_path("atlas", tmp_path / "custom.cfg")
+        assert "WARNING" not in capsys.readouterr().err
+
+    def test_no_warning_when_rucio_config_unset(self, capsys) -> None:
+        with patch.dict("os.environ", {}, clear=True):
+            _resolve_cfg_path("atlas", None)
+        assert "RUCIO_CONFIG" not in capsys.readouterr().err
+
+
+class TestServeStdioGuards:
+    def test_stdio_multiple_sites_errors(self) -> None:
+        """stdio transport must reject more than one --site rather than silently use sites[0]."""
+        with pytest.raises(SystemExit) as exc:
+            serve(transport="stdio", sites=["escape", "atlas"])
+        assert exc.value.code != 0
+
+    def test_stdio_multiple_sites_error_message(self, capsys) -> None:
+        with pytest.raises(SystemExit):
+            serve(transport="stdio", sites=["escape", "atlas"])
+        assert "single site" in capsys.readouterr().err
+
+    def test_shared_secret_with_stdio_errors(self) -> None:
+        """--shared-secret with stdio must error out (help says it requires --transport http)."""
+        with pytest.raises(SystemExit) as exc:
+            serve(transport="stdio", sites=["escape"], shared_secret="s3cr3t")
+        assert exc.value.code != 0
+
+    def test_shared_secret_with_stdio_error_message(self, capsys) -> None:
+        with pytest.raises(SystemExit):
+            serve(transport="stdio", sites=["escape"], shared_secret="s3cr3t")
+        assert "--transport http" in capsys.readouterr().err
+
+
+class TestServeSharedSecret:
+    def test_shared_secret_http_prints_notice(self, capsys) -> None:
+        """Shared-secret HTTP mode must announce itself prominently on stderr."""
+        with (
+            patch("rucio_mcp.server._resolve_cfg_path"),
+            patch("rucio_mcp.server._preflight_check"),
+            patch("rucio_mcp.server._make_shared_secret_app") as mock_make,
+            patch("rucio_mcp.server.start_metrics_server"),
+            patch("uvicorn.run"),
+        ):
+            mock_make.return_value = MagicMock()
+            serve(
+                transport="http",
+                resource_url="http://localhost:8000",
+                sites=["escape"],
+                shared_secret="s3cr3t",
+            )
+        err = capsys.readouterr().err
+        assert "shared-secret" in err.lower()
+
+
+class TestServeHTTPMultiSite:
+    def test_multi_site_rucio_cfg_dropped_warns(self, capsys) -> None:
+        """--rucio-cfg is silently dropped for multi-site HTTP; must warn instead."""
+        with (
+            patch("rucio_mcp.server._make_http_app") as mock_make,
+            patch("rucio_mcp.server.start_metrics_server"),
+            patch("uvicorn.run"),
+        ):
+            mock_make.return_value = MagicMock()
+            serve(
+                transport="http",
+                resource_url="http://localhost:8000",
+                sites=["escape", "atlas"],
+                rucio_cfg=Path("/tmp/custom.cfg"),
+            )
+        assert "--rucio-cfg" in capsys.readouterr().err
 
 
 class TestBuildInstructions:

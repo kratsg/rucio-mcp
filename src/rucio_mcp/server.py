@@ -130,6 +130,13 @@ def _resolve_cfg_path(site: str, rucio_cfg_override: Path | None) -> Path:
     if rucio_cfg_override is not None:
         return rucio_cfg_override
     if site in PRESETS:
+        env_cfg = os.environ.get("RUCIO_CONFIG")
+        if env_cfg:
+            sys.stderr.write(
+                f"[rucio-mcp] WARNING: RUCIO_CONFIG={env_cfg!r} is set but the bundled "
+                f"preset for site {site!r} takes precedence and will be used instead.\n"
+                "    Pass --rucio-cfg <path> to use your own rucio.cfg.\n"
+            )
         return _bundled_cfg_path(site)
     env_cfg = os.environ.get("RUCIO_CONFIG")
     if env_cfg:
@@ -860,7 +867,20 @@ def serve(
     if sites is None:
         sites = ["escape"]
 
+    if shared_secret and transport == "stdio":
+        sys.stderr.write(
+            "[rucio-mcp] Error: --shared-secret requires --transport http "
+            "(it is ignored by stdio transport).\n"
+        )
+        sys.exit(1)
+
     if transport == "stdio":
+        if len(sites) > 1:
+            sys.stderr.write(
+                "[rucio-mcp] Error: stdio transport serves a single site; "
+                "specify exactly one --site.\n"
+            )
+            sys.exit(1)
         cfg_path = _resolve_cfg_path(sites[0], rucio_cfg)
         _preflight_check(cfg_path, auth_type_override=auth_type)
         _make_stdio_mcp(read_only=read_only, site_name=sites[0]).run(transport="stdio")
@@ -869,6 +889,10 @@ def serve(
     # HTTP transport, shared-secret mode: serve one pre-authenticated env client
     # (e.g. x509) behind a static bearer. Distinct from the OIDC bridge below.
     if shared_secret:
+        sys.stderr.write(
+            "[rucio-mcp] NOTICE: shared-secret HTTP mode is active — the OAuth/OIDC "
+            "bridge is disabled and all access is gated by a single static bearer.\n"
+        )
         if len(sites) > 1:
             sys.stderr.write(
                 "[rucio-mcp] Error: shared-secret mode serves a single "
@@ -912,6 +936,11 @@ def serve(
     cfg_overrides: dict[str, Path] = {}
     if rucio_cfg is not None and len(sites) == 1:
         cfg_overrides[sites[0]] = rucio_cfg
+    elif rucio_cfg is not None:
+        sys.stderr.write(
+            "[rucio-mcp] WARNING: --rucio-cfg is ignored when serving multiple sites; "
+            "each site uses its bundled preset.\n"
+        )
 
     app = _make_http_app(
         sites=sites,
