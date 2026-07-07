@@ -117,8 +117,10 @@ serviceAccount:
   annotations: {}
 
 serviceMonitor:
-  # Requires the Prometheus Operator CRDs.
-  enabled: true
+  # Requires the Prometheus Operator CRDs; off by default so a stock cluster
+  # without them can still install the chart. Enable explicitly once the CRDs
+  # are present.
+  enabled: false
   interval: 30s
 
 grafanaDashboard:
@@ -152,3 +154,26 @@ podLabels: {}
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+# -- Pod-level securityContext (rendered as-is via toYaml). Empty by default;
+# add fields like `fsGroup` here if your cluster requires them.
+podSecurityContext: {}
+
+# -- Container-level securityContext (rendered as-is via toYaml), applied to
+# both the pixi-install init container and the main container. Defaults are
+# safe no-ops for this workload: the init container runs `pixi install` and
+# the main container runs `pixi shell-hook` against /workspace (an emptyDir),
+# both of which currently expect to run as the image's default user (root) and
+# may write outside /workspace (e.g. pixi/conda caches under $HOME). Do NOT
+# default `runAsNonRoot: true` or `readOnlyRootFilesystem: true` without first
+# verifying the pixi image + install flow tolerates them.
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+  # Stricter options to consider once verified against your pixi image/setup:
+  # runAsNonRoot: true
+  # readOnlyRootFilesystem: true
