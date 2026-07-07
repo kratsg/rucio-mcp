@@ -29,3 +29,9 @@ class TestSharedSecretVerifier:
         verifier = SharedSecretVerifier("s3cr3t")
 
         assert await verifier.verify_token("") is None
+
+    async def test_non_ascii_token_returns_none_without_raising(self) -> None:
+        """Non-ASCII bearer must be rejected, not raise TypeError (→ HTTP 500)."""
+        verifier = SharedSecretVerifier("s3cr3t")
+
+        assert await verifier.verify_token("ü") is None

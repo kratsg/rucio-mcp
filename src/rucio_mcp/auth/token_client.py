@@ -47,7 +47,7 @@ class TokenInjectedClient(Client):
         _log.warning(
             "__get_token called — Rucio returned 401 for bearer prefix=%s…; "
             "token is expired or rejected",
-            self._injected_bearer[:12],
+            self._injected_bearer[:8],
         )
         msg = (
             "Bearer token expired or rejected by Rucio. "
