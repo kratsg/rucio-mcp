@@ -21,6 +21,7 @@ from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 from prometheus_client import REGISTRY
 from pydantic import AnyUrl
 
+from rucio_mcp.auth import bridge_provider as _bp
 from rucio_mcp.auth.bridge_provider import (
     _DEFAULT_EXPIRES_IN,
     BridgePoller,
@@ -244,9 +245,60 @@ class TestClientRegistry:
             finally:
                 _authorize_redirect_uri.reset(token)
 
-        with provider._clients_lock:
-            cached = provider._clients[cimd_id]
+        cached = provider._cache_get(cimd_id)
+        assert cached is not None
         assert [str(u) for u in (cached.redirect_uris or [])] == declared
+
+    async def test_token_leg_returns_cached_client_unchanged(
+        self, provider: RucioBridgeProvider
+    ) -> None:
+        """With the contextvar unset (/token leg) the cached client is returned as-is."""
+        cimd_id = "https://claude.ai/.well-known/oauth-client"
+        resolved = OAuthClientInformationFull(
+            client_id=cimd_id,
+            redirect_uris=[AnyUrl("http://localhost:1234/callback")],
+            token_endpoint_auth_method="none",
+        )
+        with patch(f"{_MODULE}.resolve_cimd_client", AsyncMock(return_value=resolved)):
+            tok = _authorize_redirect_uri.set("http://localhost:1234/callback")
+            try:
+                await provider.get_client(cimd_id)
+            finally:
+                _authorize_redirect_uri.reset(tok)
+            # /token leg: no contextvar → identical cached object.
+            assert await provider.get_client(cimd_id) is resolved
+
+
+class TestCimdClientCache:
+    """The resolved-CIMD-client cache is TTL- and size-bounded (issue #44)."""
+
+    def _client(self, cid: str) -> OAuthClientInformationFull:
+        return OAuthClientInformationFull(
+            client_id=cid,
+            redirect_uris=[AnyUrl("http://localhost/callback")],
+            token_endpoint_auth_method="none",
+        )
+
+    def test_expired_entry_evicted(self, provider: RucioBridgeProvider) -> None:
+        cid = "https://claude.ai/a"
+        provider._cache_put(cid, self._client(cid))
+        assert provider._cache_get(cid) is not None
+        # Force expiry by rewriting the stored deadline into the past.
+        client, _ = provider._clients[cid]
+        provider._clients[cid] = (client, time.time() - 1)
+        assert provider._cache_get(cid) is None
+        assert cid not in provider._clients
+
+    def test_size_cap_evicts_oldest(
+        self, provider: RucioBridgeProvider, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(_bp, "_CIMD_CACHE_MAX", 2)
+        for name in ("a", "b", "c"):
+            cid = f"https://claude.ai/{name}"
+            provider._cache_put(cid, self._client(cid))
+        assert provider._cache_get("https://claude.ai/a") is None  # oldest evicted
+        assert provider._cache_get("https://claude.ai/b") is not None
+        assert provider._cache_get("https://claude.ai/c") is not None
 
 
 class TestAuthorize:
@@ -485,6 +537,31 @@ class TestExchangeAuthorizationCode:
         )
         with pytest.raises(TokenError):
             await provider.exchange_authorization_code(client_info, auth_code)
+
+    async def test_authorization_code_is_single_use(
+        self, provider: RucioBridgeProvider, client_info: OAuthClientInformationFull
+    ) -> None:
+        """OAuth 2.1: a replayed /token request with the same code must fail."""
+        session = _make_session("s-once")
+        provider.store.put(session)
+        provider.store.mark_done(
+            "s-once", rucio_token="rucio-tok", auth_code="once-code"
+        )
+        auth_code = AuthorizationCode(
+            code="once-code",
+            scopes=["openid"],
+            expires_at=time.time() + 300,
+            client_id="mcp-client-abc",
+            code_challenge="challenge-abc",
+            redirect_uri=AnyUrl("http://localhost:1234/callback"),
+            redirect_uri_provided_explicitly=True,
+        )
+        first = await provider.exchange_authorization_code(client_info, auth_code)
+        assert first.access_token == "rucio-tok"
+        # Second exchange with the captured code must be rejected.
+        with pytest.raises(TokenError) as exc_info:
+            await provider.exchange_authorization_code(client_info, auth_code)
+        assert exc_info.value.error == "invalid_grant"
 
 
 class TestLoadAccessToken:

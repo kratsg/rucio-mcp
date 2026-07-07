@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import socket
 from typing import Any
+from unittest.mock import patch
 
 import httpx
 import pytest
@@ -98,16 +99,16 @@ class TestRedirectUriMatches:
 
 
 class TestAssertSafeUrl:
-    def test_public_ip_literal_ok(self) -> None:
-        assert_safe_url(_CLIENT_URL)  # no raise
+    async def test_public_ip_literal_ok(self) -> None:
+        await assert_safe_url(_CLIENT_URL)  # no raise
 
-    def test_http_rejected(self) -> None:
+    async def test_http_rejected(self) -> None:
         with pytest.raises(CimdError, match="https"):
-            assert_safe_url("http://example.com/client")
+            await assert_safe_url("http://example.com/client")
 
-    def test_no_host_rejected(self) -> None:
+    async def test_no_host_rejected(self) -> None:
         with pytest.raises(CimdError):
-            assert_safe_url("https:///client")
+            await assert_safe_url("https:///client")
 
     @pytest.mark.parametrize(
         "url",
@@ -119,22 +120,32 @@ class TestAssertSafeUrl:
             "https://[::1]/client",
         ],
     )
-    def test_private_ip_literal_rejected(self, url: str) -> None:
+    async def test_private_ip_literal_rejected(self, url: str) -> None:
         with pytest.raises(CimdError, match=r"public|address"):
-            assert_safe_url(url)
+            await assert_safe_url(url)
 
-    def test_hostname_resolving_to_private_rejected(self) -> None:
+    async def test_hostname_resolving_to_private_rejected(self) -> None:
         def resolver(*_args: object, **_kwargs: object) -> list[Any]:
             return [(socket.AF_INET, None, None, "", ("10.1.2.3", 443))]
 
         with pytest.raises(CimdError, match=r"non-public|resolves"):
-            assert_safe_url("https://evil.example.com/client", resolver=resolver)
+            await assert_safe_url("https://evil.example.com/client", resolver=resolver)
 
-    def test_hostname_resolving_to_public_ok(self) -> None:
+    async def test_hostname_resolving_to_public_ok(self) -> None:
         def resolver(*_args: object, **_kwargs: object) -> list[Any]:
             return [(socket.AF_INET, None, None, "", ("93.184.216.34", 443))]
 
-        assert_safe_url("https://example.com/client", resolver=resolver)
+        await assert_safe_url("https://example.com/client", resolver=resolver)
+
+    async def test_default_resolver_uses_event_loop(self) -> None:
+        # With no injected resolver, resolution is offloaded to the running loop
+        # so a slow OS resolver cannot block the event loop.
+        async def fake_getaddrinfo(*_args: object, **_kwargs: object) -> list[Any]:
+            return [(socket.AF_INET, None, None, "", ("93.184.216.34", 443))]
+
+        with patch("asyncio.get_running_loop") as get_loop:
+            get_loop.return_value.getaddrinfo = fake_getaddrinfo
+            await assert_safe_url("https://example.com/client")
 
 
 class TestFetchClientDocument:
