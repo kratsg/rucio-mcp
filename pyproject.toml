@@ -33,6 +33,10 @@ dependencies = [
   "httpx2>=2.0.0",
   "mcp>=1.10",
   "prometheus-client>=0.20",
+  "pydantic>=2.11",
+  "rucio-clients>=35.0",
+  "starlette>=0.27",
+  "uvicorn>=0.31.1",
 ]
 
 [project.scripts]

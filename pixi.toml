@@ -48,7 +48,7 @@ python = "<3.15,>=3.14"
 
 [feature.test.dependencies]
 pytest = ">=9"
-pytest-cov = ">=3"
+pytest-cov = ">=7"
 pytest-asyncio = ">=0.24"
 
 [feature.test.tasks]
