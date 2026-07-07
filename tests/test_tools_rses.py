@@ -213,12 +213,16 @@ class TestRucioGetRseLimits:
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
-        mock_rucio_client.get_rse_limits.return_value = iter(
-            [{"name": "MaxBeingDeletedFiles", "value": 100}]
-        )
+        # RSEClient.get_rse_limits returns a single {name: value} dict, not an
+        # iterator of {"name": ..., "value": ...} entries.
+        mock_rucio_client.get_rse_limits.return_value = {
+            "MaxBeingDeletedFiles": 100,
+            "MinFreeSpace": 2000,
+        }
         fn = registered_tools["rucio_get_rse_limits"]
         result = await fn("CERN-PROD_DATADISK", ctx=mock_ctx)
         assert "MaxBeingDeletedFiles" in result
+        assert "100" in result  # the value must survive, not just the key
 
     async def test_empty_limits(
         self,
@@ -226,7 +230,7 @@ class TestRucioGetRseLimits:
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
-        mock_rucio_client.get_rse_limits.return_value = iter([])
+        mock_rucio_client.get_rse_limits.return_value = {}
         fn = registered_tools["rucio_get_rse_limits"]
         result = await fn("CERN-PROD_DATADISK", ctx=mock_ctx)
         assert "No limits" in result
@@ -258,6 +262,25 @@ class TestRucioGetRseProtocols:
         fn = registered_tools["rucio_get_rse_protocols"]
         result = await fn("CERN-PROD_DATADISK", ctx=mock_ctx)
         assert "root" in result
+
+    async def test_returns_protocols_list(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        # rucio 39.x get_protocols returns a JSON list of protocol dicts.
+        mock_rucio_client.get_protocols.return_value = [
+            {"scheme": "root", "hostname": "eosatlas.cern.ch", "port": 1094},
+            {"scheme": "davs", "hostname": "eosatlas.cern.ch", "port": 443},
+        ]
+        fn = registered_tools["rucio_get_rse_protocols"]
+        result = await fn("CERN-PROD_DATADISK", ctx=mock_ctx)
+        assert "root" in result
+        assert "davs" in result
+        assert "eosatlas.cern.ch" in result
+        # not a raw Python repr of the list
+        assert "[{" not in result
 
     async def test_error_on_exception(
         self,
