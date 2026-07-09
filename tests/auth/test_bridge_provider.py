@@ -141,22 +141,24 @@ class TestClientRegistry:
     async def test_cimd_passes_authorize_redirect_uri(
         self, provider: RucioBridgeProvider
     ) -> None:
-        """The /authorize redirect_uri contextvar is forwarded to CIMD resolution."""
+        """The /authorize redirect_uri contextvar is applied to the resolved client."""
         cimd_id = "https://claude.ai/.well-known/oauth-client"
         requested = "http://localhost:51763/callback"
         resolved = OAuthClientInformationFull(
             client_id=cimd_id,
-            redirect_uris=[AnyUrl(requested)],
+            redirect_uris=[AnyUrl("http://localhost/callback")],
             token_endpoint_auth_method="none",
         )
-        mock_resolve = AsyncMock(return_value=resolved)
         token = _authorize_redirect_uri.set(requested)
         try:
-            with patch(f"{_MODULE}.resolve_cimd_client", mock_resolve):
-                await provider.get_client(cimd_id)
+            with patch(
+                f"{_MODULE}.resolve_cimd_client", AsyncMock(return_value=resolved)
+            ):
+                client = await provider.get_client(cimd_id)
         finally:
             _authorize_redirect_uri.reset(token)
-        mock_resolve.assert_awaited_once_with(cimd_id, requested)
+        assert client is not None
+        client.validate_redirect_uri(AnyUrl(requested))
 
     async def test_cimd_resolution_failure_returns_none(
         self, provider: RucioBridgeProvider
@@ -169,6 +171,82 @@ class TestClientRegistry:
         ):
             result = await provider.get_client(cimd_id)
         assert result is None
+
+    async def test_cimd_second_authorize_with_new_ephemeral_port(
+        self, provider: RucioBridgeProvider
+    ) -> None:
+        """Re-auth with a fresh loopback port must validate against the cached client.
+
+        Claude Code binds a new ephemeral localhost port on every auth attempt
+        (RFC 8252 §7.3); the client cached during the first /authorize must not
+        pin the first attempt's port.  Regression test for the second-auth
+        ``invalid_request: Redirect URI not registered for client``.
+        """
+        cimd_id = "https://claude.ai/oauth/claude-code-client-metadata"
+        doc = {
+            "client_id": cimd_id,
+            "redirect_uris": [
+                "http://localhost/callback",
+                "http://127.0.0.1/callback",
+            ],
+            "token_endpoint_auth_method": "none",
+            "grant_types": ["authorization_code", "refresh_token"],
+        }
+        with (
+            patch("rucio_mcp.auth.cimd.assert_safe_url"),
+            patch(
+                "rucio_mcp.auth.cimd.fetch_client_document",
+                AsyncMock(return_value=doc),
+            ),
+        ):
+            token = _authorize_redirect_uri.set("http://localhost:54321/callback")
+            try:
+                first = await provider.get_client(cimd_id)
+            finally:
+                _authorize_redirect_uri.reset(token)
+            token = _authorize_redirect_uri.set("http://localhost:55985/callback")
+            try:
+                second = await provider.get_client(cimd_id)
+            finally:
+                _authorize_redirect_uri.reset(token)
+
+        assert first is not None
+        assert second is not None
+        # The SDK's exact-match gate must accept each attempt's own port.
+        first.validate_redirect_uri(AnyUrl("http://localhost:54321/callback"))
+        second.validate_redirect_uri(AnyUrl("http://localhost:55985/callback"))
+
+    async def test_cimd_cache_stores_canonical_client(
+        self, provider: RucioBridgeProvider
+    ) -> None:
+        """The cached CIMD client holds only the document's declared redirect URIs.
+
+        Per-request ephemeral ports are appended to a copy, never stored, so the
+        cache neither pins the first port nor accumulates one entry per attempt.
+        """
+        cimd_id = "https://claude.ai/oauth/claude-code-client-metadata"
+        declared = ["http://localhost/callback", "http://127.0.0.1/callback"]
+        doc = {
+            "client_id": cimd_id,
+            "redirect_uris": declared,
+            "token_endpoint_auth_method": "none",
+        }
+        with (
+            patch("rucio_mcp.auth.cimd.assert_safe_url"),
+            patch(
+                "rucio_mcp.auth.cimd.fetch_client_document",
+                AsyncMock(return_value=doc),
+            ),
+        ):
+            token = _authorize_redirect_uri.set("http://localhost:54321/callback")
+            try:
+                await provider.get_client(cimd_id)
+            finally:
+                _authorize_redirect_uri.reset(token)
+
+        with provider._clients_lock:
+            cached = provider._clients[cimd_id]
+        assert [str(u) for u in (cached.redirect_uris or [])] == declared
 
 
 class TestAuthorize:
