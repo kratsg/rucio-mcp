@@ -7,24 +7,13 @@ from typing import Any
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
 from rucio_mcp.tools._helpers import (
+    RULE_LIST_KEYS,
     build_hints,
     classify_error,
     format_list,
     get_rucio_client,
     paginate_iter,
 )
-
-_RULE_LIST_KEYS = [
-    "id",
-    "state",
-    "rse_expression",
-    "account",
-    "copies",
-    "expires_at",
-    "locks_ok_cnt",
-    "locks_replicating_cnt",
-    "locks_stuck_cnt",
-]
 
 
 def register(mcp: FastMCP) -> None:
@@ -102,4 +91,4 @@ def register(mcp: FastMCP) -> None:
         hints = build_hints(
             ["Use `rucio_get_replication_rule <rule_id>` to see full details of a rule"]
         )
-        return format_list(results, include_keys=_RULE_LIST_KEYS) + footer + hints
+        return format_list(results, include_keys=RULE_LIST_KEYS) + footer + hints

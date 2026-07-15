@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -64,6 +65,16 @@ def _extract_request_auth(
     return session_id, bearer, account
 
 
+def _cache_key(session_id: str, bearer: str) -> str:
+    """Bind a cache entry to both the session id and the bearer it was built for.
+
+    A bare session id is a routing identifier that leaks into logs/proxies;
+    hashing the bearer into the key prevents it from acting as a credential.
+    """
+    bearer_hash = hashlib.sha256(bearer.encode()).hexdigest()[:16]
+    return f"{session_id}:{bearer_hash}"
+
+
 class BearerTokenClientFactory(RucioClientFactory):
     """HTTP-mode factory: builds and caches one TokenInjectedClient per MCP session.
 
@@ -77,16 +88,25 @@ class BearerTokenClientFactory(RucioClientFactory):
         self._cfg = cfg
 
     def get_client(self, ctx: Any) -> Client:
-        """Return a cached or newly built TokenInjectedClient for this session."""
+        """Return a cached or newly built TokenInjectedClient for this session.
+
+        The cache key binds the session id to a hash of the bearer, so a
+        stale/guessed session id paired with a different bearer never
+        returns another caller's client, and a session that re-authenticates
+        with a fresh bearer rebuilds rather than reusing the stale token.
+        Requests without a session id (e.g. stateless mode) are never
+        cached, to avoid sharing a client across unrelated callers.
+        """
         session_id, bearer, account = _extract_request_auth(
             ctx, default_account=self._cfg.account
         )
         _log.debug(
             "get_client session=%s…, bearer prefix=%s…",
             session_id[:8] if session_id else "(none)",
-            bearer[:12],
+            bearer[:8],
         )
-        cached = self._cache.get(session_id)
+        cache_key = _cache_key(session_id, bearer) if session_id else None
+        cached = self._cache.get(cache_key) if cache_key else None
         if cached is not None:
             _log.debug("get_client cache HIT for session=%s…", session_id[:8])
             return cached
@@ -101,7 +121,8 @@ class BearerTokenClientFactory(RucioClientFactory):
             auth_host=self._cfg.auth_host,
             auth_type=self._cfg.auth_type,
         )
-        self._cache.put(session_id, client, time.time() + 300)
+        if cache_key:
+            self._cache.put(cache_key, client, time.time() + 300)
         return client
 
     def close(self) -> None:

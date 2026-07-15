@@ -71,12 +71,31 @@ class BridgeStateStore:
             return self._by_session.get(session_id)
 
     def get_by_auth_code(self, auth_code: str) -> BridgeSession | None:
-        """Return the session associated with *auth_code*, or ``None``."""
+        """Return the session associated with *auth_code*, or ``None`` if expired."""
         with self._lock:
             session_id = self._by_code.get(auth_code)
             if session_id is None:
                 return None
-            return self._by_session.get(session_id)
+            session = self._by_session.get(session_id)
+            if session is not None and session.expires_at <= time.time():
+                # Defence in depth: the SDK's code handler also checks expiry.
+                self._by_session.pop(session_id, None)
+                self._by_code.pop(auth_code, None)
+                return None
+            return session
+
+    def pop_by_auth_code(self, auth_code: str) -> BridgeSession | None:
+        """Atomically remove and return the session for *auth_code*.
+
+        Enforces single-use authorization codes (OAuth 2.1): once exchanged the
+        code and its session are gone, so a replayed ``/token`` request fails.
+        Returns ``None`` if the code is unknown or already consumed.
+        """
+        with self._lock:
+            session_id = self._by_code.pop(auth_code, None)
+            if session_id is None:
+                return None
+            return self._by_session.pop(session_id, None)
 
     def mark_done(self, session_id: str, *, rucio_token: str, auth_code: str) -> None:
         """Transition *session_id* to ``done`` and register the auth code index."""

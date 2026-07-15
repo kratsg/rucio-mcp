@@ -10,7 +10,7 @@ from mcp.server.fastmcp import FastMCP
 from rucio_mcp.tools.replicas import register
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable, Callable, Iterator
     from unittest.mock import MagicMock
 
 
@@ -71,6 +71,34 @@ class TestRucioListReplicas:
         await fn("mc16_13TeV:file1", protocols="root,https", ctx=mock_ctx)
         kwargs = mock_rucio_client.list_replicas.call_args[1]
         assert kwargs["schemes"] == ["root", "https"]
+
+    async def test_all_states_maps_to_all_states_kwarg(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_replicas.return_value = iter([])
+        fn = registered_tools["rucio_list_replicas"]
+        await fn("mc16_13TeV:file1", all_states=True, ctx=mock_ctx)
+        kwargs = mock_rucio_client.list_replicas.call_args[1]
+        # all_states controls state filtering; ignore_availability is a
+        # separate rucio parameter and must not be conflated with it.
+        assert kwargs["all_states"] is True
+        assert "ignore_availability" not in kwargs
+
+    async def test_all_states_default_false(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_replicas.return_value = iter([])
+        fn = registered_tools["rucio_list_replicas"]
+        await fn("mc16_13TeV:file1", ctx=mock_ctx)
+        kwargs = mock_rucio_client.list_replicas.call_args[1]
+        assert kwargs["all_states"] is False
+        assert "ignore_availability" not in kwargs
 
     async def test_invalid_did(
         self,
@@ -162,6 +190,27 @@ class TestRucioListDatasetReplicas:
         fn = registered_tools["rucio_list_dataset_replicas"]
         await fn("mc16_13TeV:some.container", ctx=mock_ctx)
         mock_rucio_client.list_content.assert_not_called()
+
+    async def test_does_not_materialize_full_iterator(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        """Regression: pass the client iterator straight to paginate_iter
+        instead of list()-ing all RSE rows up front."""
+        consumed = 0
+
+        def _huge_replicas() -> Iterator[dict[str, str]]:
+            nonlocal consumed
+            for i in range(100_000):
+                consumed += 1
+                yield {"rse": f"RSE{i}", "state": "AVAILABLE"}
+
+        mock_rucio_client.list_dataset_replicas.return_value = _huge_replicas()
+        fn = registered_tools["rucio_list_dataset_replicas"]
+        await fn("mc16_13TeV:some.dataset", limit=2, ctx=mock_ctx)
+        assert consumed <= 3  # offset(0) + limit(2) + 1
 
 
 class TestRucioListContainerReplicas:
@@ -263,3 +312,44 @@ class TestRucioListContainerReplicas:
         fn = registered_tools["rucio_list_container_replicas"]
         result = await fn("mc16_13TeV:some.container", ctx=mock_ctx)
         assert "rucio_list_did_rules" in result
+
+    async def test_stops_early_once_page_is_filled(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        """Regression: a container with huge numbers of child datasets must
+        not trigger a list_dataset_replicas call (an HTTP round-trip) per
+        child up front — the walk should stop once the page is filled."""
+        consumed_children = 0
+        replica_calls = 0
+
+        def _children() -> Iterator[dict[str, str]]:
+            nonlocal consumed_children
+            for i in range(100_000):
+                consumed_children += 1
+                yield {"scope": "mc16_13TeV", "name": f"child{i}", "type": "DATASET"}
+
+        def _dataset_replicas(
+            scope: str, name: str, deep: bool = False
+        ) -> Iterator[dict[str, object]]:
+            nonlocal replica_calls
+            replica_calls += 1
+            return iter(
+                [
+                    {
+                        "rse": f"RSE-{scope}-{name}-{deep}",
+                        "available_bytes": 1,
+                        "available_length": 1,
+                        "state": "AVAILABLE",
+                    }
+                ]
+            )
+
+        mock_rucio_client.list_content.return_value = _children()
+        mock_rucio_client.list_dataset_replicas.side_effect = _dataset_replicas
+        fn = registered_tools["rucio_list_container_replicas"]
+        await fn("mc16_13TeV:big.container", limit=2, ctx=mock_ctx)
+        assert consumed_children <= 3  # offset(0) + limit(2) + 1
+        assert replica_calls <= 3

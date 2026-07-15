@@ -30,9 +30,13 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
-  "httpx>=0.27",
+  "httpx2>=2.0.0",
   "mcp>=1.10",
   "prometheus-client>=0.20",
+  "pydantic>=2.11",
+  "rucio-clients>=35.0",
+  "starlette>=0.27",
+  "uvicorn>=0.31.1",
 ]
 
 [project.scripts]
@@ -67,17 +71,9 @@ build.hooks.vcs.version-file = "src/rucio_mcp/_version.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/rucio_mcp"]
 
-[tool.hatch.envs.default]
-dependency-groups = ["dev"]
-
-[tool.hatch.envs.hatch-test]
-dependency-groups = ["test"]
-env-vars.PYTHONWARNDEFAULTENCODING = "1"
-
-
 [tool.pytest]
 minversion = "9.0"
-addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config", "--doctest-glob=docs/*.rst"]
+addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
 strict = true
 filterwarnings = [
   "error",

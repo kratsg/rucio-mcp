@@ -215,6 +215,56 @@ class TestPollForToken:
                 interval=0.01,
             )
 
+    async def test_fails_fast_on_4xx(self, poller: RucioOidcPoller) -> None:
+        """A hard client error (e.g. expired request) must raise, not retry."""
+        mock = _mock_client(get_side_effect=[_response(400)])
+
+        with (
+            patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock),
+            pytest.raises(RuntimeError, match="400"),
+        ):
+            await poller.poll_for_token(
+                "https://rucio-auth.example.com/auth/oidc_redirect?state=xyz_polling",
+                timeout=5.0,
+                interval=0.0,
+            )
+        # Exactly one request — no retry loop on the 4xx.
+        assert mock.get.call_count == 1
+
+    async def test_retries_on_5xx_then_succeeds(self, poller: RucioOidcPoller) -> None:
+        responses = [
+            _response(503),
+            _response(200, {"X-Rucio-Auth-Token": "tok"}),
+        ]
+        mock = _mock_client(get_side_effect=responses)
+
+        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
+            token = await poller.poll_for_token(
+                "https://rucio-auth.example.com/auth/oidc_redirect?state=xyz",
+                timeout=5.0,
+                interval=0.0,
+            )
+
+        assert token == "tok"
+        assert mock.get.call_count == 2
+
+    async def test_retries_on_network_error(self, poller: RucioOidcPoller) -> None:
+        responses = [
+            httpx.ConnectError("boom"),
+            _response(200, {"X-Rucio-Auth-Token": "tok"}),
+        ]
+        mock = _mock_client(get_side_effect=responses)
+
+        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
+            token = await poller.poll_for_token(
+                "https://rucio-auth.example.com/auth/oidc_redirect?state=xyz",
+                timeout=5.0,
+                interval=0.0,
+            )
+
+        assert token == "tok"
+        assert mock.get.call_count == 2
+
     async def test_fetch_token_header_sent(self, poller: RucioOidcPoller) -> None:
         seen_kwargs: list[dict[str, Any]] = []
 

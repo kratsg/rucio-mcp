@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import itertools
-from typing import Any, TypeVar
+from typing import Any
 
 from rucio.common.exception import RucioException
 from rucio.common.utils import extract_scope
 
 from rucio_mcp.metrics import TOOL_ERRORS, current_tool_labels
-
-T = TypeVar("T")
 
 
 def parse_did(did: str) -> tuple[str, str]:
@@ -67,33 +65,6 @@ def human_bytes(n: float | None) -> str:
             return f"-{result}" if negative else result
         n /= 1024
     return f"{n:.2f} PB"  # unreachable but satisfies type checker
-
-
-def paginate(
-    items: list[T],
-    limit: int,
-    offset: int = 0,
-) -> tuple[list[T], str]:
-    """Truncate a list to a page window and generate a pagination footer.
-
-    Args:
-        items: The full list of items (already offset+limit sliced from source).
-        limit: Maximum number of items to return per page.
-        offset: Starting index (for footer display only).
-
-    Returns:
-        A tuple of ``(page_items, footer_text)``. ``footer_text`` is empty if
-        all items fit within ``limit``.
-    """
-    if len(items) <= limit:
-        return items, ""
-    page = items[:limit]
-    shown = offset + limit
-    footer = (
-        f"\n\n---\nShowing {limit} results (offset={offset}). "
-        f"Pass `offset={shown}` to see more."
-    )
-    return page, footer
 
 
 def paginate_iter(
@@ -252,6 +223,20 @@ def check_write_allowed(lifespan_context: dict[str, Any]) -> str | None:
     if lifespan_context.get("read_only"):
         return _READ_ONLY_ERROR
     return None
+
+
+# Columns shared by the rule-list renderers in rules.py and subscriptions.py.
+RULE_LIST_KEYS: list[str] = [
+    "id",
+    "state",
+    "rse_expression",
+    "account",
+    "copies",
+    "expires_at",
+    "locks_ok_cnt",
+    "locks_replicating_cnt",
+    "locks_stuck_cnt",
+]
 
 
 # Fields whose values should be treated as byte counts for humanization.
