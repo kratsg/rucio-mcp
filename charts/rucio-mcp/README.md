@@ -42,17 +42,17 @@ helm install rucio-mcp ./charts/rucio-mcp \
 
 ## Key values
 
-| Key                        | Default                      | Description                                                     |
-| -------------------------- | ---------------------------- | --------------------------------------------------------------- |
-| `auth.mode`                | `oidc`                       | `oidc` or `sharedSecret`                                        |
-| `auth.sites`               | `[atlas, cms, dune, escape]` | Sites to serve; exactly one in `sharedSecret` mode              |
-| `rucioMcp.version`         | `0.6.0`                      | rucio-mcp release pinned into `pixi.toml`                       |
-| `rucioMcp.pixiLockContent` | `""`                         | Frozen `pixi.lock` for reproducible installs (`--set-file`)     |
-| `readOnly`                 | `true`                       | Disable write tools                                             |
-| `server.resourceUrl`       | `""`                         | Public URL; derived from `ingress.host` in `oidc` mode if empty |
-| `ingress.host`             | `""`                         | External hostname (required when `ingress.enabled`)             |
-| `serviceMonitor.enabled`   | `true`                       | Create a Prometheus-Operator `ServiceMonitor`                   |
-| `grafanaDashboard.enabled` | `false`                      | Ship the Grafana dashboard ConfigMap                            |
+| Key                        | Default                      | Description                                                       |
+| -------------------------- | ---------------------------- | ----------------------------------------------------------------- |
+| `auth.mode`                | `oidc`                       | `oidc` or `sharedSecret`                                          |
+| `auth.sites`               | `[atlas, cms, dune, escape]` | Sites to serve; exactly one in `sharedSecret` mode                |
+| `rucioMcp.version`         | `0.6.0`                      | rucio-mcp release pinned into `pixi.toml`                         |
+| `rucioMcp.pixiLockContent` | `""`                         | Frozen `pixi.lock` for reproducible installs (`--set-file`)       |
+| `readOnly`                 | `true`                       | Disable write tools                                               |
+| `server.resourceUrl`       | `""`                         | Public URL; derived from `ingress.host` in `oidc` mode if empty   |
+| `ingress.host`             | `""`                         | External hostname (required when `ingress.enabled`)               |
+| `serviceMonitor.enabled`   | `false`                      | Create a Prometheus-Operator `ServiceMonitor` (requires its CRDs) |
+| `grafanaDashboard.enabled` | `false`                      | Ship the Grafana dashboard ConfigMap                              |
 
 See [`values.yaml`](values.yaml) for the full, documented set.
 

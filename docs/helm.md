@@ -29,7 +29,7 @@ conda-forge into a shared volume; the main container then runs
   default). Defaults assume `nginx` + a `letsencrypt-prod` ClusterIssuer.
 - The
   [Prometheus Operator](https://github.com/prometheus-operator/prometheus-operator)
-  CRDs if `serviceMonitor.enabled` (the default) — otherwise set it to `false`.
+  CRDs, only if you enable `serviceMonitor.enabled` (off by default).
 
 ## OIDC bridge mode (multi-user)
 
@@ -115,8 +115,8 @@ kubectl -n mcp get secret rucio-mcp-shared-secret \
 
 ## Monitoring
 
-- `serviceMonitor.enabled` (default `true`) creates a `ServiceMonitor` scraping
-  `/metrics` on the metrics port.
+- `serviceMonitor.enabled` (default `false`, requires the Prometheus Operator
+  CRDs) creates a `ServiceMonitor` scraping `/metrics` on the metrics port.
 - `grafanaDashboard.enabled` ships the bundled dashboard as a ConfigMap labelled
   for the Grafana sidecar. Set `grafanaDashboard.namespace` to the namespace
   your Grafana watches if it differs from the release namespace:
@@ -126,6 +126,17 @@ helm upgrade rucio-mcp ./charts/rucio-mcp --reuse-values \
   --set grafanaDashboard.enabled=true \
   --set grafanaDashboard.namespace=prom
 ```
+
+## Security context
+
+`podSecurityContext` and `securityContext` (applied to both the init container
+and the main container) are rendered as-is via `toYaml`. The defaults drop all
+Linux capabilities and disable privilege escalation, but stop short of
+`runAsNonRoot`/`readOnlyRootFilesystem`: the init container installs packages
+with `pixi install` and the main container runs `pixi shell-hook`, both of which
+currently expect the pixi image's default (root) user and may write outside the
+`/workspace` emptyDir. See the commented-out suggestions in `values.yaml` if
+you've verified your pixi image tolerates a stricter profile.
 
 ## Freezing the deployed version
 
