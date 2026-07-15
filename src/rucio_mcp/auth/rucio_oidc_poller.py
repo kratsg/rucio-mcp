@@ -118,13 +118,29 @@ class RucioOidcPoller:
             async with httpx.AsyncClient(timeout=30.0, verify=_ssl_context()) as client:
                 while True:
                     attempt += 1
-                    response = await client.get(polling_url, headers=headers)
+                    try:
+                        response = await client.get(polling_url, headers=headers)
+                    except httpx.HTTPError as exc:
+                        # Transient network failure — keep polling until timeout.
+                        _log.debug("Poll %d: network error, retrying: %s", attempt, exc)
+                        await asyncio.sleep(interval)
+                        continue
                     token: str | None = response.headers.get("X-Rucio-Auth-Token")
                     if response.status_code == 200 and token:
                         _log.info(
                             "Rucio session token received after %d poll(s)", attempt
                         )
                         return token
+                    if 400 <= response.status_code < 500:
+                        # A hard client error (expired/invalid request) will never
+                        # resolve — fail fast so the real reason surfaces instead of
+                        # a generic timeout after the full polling window.
+                        msg = (
+                            f"Rucio auth polling failed with HTTP "
+                            f"{response.status_code}"
+                        )
+                        raise RuntimeError(msg)
+                    # 200-without-token (still pending) or 5xx — keep polling.
                     _log.debug(
                         "Poll %d: no token yet (status=%d)",
                         attempt,

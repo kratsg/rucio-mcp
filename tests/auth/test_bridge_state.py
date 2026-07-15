@@ -107,6 +107,30 @@ class TestBridgeStateStore:
         store.put(_make_session("s2"))
         assert store.get_by_auth_code("code-xyz") is None
 
+    def test_get_by_auth_code_returns_none_when_expired(self) -> None:
+        store = BridgeStateStore()
+        s = _make_session("s1", expires_at=time.time() + 300)
+        store.put(s)
+        store.mark_done("s1", rucio_token="tok", auth_code="code-1")
+        s.expires_at = time.time() - 1  # expire in place
+        assert store.get_by_auth_code("code-1") is None
+
+    def test_pop_by_auth_code_is_single_use(self) -> None:
+        store = BridgeStateStore()
+        store.put(_make_session("s1"))
+        store.mark_done("s1", rucio_token="tok", auth_code="code-1")
+        popped = store.pop_by_auth_code("code-1")
+        assert popped is not None
+        assert popped.session_id == "s1"
+        # Second pop finds nothing; the session and index are gone.
+        assert store.pop_by_auth_code("code-1") is None
+        assert store.get_by_auth_code("code-1") is None
+        assert store.get_by_session_id("s1") is None
+
+    def test_pop_by_auth_code_unknown_returns_none(self) -> None:
+        store = BridgeStateStore()
+        assert store.pop_by_auth_code("ghost") is None
+
     def test_mark_done_on_unknown_session_is_noop(self) -> None:
         store = BridgeStateStore()
         store.mark_done("ghost", rucio_token="tok", auth_code="code")  # must not raise

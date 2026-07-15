@@ -19,6 +19,8 @@ public client — PKCE only, no secret).  Both are set in ``server.py``.
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import ipaddress
 import logging
 import socket
@@ -37,8 +39,9 @@ _MAX_DOC_BYTES = 64 * 1024
 _FETCH_TIMEOUT = 10.0
 
 # socket.getaddrinfo-compatible resolver; injectable so SSRF checks are testable
-# without real DNS.
-Resolver = Callable[..., list[Any]]
+# without real DNS.  The result may be a plain list (sync test resolver) or an
+# awaitable (the default asyncio loop.getaddrinfo); assert_safe_url handles both.
+Resolver = Callable[..., Any]
 
 _LOOPBACK_HOSTS = frozenset({"localhost"})
 
@@ -98,14 +101,18 @@ def _ip_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     )
 
 
-def assert_safe_url(
-    client_id_url: str, *, resolver: Resolver = socket.getaddrinfo
+async def assert_safe_url(
+    client_id_url: str, *, resolver: Resolver | None = None
 ) -> None:
     """Raise :class:`CimdError` unless *client_id_url* is safe to fetch server-side.
 
     The server dereferences a URL the client controls, so this is the SSRF
     guard: requires ``https``, and rejects hosts that are — or resolve to —
     private, loopback, link-local, multicast, reserved, or unspecified addresses.
+
+    DNS resolution is offloaded to the event loop's resolver
+    (``loop.getaddrinfo``) so a blackholed nameserver cannot stall the event
+    loop for the OS resolver timeout.  Tests inject a synchronous *resolver*.
     """
     parsed = urlparse(client_id_url)
     if parsed.scheme != "https":
@@ -126,8 +133,11 @@ def assert_safe_url(
             raise CimdError(msg)
         return
 
+    if resolver is None:
+        resolver = asyncio.get_running_loop().getaddrinfo
     try:
-        infos = resolver(host, parsed.port or 443, type=socket.SOCK_STREAM)
+        result = resolver(host, parsed.port or 443, type=socket.SOCK_STREAM)
+        infos = await result if inspect.isawaitable(result) else result
     except socket.gaierror as exc:
         msg = f"cannot resolve CIMD host {host}: {exc}"
         raise CimdError(msg) from exc
@@ -259,7 +269,7 @@ async def resolve_cimd_client(
     client carrying only the document's declared redirect URIs.  Raises
     :class:`CimdError` on any failure.
     """
-    assert_safe_url(client_id)
+    await assert_safe_url(client_id)
     doc = await fetch_client_document(client_id, client=client, timeout=timeout)
     resolved = build_client_from_document(doc, client_id)
     _log.info("Resolved CIMD client_id=%s", client_id)

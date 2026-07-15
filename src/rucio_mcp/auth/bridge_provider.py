@@ -24,6 +24,7 @@ import logging
 import secrets
 import threading
 import time
+from collections import OrderedDict
 from typing import Protocol, runtime_checkable
 from urllib.parse import parse_qs, urlparse
 
@@ -56,6 +57,12 @@ _authorize_redirect_uri: contextvars.ContextVar[str | None] = contextvars.Contex
 )
 
 _DEFAULT_EXPIRES_IN = 3600  # fallback when token is opaque or has no exp claim
+
+# Bounds on the resolved-CIMD-client cache: a TTL caps staleness of rotated CIMD
+# documents, and a size cap prevents an attacker filling memory with distinct
+# client_id URL paths (one domain, unlimited paths).
+_CIMD_CACHE_TTL = 3600.0
+_CIMD_CACHE_MAX = 256
 
 
 def _jwt_expires_in(token: str) -> int:
@@ -121,7 +128,11 @@ class RucioBridgeProvider:
         self._poll_timeout = poll_timeout
         self._site_name = site_name
         self.store = BridgeStateStore()
-        self._clients: dict[str, OAuthClientInformationFull] = {}
+        # client_id URL → (resolved client, expiry epoch); LRU-ordered, TTL+size
+        # bounded (see _cache_get / _cache_put).
+        self._clients: OrderedDict[str, tuple[OAuthClientInformationFull, float]] = (
+            OrderedDict()
+        )
         self._clients_lock = threading.Lock()
         self._bg_tasks: set[asyncio.Task[None]] = set()
 
@@ -143,6 +154,28 @@ class RucioBridgeProvider:
         )
         raise NotImplementedError(msg)
 
+    def _cache_get(self, client_id: str) -> OAuthClientInformationFull | None:
+        """Return the cached client if present and unexpired, else ``None`` (LRU)."""
+        now = time.time()
+        with self._clients_lock:
+            entry = self._clients.get(client_id)
+            if entry is None:
+                return None
+            client, expires_at = entry
+            if expires_at <= now:
+                del self._clients[client_id]
+                return None
+            self._clients.move_to_end(client_id)
+            return client
+
+    def _cache_put(self, client_id: str, client: OAuthClientInformationFull) -> None:
+        """Store *client* with a fresh TTL, evicting the oldest over the size cap."""
+        with self._clients_lock:
+            self._clients[client_id] = (client, time.time() + _CIMD_CACHE_TTL)
+            self._clients.move_to_end(client_id)
+            while len(self._clients) > _CIMD_CACHE_MAX:
+                self._clients.popitem(last=False)
+
     async def get_client(self, client_id: str) -> OAuthClientInformationFull | None:
         """Resolve a CIMD client_id URL to its client information.
 
@@ -157,13 +190,12 @@ class RucioBridgeProvider:
         per-request copy so a fresh ephemeral loopback port passes the SDK's
         exact-match validation on every attempt, not just the first.
         """
-        with self._clients_lock:
-            client = self._clients.get(client_id)
-        if client is not None:
+        cached = self._cache_get(client_id)
+        if cached is not None:
             _log.debug(
                 "[%s] get_client: hit for client_id=%s", self._site_name, client_id
             )
-            return client_with_requested_redirect(client, _authorize_redirect_uri.get())
+            return client_with_requested_redirect(cached, _authorize_redirect_uri.get())
 
         if is_cimd_client_id(client_id):
             return await self._resolve_cimd(client_id)
@@ -194,8 +226,7 @@ class RucioBridgeProvider:
                 exc,
             )
             return None
-        with self._clients_lock:
-            self._clients[client_id] = resolved
+        self._cache_put(client_id, resolved)
         _log.debug(
             "[%s] get_client: resolved CIMD client_id=%s", self._site_name, client_id
         )
@@ -294,8 +325,12 @@ class RucioBridgeProvider:
     async def exchange_authorization_code(
         self, _client: OAuthClientInformationFull, authorization_code: AuthorizationCode
     ) -> OAuthToken:
-        """Return the rucio session token verbatim as the OAuth access_token."""
-        session = self.store.get_by_auth_code(authorization_code.code)
+        """Return the rucio session token verbatim as the OAuth access_token.
+
+        The session is popped atomically so the authorization code is single-use
+        (OAuth 2.1): a captured/replayed ``/token`` request finds nothing.
+        """
+        session = self.store.pop_by_auth_code(authorization_code.code)
         if session is None or session.rucio_token is None:
             raise TokenError(
                 error="invalid_grant",
