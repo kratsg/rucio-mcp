@@ -37,7 +37,12 @@ from mcp.server.auth.provider import (
 from mcp.shared.auth import OAuthClientInformationFull, OAuthToken
 
 from rucio_mcp.auth.bridge_state import BridgeSession, BridgeStateStore
-from rucio_mcp.auth.cimd import CimdError, is_cimd_client_id, resolve_cimd_client
+from rucio_mcp.auth.cimd import (
+    CimdError,
+    client_with_requested_redirect,
+    is_cimd_client_id,
+    resolve_cimd_client,
+)
 from rucio_mcp.metrics import BRIDGE_AUTH
 
 _log = logging.getLogger(__name__)
@@ -145,6 +150,12 @@ class RucioBridgeProvider:
         2. CIMD: if ``client_id`` is an https URL, dereference it (Client ID
            Metadata Document) and cache the result.
         3. Otherwise unknown → ``None`` (the SDK emits "Client ID not found").
+
+        The cache holds the canonical document-derived client; the requested
+        redirect_uri (the ``_authorize_redirect_uri`` contextvar, set by
+        ``_AuthorizeContextMiddleware`` during /authorize) is appended to a
+        per-request copy so a fresh ephemeral loopback port passes the SDK's
+        exact-match validation on every attempt, not just the first.
         """
         with self._clients_lock:
             client = self._clients.get(client_id)
@@ -152,7 +163,7 @@ class RucioBridgeProvider:
             _log.debug(
                 "[%s] get_client: hit for client_id=%s", self._site_name, client_id
             )
-            return client
+            return client_with_requested_redirect(client, _authorize_redirect_uri.get())
 
         if is_cimd_client_id(client_id):
             return await self._resolve_cimd(client_id)
@@ -165,17 +176,16 @@ class RucioBridgeProvider:
         return None
 
     async def _resolve_cimd(self, client_id: str) -> OAuthClientInformationFull | None:
-        """Dereference a CIMD client_id URL, caching the resolved public client.
+        """Dereference a CIMD client_id URL, caching the canonical public client.
 
-        The requested redirect_uri is taken from the ``_authorize_redirect_uri``
-        contextvar (set by ``_AuthorizeContextMiddleware`` during /authorize) so
-        an ephemeral-port loopback redirect can be matched port-agnostically.
-        On the /token leg the contextvar is unset, but the client resolved during
-        /authorize is already cached, so no re-fetch is needed.
+        Only the document-derived client is cached — never a per-request
+        redirect_uri, which would pin the first attempt's ephemeral port for
+        every later authorization.  On the /token leg the contextvar is unset,
+        but the client resolved during /authorize is already cached, so no
+        re-fetch is needed.
         """
-        redirect_uri = _authorize_redirect_uri.get()
         try:
-            resolved = await resolve_cimd_client(client_id, redirect_uri)
+            resolved = await resolve_cimd_client(client_id)
         except CimdError as exc:
             _log.warning(
                 "[%s] get_client: CIMD resolution failed for client_id=%s: %s",
@@ -189,7 +199,7 @@ class RucioBridgeProvider:
         _log.debug(
             "[%s] get_client: resolved CIMD client_id=%s", self._site_name, client_id
         )
-        return resolved
+        return client_with_requested_redirect(resolved, _authorize_redirect_uri.get())
 
     # ------------------------------------------------------------------
     # Authorization flow

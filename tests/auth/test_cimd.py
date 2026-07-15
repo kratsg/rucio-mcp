@@ -18,6 +18,7 @@ from rucio_mcp.auth.cimd import (
     CimdError,
     assert_safe_url,
     build_client_from_document,
+    client_with_requested_redirect,
     fetch_client_document,
     is_cimd_client_id,
     redirect_uri_matches,
@@ -181,7 +182,7 @@ class TestFetchClientDocument:
 
 class TestBuildClientFromDocument:
     def test_builds_public_client(self) -> None:
-        client = build_client_from_document(_document(), _CLIENT_URL, None)
+        client = build_client_from_document(_document(), _CLIENT_URL)
         assert isinstance(client, OAuthClientInformationFull)
         assert client.client_id == _CLIENT_URL
         # public client → token endpoint accepts PKCE without a secret
@@ -190,28 +191,57 @@ class TestBuildClientFromDocument:
     def test_not_self_referential_raises(self) -> None:
         doc = _document(client_id="https://attacker.example.com/client")
         with pytest.raises(CimdError, match="self-referential"):
-            build_client_from_document(doc, _CLIENT_URL, None)
+            build_client_from_document(doc, _CLIENT_URL)
 
     def test_missing_redirect_uris_raises(self) -> None:
         doc = _document()
         del doc["redirect_uris"]
         with pytest.raises(CimdError, match="redirect_uris"):
-            build_client_from_document(doc, _CLIENT_URL, None)
+            build_client_from_document(doc, _CLIENT_URL)
 
+    def test_only_declared_redirect_uris(self) -> None:
+        # Canonical client carries exactly the document's redirect_uris; any
+        # per-request ephemeral port is applied via
+        # client_with_requested_redirect, never here.
+        client = build_client_from_document(_document(), _CLIENT_URL)
+        registered = [str(u) for u in (client.redirect_uris or [])]
+        assert registered == ["http://localhost/callback"]
+
+
+class TestClientWithRequestedRedirect:
     def test_appends_port_agnostic_loopback_request(self) -> None:
         # The document declares http://localhost/callback; Claude sends the same
         # with an ephemeral port. The exact requested value must be added so the
         # SDK's exact-match validate_redirect_uri() accepts it.
-        client = build_client_from_document(_document(), _CLIENT_URL, _LOOPBACK_CB)
+        canonical = build_client_from_document(_document(), _CLIENT_URL)
+        client = client_with_requested_redirect(canonical, _LOOPBACK_CB)
         registered = [str(u) for u in (client.redirect_uris or [])]
         assert _LOOPBACK_CB in registered
 
+    def test_returns_copy_leaving_original_untouched(self) -> None:
+        canonical = build_client_from_document(_document(), _CLIENT_URL)
+        client_with_requested_redirect(canonical, _LOOPBACK_CB)
+        registered = [str(u) for u in (canonical.redirect_uris or [])]
+        assert _LOOPBACK_CB not in registered
+
     def test_non_matching_request_not_appended(self) -> None:
-        client = build_client_from_document(
-            _document(), _CLIENT_URL, "http://localhost:51763/somewhere-else"
+        canonical = build_client_from_document(_document(), _CLIENT_URL)
+        client = client_with_requested_redirect(
+            canonical, "http://localhost:51763/somewhere-else"
         )
         registered = [str(u) for u in (client.redirect_uris or [])]
         assert "http://localhost:51763/somewhere-else" not in registered
+
+    def test_no_request_returns_client_unchanged(self) -> None:
+        canonical = build_client_from_document(_document(), _CLIENT_URL)
+        assert client_with_requested_redirect(canonical, None) is canonical
+
+    def test_exact_match_returns_client_unchanged(self) -> None:
+        canonical = build_client_from_document(_document(), _CLIENT_URL)
+        assert (
+            client_with_requested_redirect(canonical, "http://localhost/callback")
+            is canonical
+        )
 
 
 class TestResolveCimdClient:
@@ -220,12 +250,12 @@ class TestResolveCimdClient:
             return httpx.Response(200, json=_document())
 
         async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
-            resolved = await resolve_cimd_client(
-                _CLIENT_URL, _LOOPBACK_CB, client=client
-            )
+            resolved = await resolve_cimd_client(_CLIENT_URL, client=client)
         assert resolved.client_id == _CLIENT_URL
         assert resolved.token_endpoint_auth_method == "none"
-        assert _LOOPBACK_CB in [str(u) for u in (resolved.redirect_uris or [])]
+        assert [str(u) for u in (resolved.redirect_uris or [])] == [
+            "http://localhost/callback"
+        ]
 
     async def test_unsafe_url_rejected_before_fetch(self) -> None:
         # A private-IP client_id must be rejected without any network call.
@@ -235,6 +265,4 @@ class TestResolveCimdClient:
             )
         ) as client:
             with pytest.raises(CimdError):
-                await resolve_cimd_client(
-                    "https://10.0.0.1/client", _LOOPBACK_CB, client=client
-                )
+                await resolve_cimd_client("https://10.0.0.1/client", client=client)

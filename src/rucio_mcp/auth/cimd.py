@@ -183,16 +183,46 @@ async def fetch_client_document(
     return parsed
 
 
+def client_with_requested_redirect(
+    client: OAuthClientInformationFull, requested_redirect_uri: str | None
+) -> OAuthClientInformationFull:
+    """Return *client*, with the requested redirect appended to a copy if needed.
+
+    If *requested_redirect_uri* matches one of the client's ``redirect_uris``
+    only port-agnostically (loopback), a copy with the exact requested value
+    appended is returned so the SDK's exact-match ``validate_redirect_uri()``
+    accepts it.  The copy is per-request and must never be cached: native apps
+    bind a fresh ephemeral loopback port on every authorization attempt, so a
+    cached port would reject every subsequent attempt.  Otherwise *client* is
+    returned unchanged so a non-matching redirect is rejected with a proper
+    OAuth error.
+    """
+    declared = [str(u) for u in client.redirect_uris or []]
+    if (
+        not requested_redirect_uri
+        or requested_redirect_uri in declared
+        or not any(redirect_uri_matches(requested_redirect_uri, d) for d in declared)
+    ):
+        return client
+    return client.model_copy(
+        update={
+            "redirect_uris": [
+                *(client.redirect_uris or []),
+                AnyUrl(requested_redirect_uri),
+            ]
+        }
+    )
+
+
 def build_client_from_document(
-    doc: dict[str, Any], client_id_url: str, requested_redirect_uri: str | None
+    doc: dict[str, Any], client_id_url: str
 ) -> OAuthClientInformationFull:
     """Build a public-client :class:`OAuthClientInformationFull` from a CIMD doc.
 
     Verifies the document is self-referential (its ``client_id`` equals the URL
-    it was served from).  If *requested_redirect_uri* matches one of the
-    document's ``redirect_uris`` only port-agnostically (loopback), the exact
-    requested value is appended so the SDK's exact-match
-    ``validate_redirect_uri()`` accepts it.
+    it was served from).  The result carries only the document's declared
+    ``redirect_uris`` — an ephemeral-port loopback redirect is appended
+    per-request via :func:`client_with_requested_redirect`, never baked in here.
     """
     if doc.get("client_id") != client_id_url:
         msg = "CIMD document is not self-referential (client_id mismatch)"
@@ -202,21 +232,10 @@ def build_client_from_document(
         msg = "CIMD document has no redirect_uris"
         raise CimdError(msg)
 
-    redirect_uris = [str(u) for u in declared]
-    # Append the exact requested redirect_uri when it matches a declared one only
-    # port-agnostically (loopback); otherwise leave it off so the SDK's
-    # validate_redirect_uri() rejects /authorize with a proper OAuth error.
-    if (
-        requested_redirect_uri
-        and requested_redirect_uri not in redirect_uris
-        and any(redirect_uri_matches(requested_redirect_uri, d) for d in redirect_uris)
-    ):
-        redirect_uris.append(requested_redirect_uri)
-
     try:
         return OAuthClientInformationFull(
             client_id=client_id_url,
-            redirect_uris=[AnyUrl(u) for u in redirect_uris],
+            redirect_uris=[AnyUrl(str(u)) for u in declared],
             # CIMD clients are public: PKCE-only, no client secret.  The MCP SDK
             # ClientAuthenticator raises (→ 401) on a Python-None auth method.
             token_endpoint_auth_method="none",
@@ -230,7 +249,6 @@ def build_client_from_document(
 
 async def resolve_cimd_client(
     client_id: str,
-    requested_redirect_uri: str | None,
     *,
     client: httpx.AsyncClient | None = None,
     timeout: float = _FETCH_TIMEOUT,
@@ -238,10 +256,11 @@ async def resolve_cimd_client(
     """Resolve a CIMD ``client_id`` URL to an :class:`OAuthClientInformationFull`.
 
     Validates the URL is safe to fetch, dereferences it, and builds a public
-    client.  Raises :class:`CimdError` on any failure.
+    client carrying only the document's declared redirect URIs.  Raises
+    :class:`CimdError` on any failure.
     """
     assert_safe_url(client_id)
     doc = await fetch_client_document(client_id, client=client, timeout=timeout)
-    resolved = build_client_from_document(doc, client_id, requested_redirect_uri)
+    resolved = build_client_from_document(doc, client_id)
     _log.info("Resolved CIMD client_id=%s", client_id)
     return resolved
