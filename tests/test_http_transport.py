@@ -256,6 +256,45 @@ class TestMultiSiteOAuthIsolation:
             )
         assert resp.status_code == 302
 
+    def test_cimd_reauth_with_new_ephemeral_port_accepted(
+        self, multi_site_client: TestClient
+    ) -> None:
+        # Claude Code binds a fresh loopback port on every auth attempt; the
+        # second /authorize must not be validated against the port from the
+        # first attempt via the cached CIMD client (regression for
+        # "Redirect URI ... not registered for client" on re-auth).
+        cimd_id = "https://claude.ai/.well-known/oauth-client"
+        resolved = OAuthClientInformationFull(
+            client_id=cimd_id,
+            redirect_uris=[AnyUrl("http://localhost/callback")],
+            token_endpoint_auth_method="none",
+        )
+        with (
+            patch(
+                "rucio_mcp.auth.bridge_provider.resolve_cimd_client",
+                AsyncMock(return_value=resolved),
+            ),
+            patch(
+                "rucio_mcp.auth.rucio_oidc_poller.RucioOidcPoller.request_auth_url",
+                AsyncMock(return_value="https://idp.example.com/login"),
+            ),
+        ):
+            for port in (54321, 55985):
+                resp = multi_site_client.get(
+                    "/site/atlas/authorize",
+                    params={
+                        "client_id": cimd_id,
+                        "response_type": "code",
+                        "redirect_uri": f"http://localhost:{port}/callback",
+                        "code_challenge": "x" * 43,
+                        "code_challenge_method": "S256",
+                        "resource": "http://localhost:8000/site/atlas",
+                    },
+                    follow_redirects=False,
+                )
+                assert resp.status_code == 302
+                assert "/bridge?session=" in resp.headers["location"]
+
 
 class TestUnauthenticatedAccess:
     def test_mcp_post_without_auth_returns_401(self, http_client: TestClient) -> None:
