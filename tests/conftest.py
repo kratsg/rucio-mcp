@@ -49,6 +49,7 @@ def mock_ctx(mock_rucio_client: MagicMock) -> MagicMock:
     ctx.request_context.lifespan_context = {
         "client_factory": EnvBasedClientFactory(client=mock_rucio_client),
         "read_only": False,
+        "scopes": None,
     }
     return ctx
 
@@ -60,6 +61,7 @@ def mock_ctx_readonly(mock_rucio_client: MagicMock) -> MagicMock:
     ctx.request_context.lifespan_context = {
         "client_factory": EnvBasedClientFactory(client=mock_rucio_client),
         "read_only": True,
+        "scopes": None,
     }
     return ctx
 

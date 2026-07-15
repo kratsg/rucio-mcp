@@ -12,6 +12,7 @@ from rucio_mcp.tools._helpers import (
     format_dict,
     format_list,
     get_rucio_client,
+    get_scopes,
     paginate_iter,
     parse_did,
 )
@@ -65,7 +66,7 @@ def register(mcp: FastMCP) -> None:
 
         """
         try:
-            scope, name = parse_did(did_pattern)
+            scope, name = parse_did(did_pattern, scopes=get_scopes(ctx))
         except ValueError as exc:
             return str(exc)
 
@@ -112,7 +113,7 @@ def register(mcp: FastMCP) -> None:
             did: The data identifier in ``scope:name`` format.
         """
         try:
-            scope, name = parse_did(did)
+            scope, name = parse_did(did, scopes=get_scopes(ctx))
         except ValueError as exc:
             return str(exc)
 
@@ -167,7 +168,7 @@ def register(mcp: FastMCP) -> None:
             offset: Number of results to skip for pagination.
         """
         try:
-            scope, name = parse_did(did)
+            scope, name = parse_did(did, scopes=get_scopes(ctx))
         except ValueError as exc:
             return str(exc)
 
@@ -204,7 +205,7 @@ def register(mcp: FastMCP) -> None:
             offset: Number of files to skip for pagination.
         """
         try:
-            scope, name = parse_did(did)
+            scope, name = parse_did(did, scopes=get_scopes(ctx))
         except ValueError as exc:
             return str(exc)
 
@@ -246,7 +247,7 @@ def register(mcp: FastMCP) -> None:
                 Rucio metadata. ``JSON`` returns user-defined metadata.
         """
         try:
-            scope, name = parse_did(did)
+            scope, name = parse_did(did, scopes=get_scopes(ctx))
         except ValueError as exc:
             return str(exc)
 
@@ -279,7 +280,7 @@ def register(mcp: FastMCP) -> None:
             offset: Number of results to skip for pagination.
         """
         try:
-            scope, name = parse_did(did)
+            scope, name = parse_did(did, scopes=get_scopes(ctx))
         except ValueError as exc:
             return str(exc)
 

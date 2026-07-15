@@ -51,6 +51,11 @@ class TestParseDid:
         with pytest.raises(ValueError, match="empty scope or name"):
             parse_did("scope:")
 
+    def test_accepts_scopes_kwarg(self) -> None:
+        # scopes is forwarded to extract_scope; built-in algorithm ignores it
+        assert parse_did("scope:name", scopes=["scope"]) == ("scope", "name")
+        assert parse_did("scope:name", scopes=None) == ("scope", "name")
+
 
 @pytest.fixture
 def registered_tools() -> dict[str, Callable[..., Awaitable[str]]]:

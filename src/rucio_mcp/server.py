@@ -262,9 +262,22 @@ def _make_stdio_mcp(
           - RUCIO_CONFIG     (direct path to rucio.cfg)
           - X509_USER_PROXY  (path to proxy cert when RUCIO_AUTH_TYPE=x509_proxy)
         """
-        factory = EnvBasedClientFactory(client=Client())
+        client = Client()
         try:
-            yield {"client_factory": factory, "read_only": read_only}
+            scope_list: list[str] | None = list(client.list_scopes())
+        except Exception:  # noqa: BLE001
+            sys.stderr.write(
+                "warning: could not pre-fetch scopes; scope extraction will use"
+                " site defaults\n"
+            )
+            scope_list = None
+        factory = EnvBasedClientFactory(client=client)
+        try:
+            yield {
+                "client_factory": factory,
+                "read_only": read_only,
+                "scopes": scope_list,
+            }
         finally:
             factory.close()
 
@@ -332,7 +345,7 @@ def _make_site_mcp(
     async def _site_lifespan(_server: FastMCP) -> AsyncGenerator[dict[str, Any], None]:
         factory = BearerTokenClientFactory(cache=cache, cfg=cfg)
         try:
-            yield {"client_factory": factory, "read_only": read_only}
+            yield {"client_factory": factory, "read_only": read_only, "scopes": None}
         finally:
             factory.close()
 
@@ -394,9 +407,22 @@ def _make_shared_secret_mcp(
 
     @asynccontextmanager
     async def _lifespan(_server: FastMCP) -> AsyncGenerator[dict[str, Any], None]:
-        factory = EnvBasedClientFactory(client=Client())
+        client = Client()
         try:
-            yield {"client_factory": factory, "read_only": read_only}
+            scope_list: list[str] | None = list(client.list_scopes())
+        except Exception:  # noqa: BLE001
+            sys.stderr.write(
+                "warning: could not pre-fetch scopes; scope extraction will use"
+                " site defaults\n"
+            )
+            scope_list = None
+        factory = EnvBasedClientFactory(client=client)
+        try:
+            yield {
+                "client_factory": factory,
+                "read_only": read_only,
+                "scopes": scope_list,
+            }
         finally:
             factory.close()
 
