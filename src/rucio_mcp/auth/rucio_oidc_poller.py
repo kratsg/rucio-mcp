@@ -131,16 +131,10 @@ class RucioOidcPoller:
                             "Rucio session token received after %d poll(s)", attempt
                         )
                         return token
-                    if 400 <= response.status_code < 500:
-                        # A hard client error (expired/invalid request) will never
-                        # resolve — fail fast so the real reason surfaces instead of
-                        # a generic timeout after the full polling window.
-                        msg = (
-                            f"Rucio auth polling failed with HTTP "
-                            f"{response.status_code}"
-                        )
-                        raise RuntimeError(msg)
-                    # 200-without-token (still pending) or 5xx — keep polling.
+                    # 200-without-token (still pending), 4xx (e.g. Rucio returns 401
+                    # until the user finishes logging in), or 5xx — keep polling.
+                    # Mirrors rucio's own client (baseclient.py __get_token_oidc),
+                    # which never treats a polling response's status as fatal.
                     _log.debug(
                         "Poll %d: no token yet (status=%d)",
                         attempt,
