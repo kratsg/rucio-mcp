@@ -67,17 +67,9 @@ build.hooks.vcs.version-file = "src/rucio_mcp/_version.py"
 [tool.hatch.build.targets.wheel]
 packages = ["src/rucio_mcp"]
 
-[tool.hatch.envs.default]
-dependency-groups = ["dev"]
-
-[tool.hatch.envs.hatch-test]
-dependency-groups = ["test"]
-env-vars.PYTHONWARNDEFAULTENCODING = "1"
-
-
 [tool.pytest]
 minversion = "9.0"
-addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config", "--doctest-glob=docs/*.rst"]
+addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
 strict = true
 filterwarnings = [
   "error",
