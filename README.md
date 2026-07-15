@@ -63,6 +63,7 @@ pixi add rucio-mcp
 - Python 3.10+
 - A configured Rucio environment (`rucio.cfg` and valid authentication)
 - For x509 proxy auth: a valid VOMS proxy (`voms-proxy-init -voms <VO>`)
+
 <!-- --8<-- [end:requirements] -->
 
 <!-- --8<-- [start:quick-start] -->
@@ -458,6 +459,7 @@ Once configured, you can ask Claude things like:
 - _"Is my proxy still valid? How long do I have left?"_
 - _"Show me the replication rules for this container and their current states"_
 - _"What's my storage quota at CERN-PROD_DATADISK?"_
+
 <!-- --8<-- [end:example-prompts] -->
 
 <!-- prettier-ignore-start -->
