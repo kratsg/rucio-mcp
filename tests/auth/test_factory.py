@@ -159,3 +159,53 @@ class TestBearerTokenClientFactory:
         factory = BearerTokenClientFactory(cache=cache, cfg=_make_rucio_cfg())
         factory.close()
         cache.close.assert_called_once()
+
+    def test_same_session_different_bearer_not_cached(self) -> None:
+        """A stale session id with a different bearer must not reuse the old client."""
+        cache = SessionCache()
+        factory = BearerTokenClientFactory(cache=cache, cfg=_make_rucio_cfg())
+        ctx1 = self._make_ctx("real-token", session_id="fixed-session")
+        ctx2 = self._make_ctx("garbage", session_id="fixed-session")
+        with patch.object(TokenInjectedClient, "__init__", lambda _s, **_kw: None):
+            first = factory.get_client(ctx1)
+            second = factory.get_client(ctx2)
+        assert first is not second
+
+    def test_same_session_same_bearer_hits_cache(self) -> None:
+        cache = SessionCache()
+        factory = BearerTokenClientFactory(cache=cache, cfg=_make_rucio_cfg())
+        ctx1 = self._make_ctx("real-token", session_id="fixed-session")
+        ctx2 = self._make_ctx("real-token", session_id="fixed-session")
+        with patch.object(TokenInjectedClient, "__init__", lambda _s, **_kw: None):
+            first = factory.get_client(ctx1)
+            second = factory.get_client(ctx2)
+        assert first is second
+
+    def test_reauth_with_fresh_bearer_rebuilds_client(self) -> None:
+        """A client that re-authenticates mid-session must not keep the stale token."""
+        cache = SessionCache()
+        factory = BearerTokenClientFactory(cache=cache, cfg=_make_rucio_cfg())
+        ctx_old = self._make_ctx("old-token", session_id="fixed-session")
+        ctx_new = self._make_ctx("new-token", session_id="fixed-session")
+        captured: list[dict[str, object]] = []
+
+        def fake_init(_self: object, **kw: object) -> None:
+            captured.append(dict(kw))
+
+        with patch.object(TokenInjectedClient, "__init__", fake_init):
+            factory.get_client(ctx_old)
+            factory.get_client(ctx_new)
+        assert captured[0]["bearer_token"] == "old-token"
+        assert captured[1]["bearer_token"] == "new-token"
+
+    def test_missing_session_id_skips_cache(self) -> None:
+        """Empty mcp-session-id must never be cached (no cross-tenant sharing)."""
+        cache = SessionCache()
+        factory = BearerTokenClientFactory(cache=cache, cfg=_make_rucio_cfg())
+        ctx1 = self._make_ctx("tok", session_id="")
+        ctx2 = self._make_ctx("tok", session_id="")
+        with patch.object(TokenInjectedClient, "__init__", lambda _s, **_kw: None):
+            first = factory.get_client(ctx1)
+            second = factory.get_client(ctx2)
+        assert first is not second
+        assert cache.size() == 0

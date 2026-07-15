@@ -74,8 +74,9 @@ tool — never access `lifespan_context["rucio_client"]` directly.
 
 - **`EnvBasedClientFactory`** (stdio): wraps a single pre-built `Client`
 - **`BearerTokenClientFactory`** (http): extracts bearer from `Authorization`
-  header, builds `TokenInjectedClient`, caches by `mcp-session-id` with a fixed
-  300 s TTL (rucio rejects stale tokens with 401)
+  header, builds `TokenInjectedClient`, caches by `mcp-session-id` + a hash of
+  the bearer (never the session id alone) with a fixed 300 s TTL (rucio rejects
+  stale tokens with 401); requests with no session id are never cached
 
 ### `TokenInjectedClient`
 

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import shutil
 
 from mcp.server.fastmcp import FastMCP  # noqa: TC002
+
+_PROXY_TIMEOUT_S = 30.0
 
 
 def register(mcp: FastMCP) -> None:
@@ -35,7 +38,18 @@ def register(mcp: FastMCP) -> None:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, stderr = await proc.communicate()
+        try:
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(), timeout=_PROXY_TIMEOUT_S
+            )
+        except asyncio.TimeoutError:
+            proc.kill()
+            with contextlib.suppress(Exception):
+                await proc.wait()
+            return (
+                f"Error: 'voms-proxy-info' timed out after {_PROXY_TIMEOUT_S:.0f}s. "
+                "The command may be hung; check your grid environment."
+            )
 
         if proc.returncode != 0:
             error_text = stderr.decode().strip()

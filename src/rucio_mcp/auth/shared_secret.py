@@ -22,7 +22,9 @@ class SharedSecretVerifier(TokenVerifier):
 
     async def verify_token(self, token: str) -> AccessToken | None:
         """Return an AccessToken if *token* matches the secret, else None."""
-        if secrets.compare_digest(token, self._secret):
+        # Compare as UTF-8 bytes: compare_digest raises TypeError on
+        # non-ASCII str input, which would surface as an HTTP 500.
+        if secrets.compare_digest(token.encode(), self._secret.encode()):
             return AccessToken(
                 token=token,
                 client_id="shared-secret",
