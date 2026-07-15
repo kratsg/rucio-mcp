@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -127,7 +128,8 @@ class TestCLIServe:
 
         assert captured["auth_type"] == "oidc"
 
-    def test_auth_type_defaults_to_oidc(self) -> None:
+    def test_auth_type_defaults_to_none(self) -> None:
+        """Unset --auth-type must forward None so env/cfg fallback in _preflight_check works."""
         captured: dict[str, object] = {}
 
         def fake_serve(**kwargs: object) -> None:
@@ -139,7 +141,21 @@ class TestCLIServe:
         ):
             main()
 
-        assert captured["auth_type"] == "oidc"
+        assert captured["auth_type"] is None
+
+    def test_env_auth_type_survives_when_flag_not_passed(self, tmp_path) -> None:
+        """RUCIO_AUTH_TYPE from the env must survive an end-to-end stdio serve()
+        when --auth-type is not passed (regression: CLI default forced oidc)."""
+        cfg = tmp_path / "rucio.cfg"
+        cfg.touch()
+        with (
+            patch.dict("os.environ", {"RUCIO_AUTH_TYPE": "x509_proxy"}, clear=True),
+            patch("sys.argv", ["rucio-mcp", "serve", "--rucio-cfg", str(cfg)]),
+            patch("rucio_mcp.server._make_stdio_mcp") as mock_mcp,
+        ):
+            mock_mcp.return_value = MagicMock()
+            main()
+            assert os.environ["RUCIO_AUTH_TYPE"] == "x509_proxy"
 
     def test_metrics_port_defaults_to_9001(self) -> None:
         captured: dict[str, object] = {}
@@ -312,10 +328,11 @@ class TestCLIServe:
 
 class TestCLIPing:
     def test_ping_dispatches(self) -> None:
-        captured: dict[str, bool] = {}
+        captured: dict[str, object] = {}
 
-        def fake_ping() -> None:
+        def fake_ping(**kwargs: object) -> None:
             captured["called"] = True
+            captured.update(kwargs)
 
         with (
             patch("sys.argv", ["rucio-mcp", "ping"]),
@@ -324,3 +341,47 @@ class TestCLIPing:
             main()
 
         assert captured.get("called") is True
+
+    def test_ping_site_defaults_to_escape(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_ping(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch("sys.argv", ["rucio-mcp", "ping"]),
+            patch("rucio_mcp.cli.ping_server", fake_ping),
+        ):
+            main()
+
+        assert captured["site"] == "escape"
+        assert captured["rucio_cfg"] is None
+
+    def test_ping_site_flag_forwarded(self) -> None:
+        """`ping --site atlas` must ping the atlas preset, not the escape default."""
+        captured: dict[str, object] = {}
+
+        def fake_ping(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch("sys.argv", ["rucio-mcp", "ping", "--site", "atlas"]),
+            patch("rucio_mcp.cli.ping_server", fake_ping),
+        ):
+            main()
+
+        assert captured["site"] == "atlas"
+
+    def test_ping_rucio_cfg_flag_forwarded(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_ping(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch("sys.argv", ["rucio-mcp", "ping", "--rucio-cfg", "/tmp/my.cfg"]),
+            patch("rucio_mcp.cli.ping_server", fake_ping),
+        ):
+            main()
+
+        assert str(captured["rucio_cfg"]) == "/tmp/my.cfg"

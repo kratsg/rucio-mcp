@@ -66,11 +66,12 @@ def main() -> None:
     )
     serve_parser.add_argument(
         "--auth-type",
-        default="oidc",
+        default=None,
         choices=("oidc", "x509", "x509_proxy", "userpass", "gss"),
         help=(
             "Override authentication method for stdio transport. "
             "Use 'x509' as a friendly alias for 'x509_proxy'. "
+            "When unset, falls back to RUCIO_AUTH_TYPE, then the cfg file, then oidc. "
             "Ignored in HTTP mode (HTTP mode always uses OIDC via the OAuth bridge). "
             "Note: 'x509' is the rucio cert-based method; "
             "use 'x509_proxy' or the 'x509' alias for VOMS proxy auth."
@@ -130,9 +131,22 @@ def main() -> None:
         help="Logging verbosity (default: info). Use 'debug' to trace auth flow.",
     )
 
-    subparsers.add_parser(
+    ping_parser = subparsers.add_parser(
         "ping",
         help="Check connectivity to the Rucio server.",
+    )
+    ping_parser.add_argument(
+        "--site",
+        default="escape",
+        metavar="SITE",
+        help="Site preset to ping (e.g. atlas, cms, dune, escape). Defaults to escape.",
+    )
+    ping_parser.add_argument(
+        "--rucio-cfg",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Path to a custom rucio.cfg (overrides the --site preset).",
     )
 
     args = parser.parse_args()
@@ -159,7 +173,7 @@ def main() -> None:
             log_level=args.log_level,
         )
     elif args.command == "ping":
-        ping_server()
+        ping_server(site=args.site, rucio_cfg=args.rucio_cfg)
     else:
         parser.print_help()
         sys.exit(0)
