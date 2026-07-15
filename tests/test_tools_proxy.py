@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -66,3 +67,25 @@ class TestRucioVomsProxyInfo:
         ):
             result = await fn()
         assert "Proxy check failed" in result
+
+    async def test_timeout(
+        self, registered_tools: dict[str, Callable[..., Awaitable[str]]]
+    ) -> None:
+        async def _hang() -> tuple[bytes, bytes]:
+            await asyncio.sleep(3600)
+            return b"", b""
+
+        mock_proc = MagicMock()
+        mock_proc.returncode = None
+        mock_proc.communicate = _hang
+        mock_proc.kill = MagicMock()
+
+        fn = registered_tools["rucio_voms_proxy_info"]
+        with (
+            patch("shutil.which", return_value="/usr/bin/voms-proxy-info"),
+            patch("asyncio.create_subprocess_exec", return_value=mock_proc),
+            patch("rucio_mcp.tools.proxy._PROXY_TIMEOUT_S", 0.01),
+        ):
+            result = await fn()
+        assert "timed out" in result.lower()
+        mock_proc.kill.assert_called_once()

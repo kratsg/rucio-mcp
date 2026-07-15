@@ -57,9 +57,22 @@ class TestRucioListRequests:
         mock_rucio_client.list_requests.return_value = iter([])
         fn = registered_tools["rucio_list_requests"]
         await fn("SRC", "DST", "SUBMITTED,WAITING", ctx=mock_ctx)
-        mock_rucio_client.list_requests.assert_called_once_with(
-            "SRC", "DST", ["SUBMITTED", "WAITING"]
-        )
+        # Full names are mapped to single-letter codes and joined as a plain
+        # string (rucio interpolates the value straight into the query string).
+        mock_rucio_client.list_requests.assert_called_once_with("SRC", "DST", "S,W")
+
+    async def test_rejects_unknown_state(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_requests.return_value = iter([])
+        fn = registered_tools["rucio_list_requests"]
+        result = await fn("SRC", "DST", "BOGUS", ctx=mock_ctx)
+        assert result.startswith("Error:")
+        assert "SUBMITTED" in result  # lists valid names
+        mock_rucio_client.list_requests.assert_not_called()
 
     async def test_no_requests(
         self,
@@ -121,7 +134,7 @@ class TestRucioListRequestsHistory:
         fn = registered_tools["rucio_list_requests_history"]
         await fn("SRC", "DST", "DONE", limit=50, offset=10, ctx=mock_ctx)
         mock_rucio_client.list_requests_history.assert_called_once_with(
-            "SRC", "DST", ["DONE"], offset=10, limit=50
+            "SRC", "DST", "D", offset=10, limit=50
         )
 
     async def test_no_history(
