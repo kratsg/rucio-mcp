@@ -46,7 +46,7 @@ helm install rucio-mcp ./charts/rucio-mcp \
 | -------------------------- | ---------------------------- | ----------------------------------------------------------------- |
 | `auth.mode`                | `oidc`                       | `oidc` or `sharedSecret`                                          |
 | `auth.sites`               | `[atlas, cms, dune, escape]` | Sites to serve; exactly one in `sharedSecret` mode                |
-| `rucioMcp.version`         | `0.7.0`                      | rucio-mcp release pinned into `pixi.toml`                         |
+| `rucioMcp.version`         | `0.7.1`                      | rucio-mcp release pinned into `pixi.toml`                         |
 | `rucioMcp.pixiLockContent` | `""`                         | Frozen `pixi.lock` for reproducible installs (`--set-file`)       |
 | `readOnly`                 | `true`                       | Disable write tools                                               |
 | `server.resourceUrl`       | `""`                         | Public URL; derived from `ingress.host` in `oidc` mode if empty   |
