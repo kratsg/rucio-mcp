@@ -215,21 +215,47 @@ class TestPollForToken:
                 interval=0.01,
             )
 
-    async def test_fails_fast_on_4xx(self, poller: RucioOidcPoller) -> None:
-        """A hard client error (e.g. expired request) must raise, not retry."""
-        mock = _mock_client(get_side_effect=[_response(400)])
+    async def test_retries_on_401_then_succeeds(self, poller: RucioOidcPoller) -> None:
+        """Rucio returns 401 while the user hasn't finished logging in yet — not
+        a hard failure, so the poller must keep retrying rather than aborting."""
+        responses = [
+            _response(401),
+            _response(200, {"X-Rucio-Auth-Token": "tok"}),
+        ]
+        mock = _mock_client(get_side_effect=responses)
 
-        with (
-            patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock),
-            pytest.raises(RuntimeError, match="400"),
-        ):
-            await poller.poll_for_token(
+        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
+            token = await poller.poll_for_token(
                 "https://rucio-auth.example.com/auth/oidc_redirect?state=xyz_polling",
                 timeout=5.0,
                 interval=0.0,
             )
-        # Exactly one request — no retry loop on the 4xx.
-        assert mock.get.call_count == 1
+
+        assert token == "tok"
+        assert mock.get.call_count == 2
+
+    async def test_times_out_when_4xx_never_resolves(
+        self, poller: RucioOidcPoller
+    ) -> None:
+        """A 4xx that never resolves into a token times out, it doesn't raise early."""
+
+        async def _always_401(*_args: Any, **_kwargs: Any) -> MagicMock:
+            return _response(401)
+
+        mock = AsyncMock()
+        mock.__aenter__.return_value = mock
+        mock.__aexit__.return_value = False
+        mock.get = _always_401
+
+        with (
+            patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock),
+            pytest.raises(asyncio.TimeoutError),
+        ):
+            await poller.poll_for_token(
+                "https://rucio-auth.example.com/auth/oidc_redirect?state=xyz_polling",
+                timeout=0.05,
+                interval=0.01,
+            )
 
     async def test_retries_on_5xx_then_succeeds(self, poller: RucioOidcPoller) -> None:
         responses = [
