@@ -163,17 +163,19 @@ def register(mcp: FastMCP) -> None:
         """
         client = get_rucio_client(ctx)
         try:
-            results = list(client.get_rse_limits(rse))
+            # RSEClient.get_rse_limits returns a single {name: value} dict
+            # despite its Iterator annotation.
+            result = client.get_rse_limits(rse)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
-        if not results:
+        if not result:
             return "No limits configured for this RSE."
 
         hints = build_hints(
             [f"Use `rucio_get_rse_usage {rse}` to check current space consumption"]
         )
-        return format_list(results) + hints
+        return format_dict(result) + hints
 
     @mcp.tool()
     async def rucio_get_rse_protocols(
@@ -200,6 +202,8 @@ def register(mcp: FastMCP) -> None:
         )
         if isinstance(result, dict):
             return format_dict(result) + hints
+        if isinstance(result, list):
+            return format_list(result) + hints
         return str(result) + hints
 
     @mcp.tool()
