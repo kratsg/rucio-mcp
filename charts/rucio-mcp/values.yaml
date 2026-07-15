@@ -14,7 +14,7 @@ imagePullSecrets: []
 # -- rucio-mcp release pinned into the rendered pixi.toml at /workspace.
 rucioMcp:
   # Conda-forge version of rucio-mcp to install (==<version>).
-  version: "0.6.0"
+  version: "0.7.0"
   # Extra conda-forge dependencies merged into the rendered pixi.toml, as a
   # name -> version-spec map. rucio-mcp already pulls in ca-policy-lcg; pin it
   # here (e.g. {ca-policy-lcg: "*"}) only to force the latest CA bundle.
