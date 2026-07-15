@@ -356,6 +356,29 @@ class TestRucioUpdateRule:
         assert call_options["comment"] == "test"
         assert call_options["locked"] is True
 
+    async def test_unlock_sends_false(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        fn = registered_tools["rucio_update_rule"]
+        await fn("abc123", locked=False, ctx=mock_ctx)
+        call_options = mock_rucio_client.update_replication_rule.call_args[0][1]
+        # Unlocking must actually be sent, not dropped as a falsy value.
+        assert call_options["locked"] is False
+
+    async def test_no_options_returns_error(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        fn = registered_tools["rucio_update_rule"]
+        result = await fn("abc123", ctx=mock_ctx)
+        assert result.startswith("Error:")
+        mock_rucio_client.update_replication_rule.assert_not_called()
+
     async def test_blocked_in_read_only_mode(
         self,
         registered_tools: dict[str, Callable[..., Awaitable[str]]],

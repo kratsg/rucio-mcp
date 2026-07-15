@@ -380,9 +380,9 @@ def register(mcp: FastMCP) -> None:
     async def rucio_update_rule(
         rule_id: str,
         lifetime: int = 0,
-        locked: bool = False,
-        comment: str = "",
-        activity: str = "",
+        locked: bool | None = None,
+        comment: str | None = None,
+        activity: str | None = None,
         *,
         ctx: Context[Any, Any],
     ) -> str:
@@ -394,9 +394,11 @@ def register(mcp: FastMCP) -> None:
         Args:
             rule_id: The replication rule UUID to update.
             lifetime: New lifetime in seconds from now. 0 means no change.
-            locked: Set the locked flag (True = cannot be deleted).
-            comment: Replace the rule's comment.
-            activity: Replace the transfer activity label.
+            locked: Set the locked flag (True = cannot be deleted, False =
+                unlock). Omit to leave unchanged.
+            comment: Replace the rule's comment. Omit to leave unchanged.
+            activity: Replace the transfer activity label. Omit to leave
+                unchanged.
         """
         if err := check_write_allowed(ctx.request_context.lifespan_context):
             return err
@@ -404,12 +406,18 @@ def register(mcp: FastMCP) -> None:
         options: dict[str, Any] = {}
         if lifetime:
             options["lifetime"] = lifetime
-        if locked:
+        if locked is not None:
             options["locked"] = locked
-        if comment:
+        if comment is not None:
             options["comment"] = comment
-        if activity:
+        if activity is not None:
             options["activity"] = activity
+
+        if not options:
+            return (
+                "Error: no fields to update. Provide at least one of "
+                "lifetime, locked, comment, or activity."
+            )
 
         client = get_rucio_client(ctx)
         try:

@@ -88,7 +88,7 @@ def register(mcp: FastMCP) -> None:
                 return str(exc)
             parsed.append({"scope": scope, "name": name})
 
-        kwargs: dict[str, Any] = {"ignore_availability": not all_states}
+        kwargs: dict[str, Any] = {"all_states": all_states}
         if protocols:
             kwargs["schemes"] = [p.strip() for p in protocols.split(",")]
         if rse_expression:

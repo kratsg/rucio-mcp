@@ -14,11 +14,45 @@ from rucio_mcp.tools._helpers import (
     paginate_iter,
 )
 
+# Full state name -> single-letter code, from rucio.db.sqla.constants
+# RequestState (not importable from the rucio-clients distribution). The rucio
+# server resolves each state with ``RequestState(<letter>)``, a lookup by value.
+_REQUEST_STATE_CODES = {
+    "QUEUED": "Q",
+    "SUBMITTING": "G",
+    "SUBMITTED": "S",
+    "FAILED": "F",
+    "DONE": "D",
+    "LOST": "L",
+    "NO_SOURCES": "N",
+    "ONLY_TAPE_SOURCES": "O",
+    "SUBMISSION_FAILED": "B",
+    "MISMATCH_SCHEME": "M",
+    "SUSPEND": "U",
+    "WAITING": "W",
+    "PREPARING": "P",
+}
 
-def _parse_states(request_states: str) -> list[str]:
-    """Split a comma- or space-separated states string into a list."""
-    # Normalise: replace commas with spaces then split
-    return request_states.replace(",", " ").split()
+
+def _parse_states(request_states: str) -> str:
+    """Map full state names to a comma-joined string of rucio letter codes.
+
+    rucio interpolates the value straight into the query string, so a plain
+    string (not a Python list) must be passed.
+
+    Raises:
+        ValueError: If a state name is not recognised.
+    """
+    names = request_states.replace(",", " ").split()
+    codes = []
+    for name in names:
+        code = _REQUEST_STATE_CODES.get(name.upper())
+        if code is None:
+            valid = ", ".join(_REQUEST_STATE_CODES)
+            msg = f"Error: unknown request state '{name}'. Valid states: {valid}."
+            raise ValueError(msg)
+        codes.append(code)
+    return ",".join(codes)
 
 
 def register(mcp: FastMCP) -> None:
@@ -48,7 +82,10 @@ def register(mcp: FastMCP) -> None:
             offset: Number of requests to skip for pagination.
         """
         client = get_rucio_client(ctx)
-        states = _parse_states(request_states)
+        try:
+            states = _parse_states(request_states)
+        except ValueError as exc:
+            return str(exc)
         try:
             it = client.list_requests(src_rse, dst_rse, states)
             results, footer = paginate_iter(it, limit=limit, offset=offset)
@@ -89,7 +126,10 @@ def register(mcp: FastMCP) -> None:
             offset: Number of records to skip for pagination.
         """
         client = get_rucio_client(ctx)
-        states = _parse_states(request_states)
+        try:
+            states = _parse_states(request_states)
+        except ValueError as exc:
+            return str(exc)
         try:
             it = client.list_requests_history(
                 src_rse, dst_rse, states, offset=offset, limit=limit

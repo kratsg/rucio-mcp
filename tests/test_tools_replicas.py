@@ -72,6 +72,34 @@ class TestRucioListReplicas:
         kwargs = mock_rucio_client.list_replicas.call_args[1]
         assert kwargs["schemes"] == ["root", "https"]
 
+    async def test_all_states_maps_to_all_states_kwarg(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_replicas.return_value = iter([])
+        fn = registered_tools["rucio_list_replicas"]
+        await fn("mc16_13TeV:file1", all_states=True, ctx=mock_ctx)
+        kwargs = mock_rucio_client.list_replicas.call_args[1]
+        # all_states controls state filtering; ignore_availability is a
+        # separate rucio parameter and must not be conflated with it.
+        assert kwargs["all_states"] is True
+        assert "ignore_availability" not in kwargs
+
+    async def test_all_states_default_false(
+        self,
+        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        mock_ctx: MagicMock,
+        mock_rucio_client: MagicMock,
+    ) -> None:
+        mock_rucio_client.list_replicas.return_value = iter([])
+        fn = registered_tools["rucio_list_replicas"]
+        await fn("mc16_13TeV:file1", ctx=mock_ctx)
+        kwargs = mock_rucio_client.list_replicas.call_args[1]
+        assert kwargs["all_states"] is False
+        assert "ignore_availability" not in kwargs
+
     async def test_invalid_did(
         self,
         registered_tools: dict[str, Callable[..., Awaitable[str]]],
