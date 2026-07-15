@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 from rucio_mcp.tools._helpers import (
     build_hints,
@@ -140,23 +143,27 @@ def register(mcp: FastMCP) -> None:
             return str(exc)
 
         client = get_rucio_client(ctx)
-        try:
-            children = list(client.list_content(scope, name))
-            results = []
-            for child in children:
+
+        def _child_replicas() -> Iterator[dict[str, Any]]:
+            # Lazily walks children so paginate_iter can stop early once it
+            # has enough rows, instead of calling list_dataset_replicas for
+            # every child up front.
+            for child in client.list_content(scope, name):
                 child_scope = child.get("scope", scope)
                 child_name = child.get("name", "")
                 if child_name:
-                    results.extend(
-                        client.list_dataset_replicas(child_scope, child_name, deep=deep)
+                    yield from client.list_dataset_replicas(
+                        child_scope, child_name, deep=deep
                     )
+
+        try:
+            page, footer = paginate_iter(_child_replicas(), limit=limit, offset=offset)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
-        if not results:
+        if not page:
             return "No dataset replicas found for container children."
 
-        page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
         hints = build_hints(
             [
                 f"Use `rucio_list_replicas {did}` for per-file PFN details",
@@ -202,11 +209,12 @@ def register(mcp: FastMCP) -> None:
 
         client = get_rucio_client(ctx)
         try:
-            results = list(client.list_dataset_replicas(scope, name, deep=deep))
+            it = client.list_dataset_replicas(scope, name, deep=deep)
+            page, footer = paginate_iter(it, limit=limit, offset=offset)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
-        if not results:
+        if not page:
             hints = build_hints(
                 [
                     f"If {did} is a container DID, use `rucio_list_container_replicas {did}` instead",
@@ -214,7 +222,6 @@ def register(mcp: FastMCP) -> None:
             )
             return "No dataset replicas found." + hints
 
-        page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
         hints = build_hints(
             [
                 f"Use `rucio_list_replicas {did}` for per-file PFN details",

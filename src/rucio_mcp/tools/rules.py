@@ -7,6 +7,7 @@ from typing import Any
 from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
 
 from rucio_mcp.tools._helpers import (
+    RULE_LIST_KEYS,
     build_hints,
     check_write_allowed,
     classify_error,
@@ -16,18 +17,6 @@ from rucio_mcp.tools._helpers import (
     paginate_iter,
     parse_did,
 )
-
-_RULE_LIST_KEYS = [
-    "id",
-    "state",
-    "rse_expression",
-    "account",
-    "copies",
-    "expires_at",
-    "locks_ok_cnt",
-    "locks_replicating_cnt",
-    "locks_stuck_cnt",
-]
 
 _RULE_INFO_KEYS = [
     "id",
@@ -56,6 +45,8 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def rucio_list_did_rules(
         did: str,
+        limit: int = 100,
+        offset: int = 0,
         *,
         ctx: Context[Any, Any],
     ) -> str:
@@ -67,6 +58,8 @@ def register(mcp: FastMCP) -> None:
 
         Args:
             did: The data identifier in ``scope:name`` format.
+            limit: Maximum number of rules to return (default 100).
+            offset: Number of rules to skip for pagination.
         """
         try:
             scope, name = parse_did(did)
@@ -75,7 +68,8 @@ def register(mcp: FastMCP) -> None:
 
         client = get_rucio_client(ctx)
         try:
-            results = list(client.list_did_rules(scope, name))
+            it = client.list_did_rules(scope, name)
+            results, footer = paginate_iter(it, limit=limit, offset=offset)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -88,9 +82,8 @@ def register(mcp: FastMCP) -> None:
             ]
         )
         return (
-            format_list(
-                results, include_keys=_RULE_LIST_KEYS, byte_keys=_RULE_BYTE_KEYS
-            )
+            format_list(results, include_keys=RULE_LIST_KEYS, byte_keys=_RULE_BYTE_KEYS)
+            + footer
             + hints
         )
 
@@ -174,14 +167,14 @@ def register(mcp: FastMCP) -> None:
 
         client = get_rucio_client(ctx)
         try:
-            results = list(client.list_replication_rule_full_history(scope, name))
+            it = client.list_replication_rule_full_history(scope, name)
+            page, footer = paginate_iter(it, limit=limit, offset=offset)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
-        if not results:
+        if not page:
             return "No rule history found."
 
-        page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
         hints = build_hints(
             [
                 f"Use `rucio_list_did_rules {did}` to see the current active rules for this DID"
@@ -235,9 +228,7 @@ def register(mcp: FastMCP) -> None:
             ]
         )
         return (
-            format_list(
-                results, include_keys=_RULE_LIST_KEYS, byte_keys=_RULE_BYTE_KEYS
-            )
+            format_list(results, include_keys=RULE_LIST_KEYS, byte_keys=_RULE_BYTE_KEYS)
             + footer
             + hints
         )

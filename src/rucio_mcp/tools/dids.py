@@ -173,14 +173,14 @@ def register(mcp: FastMCP) -> None:
 
         client = get_rucio_client(ctx)
         try:
-            results = list(client.list_content(scope, name))
+            it = client.list_content(scope, name)
+            page, footer = paginate_iter(it, limit=limit, offset=offset)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
-        if not results:
+        if not page:
             return "No contents found."
 
-        page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
         hints = build_hints(
             ["Use `rucio_get_did <scope:name>` to inspect any child DID"]
         )
@@ -210,14 +210,14 @@ def register(mcp: FastMCP) -> None:
 
         client = get_rucio_client(ctx)
         try:
-            results = list(client.list_files(scope, name, long=long))
+            it = client.list_files(scope, name, long=long)
+            page, footer = paginate_iter(it, limit=limit, offset=offset)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
-        if not results:
+        if not page:
             return "No files found."
 
-        page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
         hints = build_hints(
             [f"Use `rucio_list_replicas {did}` to find where files are stored"]
         )
@@ -285,14 +285,14 @@ def register(mcp: FastMCP) -> None:
 
         client = get_rucio_client(ctx)
         try:
-            results = list(client.list_parent_dids(scope, name))
+            it = client.list_parent_dids(scope, name)
+            page, footer = paginate_iter(it, limit=limit, offset=offset)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
-        if not results:
+        if not page:
             return "No parent DIDs found."
 
-        page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
         hints = build_hints(
             ["Use `rucio_get_did <scope:name>` to inspect any parent DID"]
         )
