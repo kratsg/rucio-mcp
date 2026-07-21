@@ -79,6 +79,28 @@ class TestBridgePage:
         assert "bridge/status" in resp.text  # relative URL works under any mount prefix
         assert "abc" in resp.text  # session id embedded in JS
 
+    def test_polling_url_is_html_escaped(self) -> None:
+        store = _make_store()
+        store.put(
+            _make_session(
+                "abc",
+                polling_url='https://idp.example.com/login"><script>alert(1)</script>',
+            )
+        )
+        client = TestClient(_make_app(store), raise_server_exceptions=True)
+        resp = client.get("/bridge?session=abc")
+        # The raw injection must not appear; the escaped form must.
+        assert "<script>alert(1)</script>" not in resp.text
+        assert "&lt;script&gt;alert(1)&lt;/script&gt;" in resp.text
+
+    def test_session_id_is_html_escaped(self) -> None:
+        store = _make_store()
+        store.put(_make_session('s"</script><b>'))
+        client = TestClient(_make_app(store), raise_server_exceptions=True)
+        resp = client.get('/bridge?session=s"</script><b>')
+        assert "</script><b>" not in resp.text
+        assert "&lt;/script&gt;&lt;b&gt;" in resp.text
+
 
 class TestBridgeStatus:
     def test_missing_session_param_returns_400(self) -> None:

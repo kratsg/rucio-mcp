@@ -717,6 +717,7 @@ def _make_http_app(
 ) -> Starlette:
     """Build a parent Starlette app with one FastMCP per site under /site/{name}/."""
     site_mcps: list[tuple[str, FastMCP]] = []
+    providers: list[RucioBridgeProvider] = []
     bridge_stores: dict[str, Any] = {}
     for site_name in sites:
         cfg_path = (rucio_cfg_overrides or {}).get(site_name) or _bundled_cfg_path(
@@ -747,6 +748,7 @@ def _make_http_app(
             poll_timeout=poll_timeout,
         )
         site_mcps.append((site_name, mcp))
+        providers.append(provider)
         bridge_stores[site_name] = (provider.store, cache)
 
     # Initialise session managers by calling streamable_http_app() on each.
@@ -772,7 +774,12 @@ def _make_http_app(
         async with AsyncExitStack() as stack:
             for _, mcp in site_mcps:
                 await stack.enter_async_context(mcp.session_manager.run())
-            yield
+            try:
+                yield
+            finally:
+                # Cancel in-flight bridge poll tasks so they don't leak on shutdown.
+                for provider in providers:
+                    await provider.aclose()
 
     routes: list[BaseRoute] = [
         Mount(f"/site/{name}", app=sub) for name, sub in sub_apps

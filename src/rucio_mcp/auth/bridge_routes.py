@@ -22,6 +22,7 @@ GET /bridge/status?session=<sid>
 
 from __future__ import annotations
 
+from html import escape as html_escape
 from typing import TYPE_CHECKING
 
 from starlette.responses import HTMLResponse, JSONResponse, Response
@@ -91,6 +92,11 @@ def register_bridge_routes(mcp: FastMCP, provider: RucioBridgeProvider) -> None:
 
 
 def _build_bridge_html(*, session_id: str, polling_url: str) -> str:
+    # Both values reach untrusted contexts: polling_url comes from the rucio
+    # auth server and lands in an href attribute; session_id lands in a JS
+    # string. Escape both so neither can break out of its context.
+    polling_url = html_escape(polling_url, quote=True)
+    session_id = html_escape(session_id, quote=True)
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
