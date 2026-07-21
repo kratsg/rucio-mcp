@@ -13,6 +13,7 @@ from rucio_mcp.tools._helpers import (
     get_rucio_client,
     paginate_iter,
     parse_did,
+    run_sync,
 )
 
 _LOCK_KEYS = ["scope", "name", "rse", "state", "account", "rule_id"]
@@ -45,9 +46,13 @@ def register(mcp: FastMCP) -> None:
             return str(exc)
 
         client = get_rucio_client(ctx)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.get_dataset_locks(scope, name)
-            results, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            results, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -81,9 +86,13 @@ def register(mcp: FastMCP) -> None:
             offset: Number of locks to skip for pagination.
         """
         client = get_rucio_client(ctx)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.get_dataset_locks_by_rse(rse)
-            results, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            results, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 

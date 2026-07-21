@@ -24,6 +24,7 @@ hatch-vcs = ">=0.4"
 [package.run-dependencies]
 rich = "*"
 rucio-clients = ">=35.0.0"
+anyio = ">=4"
 httpx2 = ">=2.0.0"
 mcp = ">=1.10"
 prometheus_client = ">=0.20"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
@@ -18,7 +19,33 @@ from rucio_mcp.tools._helpers import (
     format_dict,
     format_list,
     get_rucio_client,
+    run_sync,
 )
+
+
+class TestRunSync:
+    async def test_runs_in_worker_thread(self) -> None:
+        caller = threading.get_ident()
+
+        def _work() -> int:
+            assert threading.get_ident() != caller
+            return 42
+
+        assert await run_sync(_work) == 42
+
+    async def test_forwards_args_and_kwargs(self) -> None:
+        def _add(a: int, b: int, *, c: int) -> int:
+            return a + b + c
+
+        assert await run_sync(_add, 1, 2, c=3) == 6
+
+    async def test_propagates_exception(self) -> None:
+        def _boom() -> None:
+            msg = "kaboom"
+            raise ValueError(msg)
+
+        with pytest.raises(ValueError, match="kaboom"):
+            await run_sync(_boom)
 
 
 class TestFormatDict:

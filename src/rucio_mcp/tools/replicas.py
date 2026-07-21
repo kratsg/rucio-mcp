@@ -16,6 +16,7 @@ from rucio_mcp.tools._helpers import (
     get_rucio_client,
     paginate_iter,
     parse_did,
+    run_sync,
 )
 
 _DATASET_REPLICA_KEYS = ["rse", "available_bytes", "available_length", "state"]
@@ -100,9 +101,13 @@ def register(mcp: FastMCP) -> None:
             kwargs["sort"] = sort
 
         client = get_rucio_client(ctx)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.list_replicas(parsed, **kwargs)
-            results, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            results, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -156,8 +161,11 @@ def register(mcp: FastMCP) -> None:
                         child_scope, child_name, deep=deep
                     )
 
+        def _fetch() -> tuple[list[Any], str]:
+            return paginate_iter(_child_replicas(), limit=limit, offset=offset)
+
         try:
-            page, footer = paginate_iter(_child_replicas(), limit=limit, offset=offset)
+            page, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -208,9 +216,13 @@ def register(mcp: FastMCP) -> None:
             return str(exc)
 
         client = get_rucio_client(ctx)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.list_dataset_replicas(scope, name, deep=deep)
-            page, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            page, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 

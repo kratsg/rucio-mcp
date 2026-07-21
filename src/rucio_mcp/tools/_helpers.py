@@ -2,13 +2,36 @@
 
 from __future__ import annotations
 
+import functools
 import itertools
-from typing import Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
+from anyio import to_thread
 from rucio.common.exception import RucioException
 from rucio.common.utils import extract_scope
 
 from rucio_mcp.metrics import TOOL_ERRORS, current_tool_labels
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+T = TypeVar("T")
+
+
+async def run_sync(func: Callable[..., T], /, *args: Any, **kwargs: Any) -> T:
+    """Run a blocking callable in a worker thread, keeping the event loop free.
+
+    The synchronous ``rucio.client.Client`` performs network I/O; calling it
+    directly from an ``async`` tool blocks the shared event loop, so in HTTP
+    multi-user mode one slow rucio call stalls every session. Offloading the
+    whole call — including iterator consumption and pagination — keeps the loop
+    responsive.
+
+    ``anyio.to_thread.run_sync`` forwards only positional args, so keyword args
+    are bound with :func:`functools.partial`. Exceptions raised in the thread
+    propagate to the caller unchanged.
+    """
+    return await to_thread.run_sync(functools.partial(func, *args, **kwargs))
 
 
 def parse_did(did: str) -> tuple[str, str]:

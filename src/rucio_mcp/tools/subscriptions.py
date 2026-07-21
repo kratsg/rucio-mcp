@@ -13,6 +13,7 @@ from rucio_mcp.tools._helpers import (
     format_list,
     get_rucio_client,
     paginate_iter,
+    run_sync,
 )
 
 
@@ -41,12 +42,16 @@ def register(mcp: FastMCP) -> None:
             offset: Number of subscriptions to skip for pagination.
         """
         client = get_rucio_client(ctx)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.list_subscriptions(
                 name=name or None,
                 account=account or None,
             )
-            results, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            results, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -79,9 +84,13 @@ def register(mcp: FastMCP) -> None:
             offset: Number of rules to skip for pagination.
         """
         client = get_rucio_client(ctx)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.list_subscription_rules(account, name)
-            results, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            results, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 

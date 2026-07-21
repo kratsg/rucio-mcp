@@ -16,6 +16,7 @@ from rucio_mcp.tools._helpers import (
     get_rucio_client,
     paginate_iter,
     parse_did,
+    run_sync,
 )
 
 _RULE_INFO_KEYS = [
@@ -67,9 +68,13 @@ def register(mcp: FastMCP) -> None:
             return str(exc)
 
         client = get_rucio_client(ctx)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.list_did_rules(scope, name)
-            results, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            results, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -104,7 +109,7 @@ def register(mcp: FastMCP) -> None:
         """
         client = get_rucio_client(ctx)
         try:
-            result = client.get_replication_rule(rule_id)
+            result = await run_sync(client.get_replication_rule, rule_id)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -166,9 +171,13 @@ def register(mcp: FastMCP) -> None:
             return str(exc)
 
         client = get_rucio_client(ctx)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.list_replication_rule_full_history(scope, name)
-            page, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            page, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -213,9 +222,13 @@ def register(mcp: FastMCP) -> None:
             filters["account"] = account
 
         client = get_rucio_client(ctx)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.list_replication_rules(filters=filters)
-            results, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            results, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -320,8 +333,8 @@ def register(mcp: FastMCP) -> None:
 
         client = get_rucio_client(ctx)
         try:
-            rule_ids = client.add_replication_rule(
-                parsed, copies, rse_expression, **kwargs
+            rule_ids = await run_sync(
+                client.add_replication_rule, parsed, copies, rse_expression, **kwargs
             )
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
@@ -358,7 +371,9 @@ def register(mcp: FastMCP) -> None:
 
         client = get_rucio_client(ctx)
         try:
-            client.delete_replication_rule(rule_id, purge_replicas=purge_replicas)
+            await run_sync(
+                client.delete_replication_rule, rule_id, purge_replicas=purge_replicas
+            )
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -412,7 +427,7 @@ def register(mcp: FastMCP) -> None:
 
         client = get_rucio_client(ctx)
         try:
-            client.update_replication_rule(rule_id, options)
+            await run_sync(client.update_replication_rule, rule_id, options)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -446,8 +461,11 @@ def register(mcp: FastMCP) -> None:
 
         client = get_rucio_client(ctx)
         try:
-            new_rule_id = client.reduce_replication_rule(
-                rule_id, copies, exclude_expression=exclude_expression or None
+            new_rule_id = await run_sync(
+                client.reduce_replication_rule,
+                rule_id,
+                copies,
+                exclude_expression=exclude_expression or None,
             )
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
@@ -480,8 +498,8 @@ def register(mcp: FastMCP) -> None:
 
         client = get_rucio_client(ctx)
         try:
-            new_rule_id = client.move_replication_rule(
-                rule_id, rse_expression, override={}
+            new_rule_id = await run_sync(
+                client.move_replication_rule, rule_id, rse_expression, override={}
             )
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
@@ -512,7 +530,7 @@ def register(mcp: FastMCP) -> None:
 
         client = get_rucio_client(ctx)
         try:
-            client.approve_replication_rule(rule_id)
+            await run_sync(client.approve_replication_rule, rule_id)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -539,7 +557,7 @@ def register(mcp: FastMCP) -> None:
 
         client = get_rucio_client(ctx)
         try:
-            client.deny_replication_rule(rule_id, reason=reason or None)
+            await run_sync(client.deny_replication_rule, rule_id, reason=reason or None)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
