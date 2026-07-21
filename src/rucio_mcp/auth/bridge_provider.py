@@ -304,6 +304,19 @@ class RucioBridgeProvider:
             self.store.mark_error(session_id, str(exc))
             BRIDGE_AUTH.labels(site=self._site_name, outcome="failure").inc()
 
+    async def aclose(self) -> None:
+        """Cancel and await any in-flight background poll tasks.
+
+        Called from the server lifespan on shutdown so pending polls don't leak
+        or die noisily. Iterates a snapshot because the done-callback mutates
+        ``_bg_tasks`` as tasks finish.
+        """
+        tasks = list(self._bg_tasks)
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+
     async def load_authorization_code(
         self, _client: OAuthClientInformationFull, authorization_code: str
     ) -> AuthorizationCode | None:

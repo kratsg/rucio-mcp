@@ -462,6 +462,58 @@ class TestBgPoll:
         assert kwargs.get("timeout") == 30.0
 
 
+class TestAclose:
+    async def test_authorize_tracks_bg_task(
+        self,
+        provider: RucioBridgeProvider,
+        mock_poller: AsyncMock,
+        client_info: OAuthClientInformationFull,
+        auth_params: AuthorizationParams,
+    ) -> None:
+        mock_poller.request_auth_url.return_value = "https://idp.example.com/login"
+        started = asyncio.Event()
+
+        async def _never_returns(*_a: Any, **_kw: Any) -> str:
+            started.set()
+            await asyncio.Event().wait()  # never fires
+            return "unreachable"
+
+        mock_poller.poll_for_token.side_effect = _never_returns
+        await provider.authorize(client_info, auth_params)
+        await started.wait()
+        assert len(provider._bg_tasks) == 1
+        await provider.aclose()
+
+    async def test_aclose_cancels_pending_poll_tasks(
+        self,
+        provider: RucioBridgeProvider,
+        mock_poller: AsyncMock,
+        client_info: OAuthClientInformationFull,
+        auth_params: AuthorizationParams,
+    ) -> None:
+        mock_poller.request_auth_url.return_value = "https://idp.example.com/login"
+        started = asyncio.Event()
+
+        async def _never_returns(*_a: Any, **_kw: Any) -> str:
+            started.set()
+            await asyncio.Event().wait()
+            return "unreachable"
+
+        mock_poller.poll_for_token.side_effect = _never_returns
+        await provider.authorize(client_info, auth_params)
+        await started.wait()
+        task = next(iter(provider._bg_tasks))
+
+        await provider.aclose()
+        assert task.cancelled()
+        assert not provider._bg_tasks
+
+    async def test_aclose_noop_without_tasks(
+        self, provider: RucioBridgeProvider
+    ) -> None:
+        await provider.aclose()  # must not raise
+
+
 class TestLoadAuthorizationCode:
     async def test_returns_none_for_unknown_code(
         self, provider: RucioBridgeProvider, client_info: OAuthClientInformationFull
