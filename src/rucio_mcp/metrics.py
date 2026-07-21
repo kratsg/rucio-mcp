@@ -32,7 +32,6 @@ from prometheus_client import (
 )
 from prometheus_client.core import GaugeMetricFamily
 from prometheus_client.registry import Collector
-from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.routing import Match
 from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
 
@@ -42,10 +41,6 @@ from starlette.status import HTTP_500_INTERNAL_SERVER_ERROR
 disable_created_metrics()
 
 if TYPE_CHECKING:
-    from starlette.requests import Request
-    from starlette.responses import Response
-    from starlette.types import ASGIApp
-
     from rucio_mcp.auth.bridge_state import BridgeStateStore
     from rucio_mcp.auth.session_cache import SessionCache
 
@@ -170,12 +165,18 @@ def start_metrics_server(
 # ---------------------------------------------------------------------------
 
 
-class PrometheusMiddleware(BaseHTTPMiddleware):
-    """Record per-route request counts, response codes, latency, and exceptions."""
+class PrometheusMiddleware:
+    """Record per-route request counts, response codes, latency, and exceptions.
+
+    Pure ASGI middleware: the duration histogram and in-progress gauge span the
+    whole request, up to the last response body message.  A ``BaseHTTPMiddleware``
+    version would close its measurement once the response starts, understating
+    latency for streamed/SSE responses.
+    """
 
     def __init__(
         self,
-        app: ASGIApp,
+        app: Any,
         *,
         filter_unhandled_paths: bool = False,
         excluded_paths: frozenset[str] = frozenset(),
@@ -192,36 +193,47 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         normalised to ``/site/{site}`` in ``path_template``, collapsing the
         per-site well-known variant paths into a single template each.
         """
-        super().__init__(app)
+        self.app = app
         self.filter_unhandled_paths = filter_unhandled_paths
         self.excluded_paths = excluded_paths
         self.site_names = site_names
 
-    async def dispatch(
-        self, request: Request, call_next: RequestResponseEndpoint
-    ) -> Response:
-        """Instrument the request and delegate to *call_next*."""
-        method = request.method
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        """Instrument the request and delegate to the wrapped app."""
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
 
-        if request.url.path in self.excluded_paths:
-            return await call_next(request)
+        method = scope["method"]
+        path = scope["path"]
 
-        path_template, is_handled = self._path_template(request)
+        if path in self.excluded_paths:
+            await self.app(scope, receive, send)
+            return
+
+        path_template, is_handled = self._path_template(scope)
 
         if self.filter_unhandled_paths and not is_handled:
-            return await call_next(request)
+            await self.app(scope, receive, send)
+            return
 
         site, path_template = self._normalize_site(path_template)
+
+        status_code = HTTP_500_INTERNAL_SERVER_ERROR
+
+        async def _send(message: dict[str, Any]) -> None:
+            nonlocal status_code
+            if message["type"] == "http.response.start":
+                status_code = message["status"]
+            await send(message)
 
         REQUESTS_IN_PROGRESS.labels(
             method=method, path_template=path_template, site=site
         ).inc()
         REQUESTS.labels(method=method, path_template=path_template, site=site).inc()
         t0 = time.perf_counter()
-        status_code = HTTP_500_INTERNAL_SERVER_ERROR
         try:
-            response = await call_next(request)
-            status_code = response.status_code
+            await self.app(scope, receive, _send)
         except BaseException as exc:
             EXCEPTIONS.labels(
                 method=method,
@@ -244,7 +256,6 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
             REQUESTS_IN_PROGRESS.labels(
                 method=method, path_template=path_template, site=site
             ).dec()
-        return response
 
     def _normalize_site(self, path_template: str) -> tuple[str, str]:
         """Return ``(site, normalized_path_template)`` for the matched route.
@@ -260,9 +271,9 @@ class PrometheusMiddleware(BaseHTTPMiddleware):
         return "", path_template
 
     @staticmethod
-    def _path_template(request: Request) -> tuple[str, bool]:
-        for route in request.app.routes:
-            match, _ = route.matches(request.scope)
+    def _path_template(scope: Any) -> tuple[str, bool]:
+        for route in scope["app"].routes:
+            match, _ = route.matches(scope)
             if match == Match.FULL:
                 return route.path, True
-        return request.url.path, False
+        return scope["path"], False

@@ -326,9 +326,9 @@ sub-clients. Key methods by category (source in `rucio/lib/rucio/client/`):
   rule IDs
 - `client.delete_replication_rule(rule_id, purge_replicas)` → bool
 - `client.update_replication_rule(rule_id, options)` → bool
-- `client.reduce_replication_rule(rule_id, copies, activity)` → str (new rule
-  ID)
-- `client.move_replication_rule(rule_id, rse_expression, activity)` → str (new
+- `client.reduce_replication_rule(rule_id, copies, exclude_expression=None)` →
+  str (new rule ID)
+- `client.move_replication_rule(rule_id, rse_expression, override)` → str (new
   rule ID)
 - `client.approve_replication_rule(rule_id)` → bool
 - `client.deny_replication_rule(rule_id)` → bool

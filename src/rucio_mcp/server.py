@@ -62,6 +62,21 @@ from rucio_mcp.tools import (
     subscriptions,
 )
 
+# Tool modules registered on every transport. `ping` is registered separately
+# (its instructions differ by transport); stdio and shared-secret modes also add
+# `proxy` (voms-proxy-info), which has no meaning in the OIDC-bridge HTTP mode.
+_TOOL_MODULES = [
+    dids,
+    replicas,
+    scopes,
+    rses,
+    rules,
+    account,
+    locks,
+    rucio_requests,
+    subscriptions,
+]
+
 _STDIO_PREAMBLE = (
     "MCP server for Rucio data management. "
     "Provides tools to discover datasets, check replica locations, "
@@ -283,19 +298,9 @@ def _make_stdio_mcp(
         instructions=_build_instructions(preset, transport="stdio"),
     )
 
-    for _module in [
-        dids,
-        replicas,
-        scopes,
-        rses,
-        rules,
-        account,
-        proxy,
-        locks,
-        rucio_requests,
-        subscriptions,
-    ]:
+    for _module in _TOOL_MODULES:
         _module.register(mcp)
+    proxy.register(mcp)
     ping.register(mcp, transport="stdio")
 
     register_resources(mcp, site_name, preset.nomenclature_resource)
@@ -308,8 +313,6 @@ def _make_site_mcp(
     cfg: RucioCfg,
     resource_url: str,
     read_only: bool,
-    host: str,
-    port: int,
     poll_timeout: float = 180.0,
 ) -> tuple[FastMCP, RucioBridgeProvider, SessionCache]:
     """Build a single-site FastMCP for HTTP transport.
@@ -348,8 +351,6 @@ def _make_site_mcp(
         f"rucio-mcp-{site_name}",
         site_name=site_name,
         instructions=_build_instructions(preset, transport="http"),
-        host=host,
-        port=port,
         streamable_http_path="/",
         lifespan=_site_lifespan,
         auth_server_provider=provider,
@@ -365,17 +366,7 @@ def _make_site_mcp(
     )
 
     register_bridge_routes(mcp, provider)
-    for _module in [
-        dids,
-        replicas,
-        scopes,
-        rses,
-        rules,
-        account,
-        locks,
-        rucio_requests,
-        subscriptions,
-    ]:
+    for _module in _TOOL_MODULES:
         _module.register(mcp)
     ping.register(mcp, transport="http")
     register_resources(mcp, site_name, preset.nomenclature_resource)
@@ -388,8 +379,6 @@ def _make_shared_secret_mcp(
     read_only: bool,
     resource_url: str,
     secret: str,
-    host: str,
-    port: int,
 ) -> _InstrumentedFastMCP:
     """Build a single-site FastMCP for HTTP transport gated by a static bearer.
 
@@ -415,8 +404,6 @@ def _make_shared_secret_mcp(
         # so use the stdio instructions/tool set; the bearer is a static gate,
         # not a decodable session token (no rucio_token_info tool).
         instructions=_build_instructions(preset, transport="stdio"),
-        host=host,
-        port=port,
         streamable_http_path="/",
         lifespan=_lifespan,
         token_verifier=SharedSecretVerifier(secret),
@@ -431,56 +418,32 @@ def _make_shared_secret_mcp(
         ),
     )
 
-    for _module in [
-        dids,
-        replicas,
-        scopes,
-        rses,
-        rules,
-        account,
-        proxy,
-        locks,
-        rucio_requests,
-        subscriptions,
-    ]:
+    for _module in _TOOL_MODULES:
         _module.register(mcp)
+    proxy.register(mcp)
     ping.register(mcp, transport="stdio")
     register_resources(mcp, site_name, preset.nomenclature_resource)
     return mcp
 
 
-def _make_shared_secret_app(
+def _assemble_parent_app(
     *,
-    site_name: str,
+    mount_routes: list[BaseRoute],
+    sites: list[str],
     resource_url: str,
     read_only: bool,
-    secret: str,
-    host: str,
-    port: int,
+    lifespan: Any,
+    bridge_stores: dict[str, Any] | None = None,
 ) -> Starlette:
-    """Build a single-site Starlette app for shared-secret HTTP transport.
+    """Assemble the parent Starlette app shared by both HTTP transport modes.
 
-    Mounts the FastMCP streamable app under ``/site/{name}/`` (parity with OIDC
-    deployments) plus ``/healthz`` and a ``/`` landing page.  No OAuth metadata,
-    bridge routes, or CIMD middleware — the only auth is the static bearer.
+    *mount_routes* holds the per-site mounts (and, for OIDC mode, the well-known
+    proxy routes) that differ between modes.  This appends the common
+    ``/healthz`` and landing ``/`` routes, installs the site-path-normaliser and
+    Prometheus middleware, disables slash redirects (an nginx ingress that
+    strips trailing slashes would otherwise loop forever), and populates
+    ``app.state``.
     """
-    mcp = _make_shared_secret_mcp(
-        site_name=site_name,
-        read_only=read_only,
-        resource_url=resource_url.rstrip("/") + f"/site/{site_name}",
-        secret=secret,
-        host=host,
-        port=port,
-    )
-    sub_app = mcp.streamable_http_app()
-
-    @asynccontextmanager
-    async def _combined_lifespan(_app: Starlette) -> AsyncGenerator[None, None]:
-        # Mounted sub-apps don't get lifespan propagation, so start the
-        # session_manager explicitly from the parent lifespan.
-        async with mcp.session_manager.run():
-            yield
-
     _version = _pkg_version("rucio-mcp")
 
     async def root_handler(request: Request) -> Response:
@@ -496,30 +459,68 @@ def _make_shared_secret_app(
         return PlainTextResponse("ok")
 
     routes: list[BaseRoute] = [
-        Mount(f"/site/{site_name}", app=sub_app),
+        *mount_routes,
         Route("/healthz", endpoint=healthz_handler, methods=["GET"]),
         Route("/", endpoint=root_handler, methods=["GET"]),
     ]
-    site_prefixes = frozenset({f"/site/{site_name}"})
+    site_prefixes = frozenset(f"/site/{name}" for name in sites)
     app = Starlette(
         routes=routes,
-        lifespan=_combined_lifespan,
+        lifespan=lifespan,
         middleware=[
             Middleware(_SitePathNormalizerMiddleware, site_prefixes=site_prefixes),
             Middleware(
                 PrometheusMiddleware,
                 filter_unhandled_paths=True,
                 excluded_paths=frozenset({"/healthz"}),
-                site_names=frozenset({site_name}),
+                site_names=frozenset(sites),
             ),
         ],
     )
-    # See _make_http_app: prevent 307 slash redirects that loop behind nginx.
     app.router.redirect_slashes = False
-    app.state.sites = [site_name]
+    if bridge_stores is not None:
+        app.state.bridge_stores = bridge_stores
+    app.state.sites = sites
     app.state.resource_url = resource_url
     app.state.read_only = read_only
     return app
+
+
+def _make_shared_secret_app(
+    *,
+    site_name: str,
+    resource_url: str,
+    read_only: bool,
+    secret: str,
+) -> Starlette:
+    """Build a single-site Starlette app for shared-secret HTTP transport.
+
+    Mounts the FastMCP streamable app under ``/site/{name}/`` (parity with OIDC
+    deployments) plus ``/healthz`` and a ``/`` landing page.  No OAuth metadata,
+    bridge routes, or CIMD middleware — the only auth is the static bearer.
+    """
+    mcp = _make_shared_secret_mcp(
+        site_name=site_name,
+        read_only=read_only,
+        resource_url=resource_url.rstrip("/") + f"/site/{site_name}",
+        secret=secret,
+    )
+    sub_app = mcp.streamable_http_app()
+
+    @asynccontextmanager
+    async def _combined_lifespan(_app: Starlette) -> AsyncGenerator[None, None]:
+        # Mounted sub-apps don't get lifespan propagation, so start the
+        # session_manager explicitly from the parent lifespan.
+        async with mcp.session_manager.run():
+            yield
+
+    return _assemble_parent_app(
+        mount_routes=[Mount(f"/site/{site_name}", app=sub_app)],
+        sites=[site_name],
+        resource_url=resource_url,
+        read_only=read_only,
+        lifespan=_combined_lifespan,
+    )
 
 
 def _augment_as_metadata(body: bytes) -> bytes:
@@ -710,8 +711,6 @@ def _make_http_app(
     sites: list[str],
     resource_url: str,
     read_only: bool,
-    host: str,
-    port: int,
     rucio_cfg_overrides: dict[str, Path] | None = None,
     poll_timeout: float = 180.0,
 ) -> Starlette:
@@ -742,8 +741,6 @@ def _make_http_app(
             cfg=cfg,
             resource_url=site_url,
             read_only=read_only,
-            host=host,
-            port=port,
             poll_timeout=poll_timeout,
         )
         site_mcps.append((site_name, mcp))
@@ -806,46 +803,14 @@ def _make_http_app(
     #       → authorization_servers: ["…/site/{name}"]
     #       → /.well-known/oauth-authorization-server/site/{name}
     #       → /site/{name}/{register,authorize,token}
-    _version = _pkg_version("rucio-mcp")
-
-    async def root_handler(request: Request) -> Response:
-        html = make_landing_html(
-            sites=request.app.state.sites,
-            resource_url=request.app.state.resource_url,
-            version=_version,
-            read_only=request.app.state.read_only,
-        )
-        return Response(html, media_type="text/html")
-
-    async def healthz_handler(_request: Request) -> Response:
-        return PlainTextResponse("ok")
-
-    routes.append(Route("/healthz", endpoint=healthz_handler, methods=["GET"]))
-    routes.append(Route("/", endpoint=root_handler, methods=["GET"]))
-    site_prefixes = frozenset(f"/site/{name}" for name in sites)
-    app = Starlette(
-        routes=routes,
+    return _assemble_parent_app(
+        mount_routes=routes,
+        sites=sites,
+        resource_url=resource_url,
+        read_only=read_only,
         lifespan=_combined_lifespan,
-        middleware=[
-            Middleware(_SitePathNormalizerMiddleware, site_prefixes=site_prefixes),
-            Middleware(
-                PrometheusMiddleware,
-                filter_unhandled_paths=True,
-                excluded_paths=frozenset({"/healthz"}),
-                site_names=frozenset(sites),
-            ),
-        ],
+        bridge_stores=bridge_stores,
     )
-    # Prevent 307 redirects for /site/{name} → /site/{name}/. Without this,
-    # nginx ingresses that strip trailing slashes cause an infinite redirect
-    # loop: Starlette redirects POST /site/escape → /site/escape/, nginx strips
-    # the slash, pod sees /site/escape again → repeat forever.
-    app.router.redirect_slashes = False
-    app.state.bridge_stores = bridge_stores
-    app.state.sites = sites
-    app.state.resource_url = resource_url
-    app.state.read_only = read_only
-    return app
 
 
 def serve(
@@ -906,8 +871,6 @@ def serve(
             resource_url=resource_url or f"http://{host}:{port}",
             read_only=read_only,
             secret=shared_secret,
-            host=host,
-            port=port,
         )
         start_metrics_server(metrics_port, {})
         uvicorn.run(
@@ -946,8 +909,6 @@ def serve(
         sites=sites,
         resource_url=resource_url,
         read_only=read_only,
-        host=host,
-        port=port,
         rucio_cfg_overrides=cfg_overrides or None,
         poll_timeout=poll_timeout,
     )

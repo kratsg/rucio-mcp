@@ -43,8 +43,6 @@ def http_app(oidc_rucio_cfg: Path):
         sites=["escape"],
         resource_url="http://localhost:8000",
         read_only=False,
-        host="127.0.0.1",
-        port=8000,
         rucio_cfg_overrides={"escape": oidc_rucio_cfg},
     )
 
@@ -202,8 +200,6 @@ class TestMultiSiteOAuthIsolation:
             sites=["atlas", "escape"],
             resource_url="http://localhost:8000",
             read_only=False,
-            host="127.0.0.1",
-            port=8000,
             rucio_cfg_overrides={"atlas": atlas_rucio_cfg, "escape": oidc_rucio_cfg},
         )
 
@@ -443,8 +439,6 @@ class TestRootLandingPage:
             sites=["escape"],
             resource_url="http://localhost:8000",
             read_only=True,
-            host="127.0.0.1",
-            port=8000,
             rucio_cfg_overrides={"escape": oidc_rucio_cfg},
         )
         client = TestClient(app, raise_server_exceptions=True)
@@ -509,8 +503,6 @@ class TestServeHTTPValidation:
             sites=["escape"],
             resource_url="http://localhost:8000",
             read_only=False,
-            host="127.0.0.1",
-            port=8000,
             rucio_cfg_overrides={"escape": cfg},
         )
         assert app is not None
@@ -624,6 +616,44 @@ class TestSiteLabelOnHTTPMetrics:
         assert after - before == 1.0
 
 
+class TestPrometheusMiddlewareASGI:
+    """The pure-ASGI PrometheusMiddleware records duration and clears in-progress."""
+
+    def test_processing_time_histogram_records_request(
+        self, http_client: TestClient
+    ) -> None:
+        labels = {"method": "GET", "path_template": "/", "site": ""}
+        before = (
+            REGISTRY.get_sample_value(
+                "starlette_requests_processing_time_seconds_count", labels
+            )
+            or 0.0
+        )
+        http_client.get("/")
+        after = (
+            REGISTRY.get_sample_value(
+                "starlette_requests_processing_time_seconds_count", labels
+            )
+            or 0.0
+        )
+        assert after - before == 1.0
+
+    def test_in_progress_gauge_returns_to_baseline(
+        self, http_client: TestClient
+    ) -> None:
+        labels = {"method": "GET", "path_template": "/", "site": ""}
+        before = (
+            REGISTRY.get_sample_value("starlette_requests_in_progress", labels) or 0.0
+        )
+        http_client.get("/")
+        # Gauge is incremented on entry and decremented in the finally block, so a
+        # completed request must leave it unchanged.
+        after = (
+            REGISTRY.get_sample_value("starlette_requests_in_progress", labels) or 0.0
+        )
+        assert after == before
+
+
 class TestNoCreatedSeries:
     def test_no_created_series_in_metrics_output(self) -> None:
         """Counters and histograms must not emit _created timestamp series."""
@@ -674,8 +704,6 @@ class TestSharedSecretMode:
                 resource_url="http://localhost:8000",
                 read_only=False,
                 secret="s3cr3t",
-                host="127.0.0.1",
-                port=8000,
             )
             with TestClient(app, raise_server_exceptions=True) as client:
                 yield client
