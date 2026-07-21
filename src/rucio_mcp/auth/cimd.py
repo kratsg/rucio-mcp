@@ -28,7 +28,7 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl, ValidationError
 
@@ -103,12 +103,16 @@ def _ip_blocked(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
 
 async def assert_safe_url(
     client_id_url: str, *, resolver: Resolver | None = None
-) -> None:
-    """Raise :class:`CimdError` unless *client_id_url* is safe to fetch server-side.
+) -> list[str]:
+    """Return the vetted IPs for *client_id_url*, or raise :class:`CimdError`.
 
     The server dereferences a URL the client controls, so this is the SSRF
     guard: requires ``https``, and rejects hosts that are — or resolve to —
     private, loopback, link-local, multicast, reserved, or unspecified addresses.
+
+    The returned addresses are handed to :class:`_PinnedTransport` so the fetch
+    connects only to an address vetted here — closing the DNS-rebinding TOCTOU
+    where an independent re-resolution could return a private IP.
 
     DNS resolution is offloaded to the event loop's resolver
     (``loop.getaddrinfo``) so a blackholed nameserver cannot stall the event
@@ -131,7 +135,7 @@ async def assert_safe_url(
         if _ip_blocked(literal):
             msg = f"CIMD client_id host {host} is not a public address"
             raise CimdError(msg)
-        return
+        return [host]
 
     if resolver is None:
         resolver = asyncio.get_running_loop().getaddrinfo
@@ -141,17 +145,63 @@ async def assert_safe_url(
     except socket.gaierror as exc:
         msg = f"cannot resolve CIMD host {host}: {exc}"
         raise CimdError(msg) from exc
+    vetted: list[str] = []
     for info in infos:
         addr = info[4][0]
         if _ip_blocked(ipaddress.ip_address(addr)):
             msg = f"CIMD host {host} resolves to non-public address {addr}"
             raise CimdError(msg)
+        if addr not in vetted:
+            vetted.append(addr)
+    if not vetted:
+        msg = f"cannot resolve CIMD host {host}"
+        raise CimdError(msg)
+    return vetted
+
+
+class _PinnedTransport(httpx2.AsyncBaseTransport):
+    """Pin the CIMD fetch to a pre-vetted IP, keeping the real hostname for TLS.
+
+    Without pinning, httpx2 re-resolves the host independently of the SSRF guard,
+    so attacker DNS could return a public IP for the check and a private one for
+    the fetch (rebinding TOCTOU). This rewrites the connection target to a vetted
+    address while preserving the SNI hostname, the certificate hostname (both via
+    the ``sni_hostname`` extension), and the ``Host`` header, so TLS still
+    verifies against the real name. Vetted IPs are tried in order for resiliency.
+    """
+
+    def __init__(
+        self,
+        vetted_ips: list[str],
+        hostname: str,
+        *,
+        wrapped: httpx2.AsyncBaseTransport,
+    ) -> None:
+        self._ips = vetted_ips
+        self._hostname = hostname
+        self._wrapped = wrapped
+
+    async def handle_async_request(self, request: httpx2.Request) -> httpx2.Response:
+        request.headers["Host"] = request.url.netloc.decode("ascii")
+        request.extensions = {**request.extensions, "sni_hostname": self._hostname}
+        last_exc: httpx2.ConnectError | None = None
+        for ip in self._ips:
+            request.url = request.url.copy_with(host=ip)
+            try:
+                return await self._wrapped.handle_async_request(request)
+            except httpx2.ConnectError as exc:
+                last_exc = exc
+        assert last_exc is not None  # non-empty _ips guaranteed by assert_safe_url
+        raise last_exc
+
+    async def aclose(self) -> None:
+        await self._wrapped.aclose()
 
 
 async def fetch_client_document(
     client_id_url: str,
     *,
-    client: httpx.AsyncClient | None = None,
+    client: httpx2.AsyncClient | None = None,
     timeout: float = _FETCH_TIMEOUT,
     max_bytes: int = _MAX_DOC_BYTES,
 ) -> dict[str, Any]:
@@ -164,20 +214,20 @@ async def fetch_client_document(
     """
     owns_client = client is None
     if client is None:
-        client = httpx.AsyncClient(timeout=timeout, follow_redirects=False)
+        client = httpx2.AsyncClient(timeout=timeout, follow_redirects=False)
     try:
         response = await client.get(
             client_id_url, headers={"Accept": "application/json"}
         )
         response.raise_for_status()
-    except httpx.HTTPError as exc:
+    except httpx2.HTTPError as exc:
         msg = f"failed to fetch CIMD document: {exc}"
         raise CimdError(msg) from exc
     finally:
         if owns_client:
             await client.aclose()
 
-    # httpx buffers the full body on a non-streaming GET, so .content / .json()
+    # httpx2 buffers the full body on a non-streaming GET, so .content / .json()
     # remain available after the client is closed above.
     if len(response.content) > max_bytes:
         msg = "CIMD document too large"
@@ -260,7 +310,7 @@ def build_client_from_document(
 async def resolve_cimd_client(
     client_id: str,
     *,
-    client: httpx.AsyncClient | None = None,
+    client: httpx2.AsyncClient | None = None,
     timeout: float = _FETCH_TIMEOUT,
 ) -> OAuthClientInformationFull:
     """Resolve a CIMD ``client_id`` URL to an :class:`OAuthClientInformationFull`.
@@ -268,9 +318,26 @@ async def resolve_cimd_client(
     Validates the URL is safe to fetch, dereferences it, and builds a public
     client carrying only the document's declared redirect URIs.  Raises
     :class:`CimdError` on any failure.
+
+    When no *client* is injected the fetch is pinned to an address vetted by
+    :func:`assert_safe_url` (see :class:`_PinnedTransport`), so a rebinding DNS
+    cannot swap in a private IP between the check and the connection.
     """
-    await assert_safe_url(client_id)
-    doc = await fetch_client_document(client_id, client=client, timeout=timeout)
+    vetted_ips = await assert_safe_url(client_id)
+    owns_client = client is None
+    if client is None:
+        hostname = urlparse(client_id).hostname or ""
+        transport = _PinnedTransport(
+            vetted_ips, hostname, wrapped=httpx2.AsyncHTTPTransport()
+        )
+        client = httpx2.AsyncClient(
+            timeout=timeout, follow_redirects=False, transport=transport
+        )
+    try:
+        doc = await fetch_client_document(client_id, client=client, timeout=timeout)
+    finally:
+        if owns_client:
+            await client.aclose()
     resolved = build_client_from_document(doc, client_id)
     _log.info("Resolved CIMD client_id=%s", client_id)
     return resolved

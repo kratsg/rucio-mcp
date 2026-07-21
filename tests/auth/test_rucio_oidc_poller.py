@@ -7,7 +7,7 @@ import ssl
 from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
+import httpx2
 import pytest
 
 from rucio_mcp.auth.rucio_oidc_poller import RucioOidcPoller, _ssl_context
@@ -51,7 +51,7 @@ def poller() -> RucioOidcPoller:
 
 
 def _mock_client(get_side_effect: Any) -> MagicMock:
-    """Build a mock httpx.AsyncClient context manager."""
+    """Build a mock httpx2.AsyncClient context manager."""
     mock_client = AsyncMock()
     mock_client.__aenter__.return_value = mock_client
     mock_client.__aexit__.return_value = False
@@ -143,7 +143,7 @@ class TestRequestAuthUrl:
             get_side_effect=[_response(200, {"X-Rucio-OIDC-Auth-URL": polling_url})]
         )
 
-        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
+        with patch(f"{_MODULE}.httpx2.AsyncClient", return_value=mock):
             url = await poller.request_auth_url()
 
         assert url == polling_url
@@ -152,7 +152,7 @@ class TestRequestAuthUrl:
         mock = _mock_client(get_side_effect=[_response(200)])
 
         with (
-            patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock),
+            patch(f"{_MODULE}.httpx2.AsyncClient", return_value=mock),
             pytest.raises(RuntimeError, match="X-Rucio-OIDC-Auth-URL"),
         ):
             await poller.request_auth_url()
@@ -160,15 +160,15 @@ class TestRequestAuthUrl:
     async def test_raises_on_http_error(self, poller: RucioOidcPoller) -> None:
         bad_resp = _response(401)
         bad_resp.raise_for_status = MagicMock(
-            side_effect=httpx.HTTPStatusError(
+            side_effect=httpx2.HTTPStatusError(
                 "401", request=MagicMock(), response=MagicMock()
             )
         )
         mock = _mock_client(get_side_effect=[bad_resp])
 
         with (
-            patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock),
-            pytest.raises(httpx.HTTPStatusError),
+            patch(f"{_MODULE}.httpx2.AsyncClient", return_value=mock),
+            pytest.raises(httpx2.HTTPStatusError),
         ):
             await poller.request_auth_url()
 
@@ -184,7 +184,7 @@ class TestPollForToken:
         ]
         mock = _mock_client(get_side_effect=responses)
 
-        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
+        with patch(f"{_MODULE}.httpx2.AsyncClient", return_value=mock):
             token = await poller.poll_for_token(
                 "https://rucio-auth.example.com/auth/oidc_redirect?state=xyz_polling",
                 timeout=5.0,
@@ -206,7 +206,7 @@ class TestPollForToken:
         mock.get = _always_pending
 
         with (
-            patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock),
+            patch(f"{_MODULE}.httpx2.AsyncClient", return_value=mock),
             pytest.raises(asyncio.TimeoutError),
         ):
             await poller.poll_for_token(
@@ -224,7 +224,7 @@ class TestPollForToken:
         ]
         mock = _mock_client(get_side_effect=responses)
 
-        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
+        with patch(f"{_MODULE}.httpx2.AsyncClient", return_value=mock):
             token = await poller.poll_for_token(
                 "https://rucio-auth.example.com/auth/oidc_redirect?state=xyz_polling",
                 timeout=5.0,
@@ -248,7 +248,7 @@ class TestPollForToken:
         mock.get = _always_401
 
         with (
-            patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock),
+            patch(f"{_MODULE}.httpx2.AsyncClient", return_value=mock),
             pytest.raises(asyncio.TimeoutError),
         ):
             await poller.poll_for_token(
@@ -264,7 +264,7 @@ class TestPollForToken:
         ]
         mock = _mock_client(get_side_effect=responses)
 
-        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
+        with patch(f"{_MODULE}.httpx2.AsyncClient", return_value=mock):
             token = await poller.poll_for_token(
                 "https://rucio-auth.example.com/auth/oidc_redirect?state=xyz",
                 timeout=5.0,
@@ -276,12 +276,12 @@ class TestPollForToken:
 
     async def test_retries_on_network_error(self, poller: RucioOidcPoller) -> None:
         responses = [
-            httpx.ConnectError("boom"),
+            httpx2.ConnectError("boom"),
             _response(200, {"X-Rucio-Auth-Token": "tok"}),
         ]
         mock = _mock_client(get_side_effect=responses)
 
-        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
+        with patch(f"{_MODULE}.httpx2.AsyncClient", return_value=mock):
             token = await poller.poll_for_token(
                 "https://rucio-auth.example.com/auth/oidc_redirect?state=xyz",
                 timeout=5.0,
@@ -303,7 +303,7 @@ class TestPollForToken:
         mock.__aexit__.return_value = False
         mock.get = _capture
 
-        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
+        with patch(f"{_MODULE}.httpx2.AsyncClient", return_value=mock):
             await poller.poll_for_token(
                 "https://rucio-auth.example.com/auth/oidc_redirect?state=xyz_polling",
                 timeout=5.0,
@@ -328,7 +328,7 @@ class TestPollForToken:
         mock.__aexit__.return_value = False
         mock.get = _capture
 
-        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
+        with patch(f"{_MODULE}.httpx2.AsyncClient", return_value=mock):
             await poller.poll_for_token(
                 "https://rucio-auth.example.com/auth/oidc_redirect?state=xyz",
                 timeout=5.0,
@@ -357,7 +357,7 @@ class TestRequestAuthUrlAccountOverride:
         mock.__aexit__.return_value = False
         mock.get = _capture
 
-        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
+        with patch(f"{_MODULE}.httpx2.AsyncClient", return_value=mock):
             await poller.request_auth_url(account="bob")
 
         assert seen_headers[0]["X-Rucio-Account"] == "bob"
@@ -379,7 +379,7 @@ class TestRequestAuthUrlAccountOverride:
         mock.__aexit__.return_value = False
         mock.get = _capture
 
-        with patch(f"{_MODULE}.httpx.AsyncClient", return_value=mock):
+        with patch(f"{_MODULE}.httpx2.AsyncClient", return_value=mock):
             await poller.request_auth_url()
 
         assert seen_headers[0]["X-Rucio-Account"] == "alice"
