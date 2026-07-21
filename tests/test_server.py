@@ -441,8 +441,6 @@ class TestInstrumentedFastMCP:
             cfg=cfg,
             resource_url="http://localhost:8000/site/escape",
             read_only=False,
-            host="127.0.0.1",
-            port=8000,
         )
         assert isinstance(mcp, _InstrumentedFastMCP)
         assert mcp._site_name == "escape"
