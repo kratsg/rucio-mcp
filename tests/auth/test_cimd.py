@@ -11,12 +11,13 @@ import socket
 from typing import Any
 from unittest.mock import patch
 
-import httpx
+import httpx2
 import pytest
 from mcp.shared.auth import OAuthClientInformationFull
 
 from rucio_mcp.auth.cimd import (
     CimdError,
+    _PinnedTransport,
     assert_safe_url,
     build_client_from_document,
     client_with_requested_redirect,
@@ -100,7 +101,8 @@ class TestRedirectUriMatches:
 
 class TestAssertSafeUrl:
     async def test_public_ip_literal_ok(self) -> None:
-        await assert_safe_url(_CLIENT_URL)  # no raise
+        # An IP literal is returned verbatim as the sole vetted address.
+        assert await assert_safe_url(_CLIENT_URL) == ["93.184.216.34"]
 
     async def test_http_rejected(self) -> None:
         with pytest.raises(CimdError, match="https"):
@@ -133,9 +135,14 @@ class TestAssertSafeUrl:
 
     async def test_hostname_resolving_to_public_ok(self) -> None:
         def resolver(*_args: object, **_kwargs: object) -> list[Any]:
-            return [(socket.AF_INET, None, None, "", ("93.184.216.34", 443))]
+            return [
+                (socket.AF_INET, None, None, "", ("93.184.216.34", 443)),
+                (socket.AF_INET, None, None, "", ("93.184.216.35", 443)),
+            ]
 
-        await assert_safe_url("https://example.com/client", resolver=resolver)
+        # All vetted addresses are returned (deduplicated), for the fetch to pin to.
+        vetted = await assert_safe_url("https://example.com/client", resolver=resolver)
+        assert vetted == ["93.184.216.34", "93.184.216.35"]
 
     async def test_default_resolver_uses_event_loop(self) -> None:
         # With no injected resolver, resolution is offloaded to the running loop
@@ -150,43 +157,53 @@ class TestAssertSafeUrl:
 
 class TestFetchClientDocument:
     async def test_returns_parsed_json(self) -> None:
-        def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json=_document())
+        def handler(_request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, json=_document())
 
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(handler)
+        ) as client:
             doc = await fetch_client_document(_CLIENT_URL, client=client)
         assert doc["client_id"] == _CLIENT_URL
 
     async def test_non_json_raises(self) -> None:
-        def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, text="<html>not json</html>")
+        def handler(_request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, text="<html>not json</html>")
 
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(handler)
+        ) as client:
             with pytest.raises(CimdError, match="JSON"):
                 await fetch_client_document(_CLIENT_URL, client=client)
 
     async def test_http_error_raises(self) -> None:
-        def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(404)
+        def handler(_request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(404)
 
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(handler)
+        ) as client:
             with pytest.raises(CimdError, match="fetch"):
                 await fetch_client_document(_CLIENT_URL, client=client)
 
     async def test_non_object_json_rejected(self) -> None:
         # A top-level JSON array (not an object) is not a valid CIMD document.
-        def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json=["not", "an", "object"])
+        def handler(_request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, json=["not", "an", "object"])
 
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(handler)
+        ) as client:
             with pytest.raises(CimdError, match="JSON object"):
                 await fetch_client_document(_CLIENT_URL, client=client)
 
     async def test_oversized_document_rejected(self) -> None:
-        def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json={"padding": "x" * 200_000})
+        def handler(_request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, json={"padding": "x" * 200_000})
 
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(handler)
+        ) as client:
             with pytest.raises(CimdError, match="large"):
                 await fetch_client_document(_CLIENT_URL, client=client, max_bytes=1024)
 
@@ -257,10 +274,12 @@ class TestClientWithRequestedRedirect:
 
 class TestResolveCimdClient:
     async def test_end_to_end(self) -> None:
-        def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json=_document())
+        def handler(_request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, json=_document())
 
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(handler)
+        ) as client:
             resolved = await resolve_cimd_client(_CLIENT_URL, client=client)
         assert resolved.client_id == _CLIENT_URL
         assert resolved.token_endpoint_auth_method == "none"
@@ -270,10 +289,110 @@ class TestResolveCimdClient:
 
     async def test_unsafe_url_rejected_before_fetch(self) -> None:
         # A private-IP client_id must be rejected without any network call.
-        async with httpx.AsyncClient(
-            transport=httpx.MockTransport(
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(
                 lambda _r: pytest.fail("should not fetch unsafe URL")
             )
         ) as client:
             with pytest.raises(CimdError):
                 await resolve_cimd_client("https://10.0.0.1/client", client=client)
+
+
+class TestPinnedTransport:
+    """The pinning transport is what closes the DNS-rebinding TOCTOU: it connects
+    to a pre-vetted IP while keeping the real hostname for TLS and the Host header.
+    """
+
+    @staticmethod
+    def _capturing() -> tuple[list[httpx2.Request], httpx2.MockTransport]:
+        seen: list[httpx2.Request] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            seen.append(request)
+            return httpx2.Response(200, json={"ok": True})
+
+        return seen, httpx2.MockTransport(handler)
+
+    async def test_connects_to_vetted_ip_not_hostname(self) -> None:
+        # The vetted IP is the connection target; the hostname is never re-resolved.
+        seen, mock = self._capturing()
+        transport = _PinnedTransport(["93.184.216.34"], "example.com", wrapped=mock)
+        async with httpx2.AsyncClient(transport=transport) as client:
+            await client.get("https://example.com:8443/path?q=1")
+        req = seen[0]
+        assert req.url.host == "93.184.216.34"
+        # port and path survive the host rewrite
+        assert req.url.port == 8443
+        assert req.url.path == "/path"
+
+    async def test_preserves_sni_and_host_header(self) -> None:
+        # TLS verification must still target the real hostname, and the origin
+        # server must see its own Host — so pinning stays transparent end to end.
+        seen, mock = self._capturing()
+        transport = _PinnedTransport(["93.184.216.34"], "example.com", wrapped=mock)
+        async with httpx2.AsyncClient(transport=transport) as client:
+            await client.get("https://example.com:8443/path")
+        req = seen[0]
+        assert req.extensions["sni_hostname"] == "example.com"
+        assert req.headers["Host"] == "example.com:8443"
+
+    async def test_rebinding_blocked(self) -> None:
+        # Simulate rebinding: assert_safe_url vets a public IP, then the fetch is
+        # pinned to it. Even if DNS would now answer with a private IP, the
+        # connection targets only the vetted public address.
+        def resolver(*_args: object, **_kwargs: object) -> list[Any]:
+            return [(socket.AF_INET, None, None, "", ("93.184.216.34", 443))]
+
+        vetted = await assert_safe_url(
+            "https://rebind.example.com/client", resolver=resolver
+        )
+        seen, mock = self._capturing()
+        transport = _PinnedTransport(vetted, "rebind.example.com", wrapped=mock)
+        async with httpx2.AsyncClient(transport=transport) as client:
+            await client.get("https://rebind.example.com/client")
+        assert seen[0].url.host == "93.184.216.34"
+
+    async def test_ipv6_vetted_ip(self) -> None:
+        seen, mock = self._capturing()
+        transport = _PinnedTransport(
+            ["2606:2800:220:1:248:1893:25c8:1946"], "example.com", wrapped=mock
+        )
+        async with httpx2.AsyncClient(transport=transport) as client:
+            await client.get("https://example.com/x")
+        assert seen[0].url.host == "2606:2800:220:1:248:1893:25c8:1946"
+        assert seen[0].extensions["sni_hostname"] == "example.com"
+
+    async def test_failover_to_next_vetted_ip(self) -> None:
+        # A dead first address must not abort the fetch; the next vetted IP is tried.
+        seen: list[str] = []
+
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            seen.append(request.url.host)
+            if request.url.host == "93.184.216.34":
+                msg = "refused"
+                raise httpx2.ConnectError(msg, request=request)
+            return httpx2.Response(200, json={"ok": True})
+
+        transport = _PinnedTransport(
+            ["93.184.216.34", "93.184.216.35"],
+            "example.com",
+            wrapped=httpx2.MockTransport(handler),
+        )
+        async with httpx2.AsyncClient(transport=transport) as client:
+            resp = await client.get("https://example.com/x")
+        assert resp.status_code == 200
+        assert seen == ["93.184.216.34", "93.184.216.35"]
+
+    async def test_all_ips_down_raises_last_error(self) -> None:
+        def handler(request: httpx2.Request) -> httpx2.Response:
+            msg = "refused"
+            raise httpx2.ConnectError(msg, request=request)
+
+        transport = _PinnedTransport(
+            ["93.184.216.34", "93.184.216.35"],
+            "example.com",
+            wrapped=httpx2.MockTransport(handler),
+        )
+        async with httpx2.AsyncClient(transport=transport) as client:
+            with pytest.raises(httpx2.ConnectError):
+                await client.get("https://example.com/x")

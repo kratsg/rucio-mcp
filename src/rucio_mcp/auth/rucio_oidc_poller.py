@@ -1,6 +1,6 @@
 """Async wrapper around Rucio's /auth/oidc polling flow.
 
-Mirrors what baseclient.py:634-674 does but uses httpx.AsyncClient so it
+Mirrors what baseclient.py:634-674 does but uses httpx2.AsyncClient so it
 can run inside an asyncio event loop without blocking the server.
 """
 
@@ -13,7 +13,7 @@ import ssl
 from dataclasses import dataclass
 from pathlib import Path
 
-import httpx
+import httpx2
 
 _log = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ def _ssl_context() -> ssl.SSLContext | bool:
 
     Rucio auth servers at CERN use a certificate chain that is not in the
     standard system CA bundle.  The rucio client resolves this via X509_CERT_DIR;
-    we do the same so the httpx poller can verify those certificates.
+    we do the same so the httpx2 poller can verify those certificates.
     """
     cert_dir = os.environ.get("X509_CERT_DIR")
     if cert_dir and Path(cert_dir).is_dir():
@@ -76,7 +76,7 @@ class RucioOidcPoller:
             self.auth_host,
             effective_account,
         )
-        async with httpx.AsyncClient(
+        async with httpx2.AsyncClient(
             base_url=self.auth_host, timeout=30.0, verify=_ssl_context()
         ) as client:
             response = await client.get(
@@ -115,12 +115,14 @@ class RucioOidcPoller:
 
         async def _loop() -> str:
             attempt = 0
-            async with httpx.AsyncClient(timeout=30.0, verify=_ssl_context()) as client:
+            async with httpx2.AsyncClient(
+                timeout=30.0, verify=_ssl_context()
+            ) as client:
                 while True:
                     attempt += 1
                     try:
                         response = await client.get(polling_url, headers=headers)
-                    except httpx.HTTPError as exc:
+                    except httpx2.HTTPError as exc:
                         # Transient network failure — keep polling until timeout.
                         _log.debug("Poll %d: network error, retrying: %s", attempt, exc)
                         await asyncio.sleep(interval)

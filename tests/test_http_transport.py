@@ -238,9 +238,22 @@ class TestMultiSiteOAuthIsolation:
             redirect_uris=[AnyUrl(redirect)],
             token_endpoint_auth_method="none",
         )
-        with patch(
-            "rucio_mcp.auth.bridge_provider.resolve_cimd_client",
-            AsyncMock(return_value=resolved),
+        # Mock the poller too so authorize() never opens a real socket (the
+        # background poll task would otherwise leak an abandoned TCP-connect
+        # coroutine, which Python 3.14 surfaces as an unraisable warning).
+        with (
+            patch(
+                "rucio_mcp.auth.bridge_provider.resolve_cimd_client",
+                AsyncMock(return_value=resolved),
+            ),
+            patch(
+                "rucio_mcp.auth.rucio_oidc_poller.RucioOidcPoller.request_auth_url",
+                AsyncMock(return_value="https://idp.example.com/login"),
+            ),
+            patch(
+                "rucio_mcp.auth.rucio_oidc_poller.RucioOidcPoller.poll_for_token",
+                AsyncMock(return_value="rucio-token"),
+            ),
         ):
             resp = multi_site_client.get(
                 "/site/atlas/authorize",
@@ -277,6 +290,13 @@ class TestMultiSiteOAuthIsolation:
             patch(
                 "rucio_mcp.auth.rucio_oidc_poller.RucioOidcPoller.request_auth_url",
                 AsyncMock(return_value="https://idp.example.com/login"),
+            ),
+            # Mock the poll too: without it the background poll task opens a real
+            # socket that is abandoned when the request returns, leaking a
+            # TCP-connect coroutine (unraisable warning on Python 3.14).
+            patch(
+                "rucio_mcp.auth.rucio_oidc_poller.RucioOidcPoller.poll_for_token",
+                AsyncMock(return_value="rucio-token"),
             ),
         ):
             for port in (54321, 55985):
