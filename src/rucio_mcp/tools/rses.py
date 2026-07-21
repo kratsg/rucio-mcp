@@ -13,6 +13,7 @@ from rucio_mcp.tools._helpers import (
     format_list,
     get_rucio_client,
     paginate_iter,
+    run_sync,
 )
 
 _RSE_USAGE_KEYS = ["source", "used", "free", "total", "files"]
@@ -46,10 +47,14 @@ def register(mcp: FastMCP) -> None:
             offset: Number of RSEs to skip for pagination.
         """
         client = get_rucio_client(ctx)
-        try:
-            rse_filter = rse_expression or None
+        rse_filter = rse_expression or None
+
+        def _fetch() -> tuple[list[Any], str]:
             it = iter(client.list_rses(rse_expression=rse_filter))
-            results, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            results, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -81,7 +86,7 @@ def register(mcp: FastMCP) -> None:
         """
         client = get_rucio_client(ctx)
         try:
-            result = client.list_rse_attributes(rse)
+            result = await run_sync(client.list_rse_attributes, rse)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -103,7 +108,7 @@ def register(mcp: FastMCP) -> None:
         """
         client = get_rucio_client(ctx)
         try:
-            results = list(client.get_rse_usage(rse))
+            results = await run_sync(lambda: list(client.get_rse_usage(rse)))
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -135,7 +140,7 @@ def register(mcp: FastMCP) -> None:
         """
         client = get_rucio_client(ctx)
         try:
-            result = client.get_rse(rse)
+            result = await run_sync(client.get_rse, rse)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -165,7 +170,7 @@ def register(mcp: FastMCP) -> None:
         try:
             # RSEClient.get_rse_limits returns a single {name: value} dict
             # despite its Iterator annotation.
-            result = client.get_rse_limits(rse)
+            result = await run_sync(client.get_rse_limits, rse)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -193,7 +198,7 @@ def register(mcp: FastMCP) -> None:
         """
         client = get_rucio_client(ctx)
         try:
-            result = client.get_protocols(rse)
+            result = await run_sync(client.get_protocols, rse)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -224,7 +229,7 @@ def register(mcp: FastMCP) -> None:
         """
         client = get_rucio_client(ctx)
         try:
-            results = client.get_distance(source, destination)
+            results = await run_sync(client.get_distance, source, destination)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -251,9 +256,13 @@ def register(mcp: FastMCP) -> None:
             offset: Number of entries to skip for pagination.
         """
         client = get_rucio_client(ctx)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.list_transfer_limits()
-            results, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            results, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 

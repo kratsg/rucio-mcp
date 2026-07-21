@@ -12,6 +12,7 @@ from rucio_mcp.tools._helpers import (
     classify_error,
     get_rucio_client,
     paginate_iter,
+    run_sync,
 )
 
 
@@ -42,7 +43,7 @@ def register(mcp: FastMCP) -> None:
         """
         client = get_rucio_client(ctx)
         try:
-            scopes = client.list_scopes()
+            scopes = await run_sync(client.list_scopes)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -83,7 +84,7 @@ def register(mcp: FastMCP) -> None:
         client = get_rucio_client(ctx)
         effective_account = account or client.account
         try:
-            scopes = client.list_scopes_for_account(effective_account)
+            scopes = await run_sync(client.list_scopes_for_account, effective_account)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 

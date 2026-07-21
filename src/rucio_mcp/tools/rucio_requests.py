@@ -12,6 +12,7 @@ from rucio_mcp.tools._helpers import (
     format_list,
     get_rucio_client,
     paginate_iter,
+    run_sync,
 )
 
 # Full state name -> single-letter code, from rucio.db.sqla.constants
@@ -86,9 +87,13 @@ def register(mcp: FastMCP) -> None:
             states = _parse_states(request_states)
         except ValueError as exc:
             return str(exc)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.list_requests(src_rse, dst_rse, states)
-            results, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            results, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -130,11 +135,15 @@ def register(mcp: FastMCP) -> None:
             states = _parse_states(request_states)
         except ValueError as exc:
             return str(exc)
-        try:
+
+        def _fetch() -> list[Any]:
             it = client.list_requests_history(
                 src_rse, dst_rse, states, offset=offset, limit=limit
             )
-            results = list(it)
+            return list(it)
+
+        try:
+            results = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 

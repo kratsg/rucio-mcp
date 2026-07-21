@@ -14,6 +14,7 @@ from rucio_mcp.tools._helpers import (
     get_rucio_client,
     human_bytes,
     paginate_iter,
+    run_sync,
 )
 
 _USAGE_KEYS = ["rse", "bytes", "bytes_limit", "bytes_remaining", "files"]
@@ -51,10 +52,12 @@ def register(mcp: FastMCP) -> None:
         """
         client = get_rucio_client(ctx)
         effective_account = account or client.account
+        rse_filter = rse or None
         try:
-            rse_filter = rse or None
-            results = list(
-                client.get_local_account_usage(effective_account, rse=rse_filter)
+            results = await run_sync(
+                lambda: list(
+                    client.get_local_account_usage(effective_account, rse=rse_filter)
+                )
             )
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
@@ -98,15 +101,18 @@ def register(mcp: FastMCP) -> None:
         """
         client = get_rucio_client(ctx)
         effective_account = account or client.account
-        try:
+
+        def _fetch() -> Any:
             if rse_expression:
-                result = client.get_account_limits(
+                return client.get_account_limits(
                     effective_account,
                     rse_expression=rse_expression,
                     locality="local",
                 )
-            else:
-                result = client.get_local_account_limits(effective_account)
+            return client.get_local_account_limits(effective_account)
+
+        try:
+            result = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -144,12 +150,16 @@ def register(mcp: FastMCP) -> None:
             offset: Number of accounts to skip for pagination.
         """
         client = get_rucio_client(ctx)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.list_accounts(
                 account_type=account_type or None,
                 identity=identity or None,
             )
-            results, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            results, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -177,7 +187,7 @@ def register(mcp: FastMCP) -> None:
         client = get_rucio_client(ctx)
         effective_account = account or client.account
         try:
-            result = client.get_account(effective_account)
+            result = await run_sync(client.get_account, effective_account)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -209,9 +219,13 @@ def register(mcp: FastMCP) -> None:
         """
         client = get_rucio_client(ctx)
         effective_account = account or client.account
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.list_replication_rules(filters={"account": effective_account})
-            results, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            results, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 

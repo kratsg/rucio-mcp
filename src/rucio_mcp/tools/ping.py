@@ -14,6 +14,7 @@ from rucio_mcp.tools._helpers import (
     classify_error,
     format_dict,
     get_rucio_client,
+    run_sync,
 )
 
 
@@ -29,7 +30,7 @@ def register(mcp: FastMCP, *, transport: str = "stdio") -> None:
         """
         client = get_rucio_client(ctx)
         try:
-            result = client.ping()
+            result = await run_sync(client.ping)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -46,7 +47,7 @@ def register(mcp: FastMCP, *, transport: str = "stdio") -> None:
         """
         client = get_rucio_client(ctx)
         try:
-            result = client.whoami()
+            result = await run_sync(client.whoami)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 

@@ -14,6 +14,7 @@ from rucio_mcp.tools._helpers import (
     get_rucio_client,
     paginate_iter,
     parse_did,
+    run_sync,
 )
 
 _STAT_KEYS = [
@@ -70,14 +71,18 @@ def register(mcp: FastMCP) -> None:
             return str(exc)
 
         client = get_rucio_client(ctx)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.list_dids(
                 scope,
                 {"name": name},
                 did_type=did_type,
                 recursive=recursive,
             )
-            results, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            results, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -118,7 +123,7 @@ def register(mcp: FastMCP) -> None:
 
         client = get_rucio_client(ctx)
         try:
-            result = client.get_did(scope, name, dynamic=True)
+            result = await run_sync(client.get_did, scope, name, dynamic=True)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -172,9 +177,13 @@ def register(mcp: FastMCP) -> None:
             return str(exc)
 
         client = get_rucio_client(ctx)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.list_content(scope, name)
-            page, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            page, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -209,9 +218,13 @@ def register(mcp: FastMCP) -> None:
             return str(exc)
 
         client = get_rucio_client(ctx)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.list_files(scope, name, long=long)
-            page, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            page, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -252,7 +265,7 @@ def register(mcp: FastMCP) -> None:
 
         client = get_rucio_client(ctx)
         try:
-            result = client.get_metadata(scope, name, plugin=plugin)
+            result = await run_sync(client.get_metadata, scope, name, plugin=plugin)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
@@ -284,9 +297,13 @@ def register(mcp: FastMCP) -> None:
             return str(exc)
 
         client = get_rucio_client(ctx)
-        try:
+
+        def _fetch() -> tuple[list[Any], str]:
             it = client.list_parent_dids(scope, name)
-            page, footer = paginate_iter(it, limit=limit, offset=offset)
+            return paginate_iter(it, limit=limit, offset=offset)
+
+        try:
+            page, footer = await run_sync(_fetch)
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
 
