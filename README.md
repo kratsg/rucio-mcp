@@ -1,5 +1,7 @@
 # rucio-mcp v0.7.1
 
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Fkratsg%2Frucio-mcp.svg)](https://mcptoplist.com/server/glama%2Fkratsg%2Frucio-mcp)
+
 [![Actions Status][actions-badge]][actions-link]
 [![Documentation Status][rtd-badge]][rtd-link]
 
