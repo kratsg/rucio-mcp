@@ -25,7 +25,7 @@ hatch-vcs = ">=0.4"
 rich = "*"
 rucio-clients = ">=35.0.0"
 httpx2 = ">=2.0.0"
-mcp = ">=1.10"
+mcp = ">=2.0.0,<3"
 prometheus_client = ">=0.20"
 ca-policy-lcg = "*"
 voms = "*"
@@ -50,6 +50,9 @@ python = "<3.15,>=3.14"
 pytest = ">=9"
 pytest-cov = ">=7"
 pytest-asyncio = ">=0.24"
+# starlette.testclient.TestClient hard-requires the real httpx package; unrelated
+# to rucio-mcp's own runtime usage of httpx2.
+httpx = "*"
 
 [feature.test.tasks]
 test = { cmd = "pytest -m 'not slow'", description = "Run quick tests (skip slow)" }

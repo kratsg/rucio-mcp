@@ -44,7 +44,6 @@ def http_app(oidc_rucio_cfg: Path):
         resource_url="http://localhost:8000",
         read_only=False,
         host="127.0.0.1",
-        port=8000,
         rucio_cfg_overrides={"escape": oidc_rucio_cfg},
     )
 
@@ -203,7 +202,6 @@ class TestMultiSiteOAuthIsolation:
             resource_url="http://localhost:8000",
             read_only=False,
             host="127.0.0.1",
-            port=8000,
             rucio_cfg_overrides={"atlas": atlas_rucio_cfg, "escape": oidc_rucio_cfg},
         )
 
@@ -444,7 +442,6 @@ class TestRootLandingPage:
             resource_url="http://localhost:8000",
             read_only=True,
             host="127.0.0.1",
-            port=8000,
             rucio_cfg_overrides={"escape": oidc_rucio_cfg},
         )
         client = TestClient(app, raise_server_exceptions=True)
@@ -510,7 +507,6 @@ class TestServeHTTPValidation:
             resource_url="http://localhost:8000",
             read_only=False,
             host="127.0.0.1",
-            port=8000,
             rucio_cfg_overrides={"escape": cfg},
         )
         assert app is not None
@@ -675,7 +671,6 @@ class TestSharedSecretMode:
                 read_only=False,
                 secret="s3cr3t",
                 host="127.0.0.1",
-                port=8000,
             )
             with TestClient(app, raise_server_exceptions=True) as client:
                 yield client

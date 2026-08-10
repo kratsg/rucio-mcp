@@ -31,7 +31,7 @@ classifiers = [
 dynamic = ["version"]
 dependencies = [
   "httpx2>=2.0.0",
-  "mcp>=1.10",
+  "mcp>=2.0.0,<3",
   "prometheus-client>=0.20",
   "pydantic>=2.11",
   "rucio-clients>=35.0",
@@ -55,6 +55,7 @@ test = [
   "pytest >=9",
   "pytest-cov >=7",
   "pytest-asyncio >=0.24",
+  "httpx",  # required by starlette.testclient.TestClient, unrelated to our httpx2 runtime usage
 ]
 dev = [
   { include-group = "test" },

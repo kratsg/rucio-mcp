@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from starlette.types import ASGIApp
 
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from pydantic import AnyHttpUrl
 from rucio.client import Client
 from starlette.applications import Starlette
@@ -94,19 +94,21 @@ def _build_instructions(preset: Preset, *, transport: str = "stdio") -> str:
     return preamble
 
 
-class _InstrumentedFastMCP(FastMCP):
+class _InstrumentedFastMCP(MCPServer):
     """FastMCP subclass that records per-tool call count and duration."""
 
     def __init__(self, *args: Any, site_name: str, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._site_name = site_name
 
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
+    async def call_tool(
+        self, name: str, arguments: dict[str, Any], context: Any = None
+    ) -> Any:
         TOOL_CALLS.labels(site=self._site_name, tool=name).inc()
         current_tool_labels.set((self._site_name, name))
         t0 = time.perf_counter()
         try:
-            return await super().call_tool(name, arguments)
+            return await super().call_tool(name, arguments, context)
         finally:
             TOOL_CALL_DURATION.labels(site=self._site_name, tool=name).observe(
                 time.perf_counter() - t0
@@ -259,7 +261,7 @@ def _make_stdio_mcp(
     """Build and return a configured FastMCP instance for stdio transport."""
 
     @asynccontextmanager
-    async def _lifespan(_server: FastMCP) -> AsyncGenerator[dict[str, Any], None]:
+    async def _lifespan(_server: MCPServer) -> AsyncGenerator[dict[str, Any], None]:
         """Initialize the Rucio client for the lifetime of the MCP server.
 
         The client reads authentication configuration from environment variables
@@ -308,10 +310,8 @@ def _make_site_mcp(
     cfg: RucioCfg,
     resource_url: str,
     read_only: bool,
-    host: str,
-    port: int,
     poll_timeout: float = 180.0,
-) -> tuple[FastMCP, RucioBridgeProvider, SessionCache]:
+) -> tuple[MCPServer, RucioBridgeProvider, SessionCache]:
     """Build a single-site FastMCP for HTTP transport.
 
     The *resource_url* must already include the ``/site/{name}`` prefix so that
@@ -336,7 +336,9 @@ def _make_site_mcp(
     cache = SessionCache()
 
     @asynccontextmanager
-    async def _site_lifespan(_server: FastMCP) -> AsyncGenerator[dict[str, Any], None]:
+    async def _site_lifespan(
+        _server: MCPServer,
+    ) -> AsyncGenerator[dict[str, Any], None]:
         factory = BearerTokenClientFactory(cache=cache, cfg=cfg)
         try:
             yield {"client_factory": factory, "read_only": read_only}
@@ -348,9 +350,6 @@ def _make_site_mcp(
         f"rucio-mcp-{site_name}",
         site_name=site_name,
         instructions=_build_instructions(preset, transport="http"),
-        host=host,
-        port=port,
-        streamable_http_path="/",
         lifespan=_site_lifespan,
         auth_server_provider=provider,
         auth=AuthSettings(
@@ -388,8 +387,6 @@ def _make_shared_secret_mcp(
     read_only: bool,
     resource_url: str,
     secret: str,
-    host: str,
-    port: int,
 ) -> _InstrumentedFastMCP:
     """Build a single-site FastMCP for HTTP transport gated by a static bearer.
 
@@ -400,7 +397,7 @@ def _make_shared_secret_mcp(
     """
 
     @asynccontextmanager
-    async def _lifespan(_server: FastMCP) -> AsyncGenerator[dict[str, Any], None]:
+    async def _lifespan(_server: MCPServer) -> AsyncGenerator[dict[str, Any], None]:
         factory = EnvBasedClientFactory(client=Client())
         try:
             yield {"client_factory": factory, "read_only": read_only}
@@ -415,9 +412,6 @@ def _make_shared_secret_mcp(
         # so use the stdio instructions/tool set; the bearer is a static gate,
         # not a decodable session token (no rucio_token_info tool).
         instructions=_build_instructions(preset, transport="stdio"),
-        host=host,
-        port=port,
-        streamable_http_path="/",
         lifespan=_lifespan,
         token_verifier=SharedSecretVerifier(secret),
         auth=AuthSettings(
@@ -456,7 +450,6 @@ def _make_shared_secret_app(
     read_only: bool,
     secret: str,
     host: str,
-    port: int,
 ) -> Starlette:
     """Build a single-site Starlette app for shared-secret HTTP transport.
 
@@ -469,10 +462,8 @@ def _make_shared_secret_app(
         read_only=read_only,
         resource_url=resource_url.rstrip("/") + f"/site/{site_name}",
         secret=secret,
-        host=host,
-        port=port,
     )
-    sub_app = mcp.streamable_http_app()
+    sub_app = mcp.streamable_http_app(streamable_http_path="/", host=host)
 
     @asynccontextmanager
     async def _combined_lifespan(_app: Starlette) -> AsyncGenerator[None, None]:
@@ -711,12 +702,11 @@ def _make_http_app(
     resource_url: str,
     read_only: bool,
     host: str,
-    port: int,
     rucio_cfg_overrides: dict[str, Path] | None = None,
     poll_timeout: float = 180.0,
 ) -> Starlette:
     """Build a parent Starlette app with one FastMCP per site under /site/{name}/."""
-    site_mcps: list[tuple[str, FastMCP]] = []
+    site_mcps: list[tuple[str, MCPServer]] = []
     bridge_stores: dict[str, Any] = {}
     for site_name in sites:
         cfg_path = (rucio_cfg_overrides or {}).get(site_name) or _bundled_cfg_path(
@@ -742,8 +732,6 @@ def _make_http_app(
             cfg=cfg,
             resource_url=site_url,
             read_only=read_only,
-            host=host,
-            port=port,
             poll_timeout=poll_timeout,
         )
         site_mcps.append((site_name, mcp))
@@ -761,7 +749,9 @@ def _make_http_app(
         (
             name,
             _CimdMetadataMiddleware(
-                _AuthorizeContextMiddleware(mcp.streamable_http_app())
+                _AuthorizeContextMiddleware(
+                    mcp.streamable_http_app(streamable_http_path="/", host=host)
+                )
             ),
         )
         for name, mcp in site_mcps
@@ -907,7 +897,6 @@ def serve(
             read_only=read_only,
             secret=shared_secret,
             host=host,
-            port=port,
         )
         start_metrics_server(metrics_port, {})
         uvicorn.run(
@@ -947,7 +936,6 @@ def serve(
         resource_url=resource_url,
         read_only=read_only,
         host=host,
-        port=port,
         rucio_cfg_overrides=cfg_overrides or None,
         poll_timeout=poll_timeout,
     )

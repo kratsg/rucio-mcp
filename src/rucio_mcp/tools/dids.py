@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
+from mcp.server.mcpserver import Context, MCPServer  # noqa: TC002
 
 from rucio_mcp.tools._helpers import (
     build_hints,
@@ -32,7 +32,7 @@ _STAT_KEYS = [
 _CONTENT_KEYS = ["scope", "name", "type", "bytes", "length"]
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     """Register DID tools with the MCP server."""
 
     @mcp.tool()

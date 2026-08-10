@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from rucio_mcp.tools._helpers import parse_did
 from rucio_mcp.tools.dids import register
@@ -54,7 +54,7 @@ class TestParseDid:
 
 @pytest.fixture
 def registered_tools() -> dict[str, Callable[..., Awaitable[str]]]:
-    mcp = FastMCP("test")
+    mcp = MCPServer("test")
     register(mcp)
     return {tool.name: tool.fn for tool in mcp._tool_manager.list_tools()}
 

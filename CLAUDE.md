@@ -33,7 +33,7 @@ registration is required by operators or end-users.
 `RUCIO_MCP_SHARED_SECRET`), HTTP transport switches to a distinct,
 mutually-exclusive model: it serves a **single env-built `Client`** (exactly
 like stdio, honoring `--auth-type` — e.g. a pre-authenticated x509 instance)
-gated by a server-wide static bearer. A FastMCP `TokenVerifier`
+gated by a server-wide static bearer. An MCPServer `TokenVerifier`
 (`auth/shared_secret.py::SharedSecretVerifier`, constant-time compare) enforces
 the secret; there is **no** OAuth bridge, OIDC poller, CIMD, `/bridge`,
 `/authorize`, `/token`, or `/register`. Single site only (one env config = one
@@ -77,6 +77,16 @@ tool — never access `lifespan_context["rucio_client"]` directly.
   header, builds `TokenInjectedClient`, caches by `mcp-session-id` + a hash of
   the bearer (never the session id alone) with a fixed 300 s TTL (rucio rejects
   stale tokens with 401); requests with no session id are never cached
+
+With mcp SDK v2, `StreamableHTTPSessionManager.run()` enters the `lifespan=`
+context manager passed to `MCPServer` **once**, when the session manager starts
+(i.e. once per process for `_make_stdio_mcp`, once per site when the parent
+Starlette app's combined lifespan calls `mcp.session_manager.run()`), and reuses
+that single yielded state — the
+`{"client_factory": factory, "read_only": read_only}` dict — across every
+session for that server, rather than entering the lifespan per-session. This is
+why `client_factory` must itself be session-aware (`BearerTokenClientFactory`'s
+per-session-id cache) instead of relying on a fresh lifespan per session.
 
 ### `TokenInjectedClient`
 
@@ -130,7 +140,7 @@ steps in `docs/contributing.md` § "Contributing a new site".
 ```
 src/rucio_mcp/
 ├── cli.py          # argparse: `rucio-mcp serve [--transport {stdio,http}] [--site SITE] [--shared-secret SECRET] [--metrics-port PORT] ...`
-├── server.py       # FastMCP setup; _InstrumentedFastMCP; _make_stdio_mcp / _make_site_mcp / _make_http_app;
+├── server.py       # MCPServer setup; _InstrumentedFastMCP; _make_stdio_mcp / _make_site_mcp / _make_http_app;
 │                   # _make_shared_secret_mcp / _make_shared_secret_app (shared-secret HTTP); serve()
 ├── metrics.py      # Prometheus metrics: HTTP counters (PrometheusMiddleware), tool-call counter +
 │                   # duration histogram (TOOL_CALLS / TOOL_CALL_DURATION), BridgeStatsCollector,
@@ -213,19 +223,19 @@ tests/
 
 ## Tool registration pattern
 
-Each tool module exports a `register(mcp: FastMCP) -> None` function.
+Each tool module exports a `register(mcp: MCPServer) -> None` function.
 `server.py` imports the modules and calls `module.register(mcp)` for each. Tools
 are defined as closures inside `register()` using the `@mcp.tool()` decorator.
 
 ```python
 # tools/mymodule.py
-from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.mcpserver import Context, MCPServer
 from typing import Any
 
 from rucio_mcp.tools._helpers import build_hints, classify_error, get_rucio_client
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     @mcp.tool()
     async def rucio_my_tool(
         param: str, limit: int = 50, offset: int = 0, *, ctx: Context[Any, Any]

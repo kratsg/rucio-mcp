@@ -5,7 +5,7 @@ from __future__ import annotations
 import fnmatch
 from typing import Any
 
-from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
+from mcp.server.mcpserver import Context, MCPServer  # noqa: TC002
 
 from rucio_mcp.tools._helpers import (
     build_hints,
@@ -15,7 +15,7 @@ from rucio_mcp.tools._helpers import (
 )
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     """Register scope tools with the MCP server."""
 
     @mcp.tool()

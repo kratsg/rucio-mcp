@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
+from mcp.server.mcpserver import Context, MCPServer  # noqa: TC002
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -46,7 +46,7 @@ def _format_file_replicas(replicas: list[dict[str, Any]]) -> str:
     return "\n".join(lines).rstrip()
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     """Register replica tools with the MCP server."""
 
     @mcp.tool()

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
+from mcp.server.mcpserver import Context, MCPServer  # noqa: TC002
 
 from rucio_mcp.tools._helpers import (
     build_hints,
@@ -18,7 +18,7 @@ from rucio_mcp.tools._helpers import (
 _LOCK_KEYS = ["scope", "name", "rse", "state", "account", "rule_id"]
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     """Register dataset lock tools with the MCP server."""
 
     @mcp.tool()

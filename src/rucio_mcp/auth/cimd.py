@@ -28,7 +28,7 @@ from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlparse
 
-import httpx
+import httpx2
 from mcp.shared.auth import OAuthClientInformationFull
 from pydantic import AnyUrl, ValidationError
 
@@ -151,7 +151,7 @@ async def assert_safe_url(
 async def fetch_client_document(
     client_id_url: str,
     *,
-    client: httpx.AsyncClient | None = None,
+    client: httpx2.AsyncClient | None = None,
     timeout: float = _FETCH_TIMEOUT,
     max_bytes: int = _MAX_DOC_BYTES,
 ) -> dict[str, Any]:
@@ -164,13 +164,13 @@ async def fetch_client_document(
     """
     owns_client = client is None
     if client is None:
-        client = httpx.AsyncClient(timeout=timeout, follow_redirects=False)
+        client = httpx2.AsyncClient(timeout=timeout, follow_redirects=False)
     try:
         response = await client.get(
             client_id_url, headers={"Accept": "application/json"}
         )
         response.raise_for_status()
-    except httpx.HTTPError as exc:
+    except httpx2.HTTPError as exc:
         msg = f"failed to fetch CIMD document: {exc}"
         raise CimdError(msg) from exc
     finally:
@@ -260,7 +260,7 @@ def build_client_from_document(
 async def resolve_cimd_client(
     client_id: str,
     *,
-    client: httpx.AsyncClient | None = None,
+    client: httpx2.AsyncClient | None = None,
     timeout: float = _FETCH_TIMEOUT,
 ) -> OAuthClientInformationFull:
     """Resolve a CIMD ``client_id`` URL to an :class:`OAuthClientInformationFull`.

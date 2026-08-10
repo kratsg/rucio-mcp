@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
+from mcp.server.mcpserver import Context, MCPServer  # noqa: TC002
 
 from rucio_mcp.tools._helpers import (
     build_hints,
@@ -55,7 +55,7 @@ def _parse_states(request_states: str) -> str:
     return ",".join(codes)
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     """Register transfer request tools with the MCP server."""
 
     @mcp.tool()

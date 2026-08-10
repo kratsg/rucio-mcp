@@ -29,7 +29,7 @@ from starlette.responses import HTMLResponse, JSONResponse, Response
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
     from starlette.requests import Request
 
     from rucio_mcp.auth.bridge_provider import RucioBridgeProvider
@@ -83,7 +83,7 @@ def make_bridge_handlers(
     return bridge_page, bridge_status
 
 
-def register_bridge_routes(mcp: FastMCP, provider: RucioBridgeProvider) -> None:
+def register_bridge_routes(mcp: MCPServer, provider: RucioBridgeProvider) -> None:
     """Register /bridge and /bridge/status on *mcp* using the provider's session store."""
     bridge_page, bridge_status = make_bridge_handlers(provider.store)
     mcp.custom_route("/bridge", methods=["GET"])(bridge_page)

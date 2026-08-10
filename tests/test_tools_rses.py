@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import pytest
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from rucio_mcp.tools.rses import register
 
@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 @pytest.fixture
 def registered_tools() -> dict[str, Callable[..., Awaitable[str]]]:
-    mcp = FastMCP("test")
+    mcp = MCPServer("test")
     register(mcp)
     return {tool.name: tool.fn for tool in mcp._tool_manager.list_tools()}
 

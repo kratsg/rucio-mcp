@@ -7,7 +7,7 @@ import datetime
 import json as _json
 from typing import Any
 
-from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
+from mcp.server.mcpserver import Context, MCPServer  # noqa: TC002
 
 from rucio_mcp.tools._helpers import (
     build_hints,
@@ -17,7 +17,7 @@ from rucio_mcp.tools._helpers import (
 )
 
 
-def register(mcp: FastMCP, *, transport: str = "stdio") -> None:
+def register(mcp: MCPServer, *, transport: str = "stdio") -> None:
     """Register ping and whoami tools with the MCP server."""
 
     @mcp.tool()
