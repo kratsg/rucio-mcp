@@ -11,7 +11,7 @@ import socket
 from typing import Any
 from unittest.mock import patch
 
-import httpx
+import httpx2
 import pytest
 from mcp.shared.auth import OAuthClientInformationFull
 
@@ -150,43 +150,53 @@ class TestAssertSafeUrl:
 
 class TestFetchClientDocument:
     async def test_returns_parsed_json(self) -> None:
-        def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json=_document())
+        def handler(_request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, json=_document())
 
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(handler)
+        ) as client:
             doc = await fetch_client_document(_CLIENT_URL, client=client)
         assert doc["client_id"] == _CLIENT_URL
 
     async def test_non_json_raises(self) -> None:
-        def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, text="<html>not json</html>")
+        def handler(_request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, text="<html>not json</html>")
 
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(handler)
+        ) as client:
             with pytest.raises(CimdError, match="JSON"):
                 await fetch_client_document(_CLIENT_URL, client=client)
 
     async def test_http_error_raises(self) -> None:
-        def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(404)
+        def handler(_request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(404)
 
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(handler)
+        ) as client:
             with pytest.raises(CimdError, match="fetch"):
                 await fetch_client_document(_CLIENT_URL, client=client)
 
     async def test_non_object_json_rejected(self) -> None:
         # A top-level JSON array (not an object) is not a valid CIMD document.
-        def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json=["not", "an", "object"])
+        def handler(_request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, json=["not", "an", "object"])
 
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(handler)
+        ) as client:
             with pytest.raises(CimdError, match="JSON object"):
                 await fetch_client_document(_CLIENT_URL, client=client)
 
     async def test_oversized_document_rejected(self) -> None:
-        def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json={"padding": "x" * 200_000})
+        def handler(_request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, json={"padding": "x" * 200_000})
 
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(handler)
+        ) as client:
             with pytest.raises(CimdError, match="large"):
                 await fetch_client_document(_CLIENT_URL, client=client, max_bytes=1024)
 
@@ -257,10 +267,12 @@ class TestClientWithRequestedRedirect:
 
 class TestResolveCimdClient:
     async def test_end_to_end(self) -> None:
-        def handler(_request: httpx.Request) -> httpx.Response:
-            return httpx.Response(200, json=_document())
+        def handler(_request: httpx2.Request) -> httpx2.Response:
+            return httpx2.Response(200, json=_document())
 
-        async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(handler)
+        ) as client:
             resolved = await resolve_cimd_client(_CLIENT_URL, client=client)
         assert resolved.client_id == _CLIENT_URL
         assert resolved.token_endpoint_auth_method == "none"
@@ -270,8 +282,8 @@ class TestResolveCimdClient:
 
     async def test_unsafe_url_rejected_before_fetch(self) -> None:
         # A private-IP client_id must be rejected without any network call.
-        async with httpx.AsyncClient(
-            transport=httpx.MockTransport(
+        async with httpx2.AsyncClient(
+            transport=httpx2.MockTransport(
                 lambda _r: pytest.fail("should not fetch unsafe URL")
             )
         ) as client:
