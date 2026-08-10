@@ -113,8 +113,10 @@ def register(mcp: MCPServer) -> None:
         if state == "STUCK":
             hints = build_hints(
                 [
-                    "Rule is STUCK. Check if the destination RSE has capacity: "
-                    f"`rucio_get_rse_usage {result.get('rse_expression', '<rse>')}`",
+                    (
+                        "Rule is STUCK. Check if the destination RSE has capacity: "
+                        f"`rucio_get_rse_usage {result.get('rse_expression', '<rse>')}`"
+                    ),
                     "Check the `error` field above for the specific failure reason",
                 ]
             )
