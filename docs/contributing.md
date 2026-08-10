@@ -39,8 +39,8 @@ pixi run docs-serve    # build and serve docs locally
 ## Tool registration pattern
 
 Each tool module lives in `src/rucio_mcp/tools/` and exports a single
-`register(mcp: FastMCP) -> None` function. Tools are defined as closures inside
-`register()` using the `@mcp.tool()` decorator.
+`register(mcp: MCPServer) -> None` function. Tools are defined as closures
+inside `register()` using the `@mcp.tool()` decorator.
 
 ```python
 # tools/mymodule.py
@@ -48,12 +48,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from mcp.server.fastmcp import Context, FastMCP  # noqa: TC002
+from mcp.server.mcpserver import Context, MCPServer  # noqa: TC002
 
 from rucio_mcp.tools._helpers import build_hints, classify_error, get_rucio_client
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     """Register my tools with the MCP server."""
 
     @mcp.tool()
@@ -80,7 +80,10 @@ Key conventions:
 - Tool names are prefixed with `rucio_` to avoid collisions
 - `ctx` is keyword-only (after `*`)
 - Get the client via `get_rucio_client(ctx)` — never access `lifespan_context`
-  directly
+  directly. Note: on mcp SDK v2, the HTTP transport's `lifespan=` context
+  manager is entered once per session-manager startup (its state is shared
+  across every session for that server), not once per session — see "Client
+  factory pattern" in `CLAUDE.md`
 - Errors are returned via `classify_error(exc)` — never raised, never bare
   `f"Error: {exc}"`
 - Append `build_hints([...])` to guide the LLM on next steps
@@ -235,9 +238,9 @@ from rucio_mcp.tools.mymodule import register
 
 @pytest.fixture
 def registered_tools(mock_ctx):
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
 
-    mcp = FastMCP("test")
+    mcp = MCPServer("test")
     register(mcp)
     return {t.name: t.fn for t in mcp._tool_manager.list_tools()}
 
