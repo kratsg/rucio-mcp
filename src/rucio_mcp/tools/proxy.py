@@ -6,12 +6,12 @@ import asyncio
 import contextlib
 import shutil
 
-from mcp.server.fastmcp import FastMCP  # noqa: TC002
+from mcp.server.mcpserver import MCPServer  # noqa: TC002
 
 _PROXY_TIMEOUT_S = 30.0
 
 
-def register(mcp: FastMCP) -> None:
+def register(mcp: MCPServer) -> None:
     """Register proxy tools with the MCP server."""
 
     @mcp.tool()

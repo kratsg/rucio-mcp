@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from prometheus_client import REGISTRY
 
 from rucio_mcp.auth.rucio_cfg import RucioCfg
@@ -441,8 +441,6 @@ class TestInstrumentedFastMCP:
             cfg=cfg,
             resource_url="http://localhost:8000/site/escape",
             read_only=False,
-            host="127.0.0.1",
-            port=8000,
         )
         assert isinstance(mcp, _InstrumentedFastMCP)
         assert mcp._site_name == "escape"
@@ -458,7 +456,7 @@ class TestInstrumentedFastMCP:
             or 0.0
         )
 
-        with patch.object(FastMCP, "call_tool", new=AsyncMock(return_value=[])):
+        with patch.object(MCPServer, "call_tool", new=AsyncMock(return_value=[])):
             await mcp.call_tool("rucio_ping", {})
 
         after = (
@@ -481,7 +479,7 @@ class TestInstrumentedFastMCP:
             or 0.0
         )
 
-        with patch.object(FastMCP, "call_tool", new=AsyncMock(return_value=[])):
+        with patch.object(MCPServer, "call_tool", new=AsyncMock(return_value=[])):
             await mcp.call_tool("rucio_ping", {})
 
         after_count = (

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from rucio_mcp.tools.ping import register
 
@@ -27,7 +27,7 @@ def _make_jwt(payload: dict[str, object]) -> str:
 @pytest.fixture
 def registered_tools() -> dict[str, Callable[..., Awaitable[str]]]:
     """Return a dict of tool_name -> callable for ping tools (stdio mode)."""
-    mcp = FastMCP("test")
+    mcp = MCPServer("test")
     register(mcp, transport="stdio")
     return {tool.name: tool.fn for tool in mcp._tool_manager.list_tools()}
 
@@ -35,7 +35,7 @@ def registered_tools() -> dict[str, Callable[..., Awaitable[str]]]:
 @pytest.fixture
 def registered_tools_http() -> dict[str, Callable[..., Awaitable[str]]]:
     """Return a dict of tool_name -> callable for ping tools (HTTP mode)."""
-    mcp = FastMCP("test")
+    mcp = MCPServer("test")
     register(mcp, transport="http")
     return {tool.name: tool.fn for tool in mcp._tool_manager.list_tools()}
 

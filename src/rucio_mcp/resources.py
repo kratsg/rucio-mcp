@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from mcp.server.fastmcp import FastMCP  # noqa: TC002
+from mcp.server.mcpserver import MCPServer  # noqa: TC002
 
 from rucio_mcp.nomenclature import load_nomenclature
 
 
-def register(mcp: FastMCP, site_name: str, nomenclature_resource: str | None) -> None:
+def register(mcp: MCPServer, site_name: str, nomenclature_resource: str | None) -> None:
     """Register documentation resources with the MCP server.
 
     A ``rucio://nomenclature`` resource is registered only when
