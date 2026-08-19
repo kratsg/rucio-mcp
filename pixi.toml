@@ -7,6 +7,9 @@ preview = ["pixi-build"]
 
 [dependencies]
 rucio-mcp = { path = "./" }
+# Broker-mode client library (its [mcp] extra's mcp dependency is already a
+# direct dependency of rucio-mcp itself)
+af-credentials = ">=0.1.1"
 
 [package]
 name = "rucio-mcp"

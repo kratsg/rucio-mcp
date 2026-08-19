@@ -39,6 +39,12 @@ dependencies = [
   "uvicorn>=0.31.1",
 ]
 
+[project.optional-dependencies]
+# Per-user x509 auth behind the AF MCP credential broker (af-mcp-platform).
+broker = [
+  "af-credentials[mcp]>=0.1.1",
+]
+
 [project.scripts]
 rucio-mcp = "rucio_mcp.cli:main"
 
