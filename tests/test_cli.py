@@ -325,6 +325,81 @@ class TestCLIServe:
 
         assert captured["shared_secret"] is None
 
+    def test_broker_flags_forwarded_to_serve(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "rucio-mcp",
+                    "serve",
+                    "--transport",
+                    "http",
+                    "--broker-url",
+                    "https://broker.example.com",
+                    "--broker-jwks-url",
+                    "https://broker.example.com/keys",
+                    "--broker-issuer",
+                    "https://broker.example.com",
+                    "--broker-audience",
+                    "rucio-mcp-atlas",
+                ],
+            ),
+            patch("rucio_mcp.cli.serve", fake_serve),
+        ):
+            main()
+
+        assert captured["broker_url"] == "https://broker.example.com"
+        assert captured["broker_jwks_url"] == "https://broker.example.com/keys"
+        assert captured["broker_issuer"] == "https://broker.example.com"
+        assert captured["broker_audience"] == "rucio-mcp-atlas"
+
+    def test_broker_flags_default_to_none(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        with (
+            patch.dict("os.environ", {}, clear=True),
+            patch("sys.argv", ["rucio-mcp", "serve"]),
+            patch("rucio_mcp.cli.serve", fake_serve),
+        ):
+            main()
+
+        assert captured["broker_url"] is None
+        assert captured["broker_jwks_url"] is None
+        assert captured["broker_issuer"] is None
+        assert captured["broker_audience"] == "rucio"
+
+    def test_broker_env_fallbacks(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_serve(**kwargs: object) -> None:
+            captured.update(kwargs)
+
+        env = {
+            "RUCIO_MCP_BROKER_URL": "https://broker.from-env",
+            "RUCIO_MCP_BROKER_JWKS_URL": "https://broker.from-env/keys",
+            "RUCIO_MCP_BROKER_ISSUER": "https://issuer.from-env",
+            "RUCIO_MCP_BROKER_AUDIENCE": "aud-from-env",
+        }
+        with (
+            patch.dict("os.environ", env),
+            patch("sys.argv", ["rucio-mcp", "serve"]),
+            patch("rucio_mcp.cli.serve", fake_serve),
+        ):
+            main()
+
+        assert captured["broker_url"] == "https://broker.from-env"
+        assert captured["broker_jwks_url"] == "https://broker.from-env/keys"
+        assert captured["broker_issuer"] == "https://issuer.from-env"
+        assert captured["broker_audience"] == "aud-from-env"
+
 
 class TestCLIPing:
     def test_ping_dispatches(self) -> None:

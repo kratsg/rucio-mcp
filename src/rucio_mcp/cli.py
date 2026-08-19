@@ -94,6 +94,42 @@ def main() -> None:
         ),
     )
     serve_parser.add_argument(
+        "--broker-url",
+        default=os.environ.get("RUCIO_MCP_BROKER_URL"),
+        help=(
+            "Enable broker HTTP mode: verify AF-credential-broker-issued JWTs "
+            "and redeem the caller's VOMS proxy per tool call. Value is the "
+            "broker base URL. Requires --transport http and a single --site. "
+            "Mutually exclusive with --shared-secret. "
+            "Can also be set via RUCIO_MCP_BROKER_URL."
+        ),
+    )
+    serve_parser.add_argument(
+        "--broker-jwks-url",
+        default=os.environ.get("RUCIO_MCP_BROKER_JWKS_URL"),
+        help=(
+            "JWKS URL for verifying broker-issued JWTs "
+            "(env: RUCIO_MCP_BROKER_JWKS_URL; "
+            "default: BROKER_URL/.well-known/jwks.json)."
+        ),
+    )
+    serve_parser.add_argument(
+        "--broker-issuer",
+        default=os.environ.get("RUCIO_MCP_BROKER_ISSUER"),
+        help=(
+            "Expected iss claim of broker-issued JWTs "
+            "(env: RUCIO_MCP_BROKER_ISSUER; default: BROKER_URL)."
+        ),
+    )
+    serve_parser.add_argument(
+        "--broker-audience",
+        default=os.environ.get("RUCIO_MCP_BROKER_AUDIENCE", "rucio"),
+        help=(
+            "Expected aud claim of broker-issued JWTs "
+            "(env: RUCIO_MCP_BROKER_AUDIENCE; default: rucio)."
+        ),
+    )
+    serve_parser.add_argument(
         "--rucio-cfg",
         type=Path,
         default=None,
@@ -166,6 +202,10 @@ def main() -> None:
             sites=sites,
             resource_url=args.resource_url,
             shared_secret=args.shared_secret,
+            broker_url=args.broker_url,
+            broker_jwks_url=args.broker_jwks_url,
+            broker_issuer=args.broker_issuer,
+            broker_audience=args.broker_audience,
             rucio_cfg=args.rucio_cfg,
             auth_type=args.auth_type,
             poll_timeout=args.poll_timeout,
