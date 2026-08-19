@@ -1,5 +1,10 @@
 """FastMCP server setup for rucio-mcp."""
 
+# This module hosts one app builder per auth model (stdio, OIDC bridge,
+# shared-secret, broker) plus the ASGI glue they share, which puts it past
+# pylint's default module-size budget.
+# pylint: disable=too-many-lines
+
 from __future__ import annotations
 
 import configparser
@@ -33,6 +38,11 @@ from starlette.routing import BaseRoute, Mount, Route
 
 from rucio_mcp.auth.bridge_provider import RucioBridgeProvider, _authorize_redirect_uri
 from rucio_mcp.auth.bridge_routes import register_bridge_routes
+from rucio_mcp.auth.broker import (
+    BrokerProxyClientFactory,
+    make_broker_token_verifier,
+    make_proxy_client,
+)
 from rucio_mcp.auth.factory import BearerTokenClientFactory, EnvBasedClientFactory
 from rucio_mcp.auth.rucio_cfg import RucioCfg
 from rucio_mcp.auth.rucio_oidc_poller import RucioOidcPoller
@@ -80,6 +90,16 @@ _HTTP_PREAMBLE = (
     "Use `rucio_token_info` to check how long the current session remains valid."
 )
 
+_BROKER_PREAMBLE = (
+    "MCP server for Rucio data management. "
+    "Provides tools to discover datasets, check replica locations, "
+    "inspect and manage replication rules, and verify authentication. "
+    "Authentication is handled by the Analysis Facility platform: each "
+    "request carries a broker-issued identity token, and every Rucio call "
+    "uses the caller's own VOMS proxy redeemed from the credential broker. "
+    "No environment variables or proxy certificates are required."
+)
+
 _NOMENCLATURE_HINT = (
     "Dataset naming conventions for this site are available "
     "via the `rucio://nomenclature` resource."
@@ -88,7 +108,12 @@ _NOMENCLATURE_HINT = (
 
 def _build_instructions(preset: Preset, *, transport: str = "stdio") -> str:
     """Build the server instructions string for *preset* and *transport*."""
-    preamble = _HTTP_PREAMBLE if transport == "http" else _STDIO_PREAMBLE
+    if transport == "http":
+        preamble = _HTTP_PREAMBLE
+    elif transport == "broker":
+        preamble = _BROKER_PREAMBLE
+    else:
+        preamble = _STDIO_PREAMBLE
     if preset.nomenclature_resource is not None:
         return preamble + "\n\n" + _NOMENCLATURE_HINT
     return preamble
@@ -443,6 +468,110 @@ def _make_shared_secret_mcp(
     return mcp
 
 
+def _make_broker_mcp(
+    *,
+    site_name: str,
+    cfg: RucioCfg,
+    read_only: bool,
+    resource_url: str,
+    broker_url: str,
+    jwks_url: str,
+    issuer: str,
+    audience: str,
+) -> _InstrumentedFastMCP:
+    """Build a single-site FastMCP for HTTP transport behind the AF credential broker.
+
+    Bearers are broker-issued identity JWTs verified against the broker's JWKS;
+    each tool call redeems the caller's VOMS proxy at the broker and disposes of
+    it immediately after authentication (see ``rucio_mcp.auth.broker``).  No
+    OAuth bridge, OIDC poller, or per-session client cache is involved — and no
+    server-held Rucio credential exists at all.
+    """
+    verifier = make_broker_token_verifier(jwks_url, issuer, audience)
+    proxy_client = make_proxy_client(broker_url)
+
+    @asynccontextmanager
+    async def _lifespan(_server: MCPServer) -> AsyncGenerator[dict[str, Any], None]:
+        factory = BrokerProxyClientFactory(proxy_client, cfg=cfg)
+        try:
+            yield {"client_factory": factory, "read_only": read_only}
+        finally:
+            factory.close()
+
+    preset = PRESETS.get(site_name, PRESETS["escape"])
+    mcp = _InstrumentedFastMCP(
+        f"rucio-mcp-{site_name}",
+        site_name=site_name,
+        instructions=_build_instructions(preset, transport="broker"),
+        lifespan=_lifespan,
+        token_verifier=verifier,
+        auth=AuthSettings(
+            issuer_url=AnyHttpUrl(resource_url),
+            # The aggregator injects the bearer itself; there is no OAuth
+            # discovery chain to advertise on this resource.
+            resource_server_url=None,
+            client_registration_options=ClientRegistrationOptions(enabled=False),
+            required_scopes=[],
+        ),
+    )
+
+    # Same tool set as the OIDC per-site server: no proxy module (the server
+    # holds no env proxy to inspect) and no rucio_token_info (the bearer is
+    # injected by the aggregator, not managed by the user).
+    for _module in [
+        dids,
+        replicas,
+        scopes,
+        rses,
+        rules,
+        account,
+        locks,
+        rucio_requests,
+        subscriptions,
+    ]:
+        _module.register(mcp)
+    ping.register(mcp, transport="stdio")
+    register_resources(mcp, site_name, preset.nomenclature_resource)
+    return mcp
+
+
+def _make_broker_app(
+    *,
+    site_name: str,
+    cfg: RucioCfg,
+    resource_url: str,
+    read_only: bool,
+    broker_url: str,
+    jwks_url: str,
+    issuer: str,
+    audience: str,
+    host: str,
+) -> Starlette:
+    """Build a single-site Starlette app for broker HTTP transport.
+
+    Mounts the FastMCP streamable app under ``/site/{name}/`` (parity with the
+    other HTTP deployments) plus ``/healthz`` and a ``/`` landing page.  The
+    only auth is the broker-issued identity JWT.
+    """
+    mcp = _make_broker_mcp(
+        site_name=site_name,
+        cfg=cfg,
+        read_only=read_only,
+        resource_url=resource_url.rstrip("/") + f"/site/{site_name}",
+        broker_url=broker_url,
+        jwks_url=jwks_url,
+        issuer=issuer,
+        audience=audience,
+    )
+    return _wrap_single_site_app(
+        mcp,
+        site_name=site_name,
+        resource_url=resource_url,
+        read_only=read_only,
+        host=host,
+    )
+
+
 def _make_shared_secret_app(
     *,
     site_name: str,
@@ -463,6 +592,28 @@ def _make_shared_secret_app(
         resource_url=resource_url.rstrip("/") + f"/site/{site_name}",
         secret=secret,
     )
+    return _wrap_single_site_app(
+        mcp,
+        site_name=site_name,
+        resource_url=resource_url,
+        read_only=read_only,
+        host=host,
+    )
+
+
+def _wrap_single_site_app(
+    mcp: _InstrumentedFastMCP,
+    *,
+    site_name: str,
+    resource_url: str,
+    read_only: bool,
+    host: str,
+) -> Starlette:
+    """Mount a single-site FastMCP under ``/site/{name}/`` with healthz + landing.
+
+    Shared by the shared-secret and broker HTTP modes, which both serve one
+    site with a TokenVerifier and no OAuth bridge.
+    """
     sub_app = mcp.streamable_http_app(streamable_http_path="/", host=host)
 
     @asynccontextmanager
@@ -847,6 +998,10 @@ def serve(
     sites: list[str] | None = None,
     resource_url: str | None = None,
     shared_secret: str | None = None,
+    broker_url: str | None = None,
+    broker_jwks_url: str | None = None,
+    broker_issuer: str | None = None,
+    broker_audience: str = "rucio",
     rucio_cfg: Path | None = None,
     auth_type: str | None = None,
     poll_timeout: float = 180.0,
@@ -864,6 +1019,20 @@ def serve(
         )
         sys.exit(1)
 
+    if broker_url and transport == "stdio":
+        sys.stderr.write(
+            "[rucio-mcp] Error: --broker-url requires --transport http "
+            "(it is ignored by stdio transport).\n"
+        )
+        sys.exit(1)
+
+    if broker_url and shared_secret:
+        sys.stderr.write(
+            "[rucio-mcp] Error: --broker-url conflicts with --shared-secret; "
+            "pick one HTTP auth mode.\n"
+        )
+        sys.exit(1)
+
     if transport == "stdio":
         if len(sites) > 1:
             sys.stderr.write(
@@ -874,6 +1043,53 @@ def serve(
         cfg_path = _resolve_cfg_path(sites[0], rucio_cfg)
         _preflight_check(cfg_path, auth_type_override=auth_type)
         _make_stdio_mcp(read_only=read_only, site_name=sites[0]).run(transport="stdio")
+        return
+
+    # HTTP transport, broker mode: verify AF-broker-issued JWTs and redeem a
+    # per-user VOMS proxy per tool call. Distinct from both modes below.
+    if broker_url:
+        if len(sites) > 1:
+            sys.stderr.write(
+                "[rucio-mcp] Error: broker mode serves a single site; "
+                "specify exactly one --site.\n"
+            )
+            sys.exit(1)
+        if auth_type is not None:
+            sys.stderr.write(
+                "[rucio-mcp] WARNING: --auth-type is ignored in broker mode "
+                "(broker mode always authenticates Rucio via x509_proxy).\n"
+            )
+        cfg_path = _resolve_cfg_path(sites[0], rucio_cfg)
+        if not cfg_path.exists():
+            sys.stderr.write(
+                f"[rucio-mcp] Error: rucio.cfg not found at {cfg_path} "
+                f"for site {sites[0]!r}.\n"
+                "    Use --rucio-cfg to point at a custom config file.\n"
+            )
+            sys.exit(1)
+        # No credential preflight: per-user proxies arrive at runtime via the
+        # broker; the server itself holds no Rucio credential.
+        app = _make_broker_app(
+            site_name=sites[0],
+            cfg=RucioCfg.from_path(cfg_path),
+            resource_url=resource_url or f"http://{host}:{port}",
+            read_only=read_only,
+            broker_url=broker_url,
+            jwks_url=broker_jwks_url
+            or f"{broker_url.rstrip('/')}/.well-known/jwks.json",
+            issuer=broker_issuer or broker_url,
+            audience=broker_audience,
+            host=host,
+        )
+        start_metrics_server(metrics_port, {})
+        uvicorn.run(
+            app,
+            host=host,
+            port=port,
+            proxy_headers=True,
+            forwarded_allow_ips=forwarded_allow_ips,
+            log_level=log_level,
+        )
         return
 
     # HTTP transport, shared-secret mode: serve one pre-authenticated env client

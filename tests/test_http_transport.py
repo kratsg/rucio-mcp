@@ -16,8 +16,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 from starlette.testclient import TestClient
 
+from rucio_mcp.auth.rucio_cfg import RucioCfg
 from rucio_mcp.metrics import BridgeStatsCollector
-from rucio_mcp.server import _make_http_app, _make_shared_secret_app, serve
+from rucio_mcp.server import (
+    _make_broker_app,
+    _make_http_app,
+    _make_shared_secret_app,
+    serve,
+)
 
 
 @pytest.fixture
@@ -740,6 +746,178 @@ class TestSharedSecretMode:
         resp = shared_secret_client.get("/")
         assert resp.status_code == 200
         assert "escape" in resp.text
+
+
+_INITIALIZE = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {},
+        "clientInfo": {"name": "test", "version": "0"},
+    },
+}
+
+_MCP_HEADERS = {
+    "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream",
+}
+
+
+class TestBrokerMode:
+    """HTTP transport behind the AF credential broker.
+
+    Bearers are broker-issued identity JWTs verified against the broker's
+    JWKS (patched here); each tool call redeems the caller's VOMS proxy.
+    No OAuth bridge, no OIDC poller, single site.
+    """
+
+    @pytest.fixture
+    def broker_client(self, monkeypatch: pytest.MonkeyPatch, oidc_rucio_cfg: Path):
+        verifier_mod = pytest.importorskip("af_credentials.verifier")
+
+        async def fake_verify(_self: object, token: str) -> object | None:
+            if token == "good-token":
+                claims: object = verifier_mod.BrokerClaims(
+                    sub="kratsg", jti="test-jti", exp=4102444800
+                )
+                return claims
+            return None
+
+        monkeypatch.setattr(verifier_mod.BrokerTokenVerifier, "verify", fake_verify)
+        app = _make_broker_app(
+            site_name="escape",
+            cfg=RucioCfg.from_path(oidc_rucio_cfg),
+            resource_url="http://127.0.0.1:8000",
+            read_only=False,
+            broker_url="http://broker.invalid",
+            jwks_url="http://broker.invalid/.well-known/jwks.json",
+            issuer="http://broker.invalid",
+            audience="rucio",
+            host="127.0.0.1",
+        )
+        # Enter the context manager so the app lifespan (and with it the mcp
+        # session manager) actually runs. base_url must agree with host= above:
+        # the SDK's DNS-rebinding Host allow-listing rejects the TestClient
+        # default "testserver".
+        with TestClient(app, base_url="http://127.0.0.1:8000") as test_client:
+            yield test_client
+
+    def test_healthz_needs_no_auth(self, broker_client: TestClient) -> None:
+        resp = broker_client.get("/healthz")
+        assert resp.status_code == 200
+
+    def test_root_landing_needs_no_auth(self, broker_client: TestClient) -> None:
+        resp = broker_client.get("/")
+        assert resp.status_code == 200
+        assert "escape" in resp.text
+
+    def test_initialize_without_bearer_is_401(self, broker_client: TestClient) -> None:
+        resp = broker_client.post(
+            "/site/escape/", json=_INITIALIZE, headers=_MCP_HEADERS
+        )
+        assert resp.status_code == 401
+
+    def test_initialize_with_unknown_token_is_401(
+        self, broker_client: TestClient
+    ) -> None:
+        resp = broker_client.post(
+            "/site/escape/",
+            json=_INITIALIZE,
+            headers={**_MCP_HEADERS, "Authorization": "Bearer wrong"},
+        )
+        assert resp.status_code == 401
+
+    def test_initialize_with_broker_token(self, broker_client: TestClient) -> None:
+        resp = broker_client.post(
+            "/site/escape/",
+            json=_INITIALIZE,
+            headers={**_MCP_HEADERS, "Authorization": "Bearer good-token"},
+        )
+        assert resp.status_code == 200
+        assert "serverInfo" in resp.text
+
+    def test_no_authorization_server_metadata(self, broker_client: TestClient) -> None:
+        # No OAuth AS in broker mode → AS metadata must not exist.
+        resp = broker_client.get("/site/escape/.well-known/oauth-authorization-server")
+        assert resp.status_code == 404
+
+    def test_no_bridge_route(self, broker_client: TestClient) -> None:
+        resp = broker_client.get("/site/escape/bridge")
+        assert resp.status_code == 404
+
+
+class TestServeBrokerValidation:
+    def test_broker_with_stdio_exits_nonzero(self) -> None:
+        with pytest.raises(SystemExit) as exc_info:
+            serve(
+                transport="stdio",
+                sites=["escape"],
+                broker_url="http://broker.invalid",
+            )
+        assert exc_info.value.code != 0
+
+    def test_broker_with_shared_secret_exits_nonzero(self) -> None:
+        with pytest.raises(SystemExit) as exc_info:
+            serve(
+                transport="http",
+                sites=["escape"],
+                broker_url="http://broker.invalid",
+                shared_secret="s3cr3t",
+            )
+        assert exc_info.value.code != 0
+
+    def test_broker_with_multiple_sites_exits_nonzero(self) -> None:
+        with pytest.raises(SystemExit) as exc_info:
+            serve(
+                transport="http",
+                sites=["escape", "atlas"],
+                broker_url="http://broker.invalid",
+            )
+        assert exc_info.value.code != 0
+
+    def test_broker_mode_starts_uvicorn(self, oidc_rucio_cfg: Path) -> None:
+        with (
+            patch("rucio_mcp.server._make_broker_app") as mock_app,
+            patch("rucio_mcp.server.start_metrics_server"),
+            patch("rucio_mcp.server.uvicorn.run") as mock_run,
+        ):
+            serve(
+                transport="http",
+                sites=["escape"],
+                broker_url="http://broker.invalid",
+                rucio_cfg=oidc_rucio_cfg,
+            )
+        assert mock_app.called
+        _, kwargs = mock_app.call_args
+        assert kwargs["broker_url"] == "http://broker.invalid"
+        assert kwargs["jwks_url"] == "http://broker.invalid/.well-known/jwks.json"
+        assert kwargs["issuer"] == "http://broker.invalid"
+        assert kwargs["audience"] == "rucio"
+        assert mock_run.called
+
+    def test_broker_jwks_and_issuer_overrides_forwarded(
+        self, oidc_rucio_cfg: Path
+    ) -> None:
+        with (
+            patch("rucio_mcp.server._make_broker_app") as mock_app,
+            patch("rucio_mcp.server.start_metrics_server"),
+            patch("rucio_mcp.server.uvicorn.run"),
+        ):
+            serve(
+                transport="http",
+                sites=["escape"],
+                broker_url="http://broker.invalid",
+                broker_jwks_url="http://keys.invalid/jwks.json",
+                broker_issuer="http://issuer.invalid",
+                broker_audience="rucio-mcp-atlas",
+                rucio_cfg=oidc_rucio_cfg,
+            )
+        _, kwargs = mock_app.call_args
+        assert kwargs["jwks_url"] == "http://keys.invalid/jwks.json"
+        assert kwargs["issuer"] == "http://issuer.invalid"
+        assert kwargs["audience"] == "rucio-mcp-atlas"
 
 
 class TestServeSharedSecretValidation:

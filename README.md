@@ -313,6 +313,33 @@ This mode serves a single `--site` and bypasses the OAuth bridge entirely (no
 [docs/configuration.md](docs/configuration.md#hosting-a-pre-authenticated-instance-over-http-shared-secret)
 for details.
 
+### Broker HTTP mode (per-user x509 via the AF credential broker)
+
+For Analysis Facility deployments behind
+[af-mcp-platform](https://github.com/kratsg/af-mcp-platform)'s aggregator,
+`--broker-url` (or `RUCIO_MCP_BROKER_URL`) starts the server in **broker mode**:
+every request must carry a broker-issued identity JWT (verified against the
+broker's JWKS), and each tool call redeems the caller's own VOMS proxy from the
+broker to authenticate to Rucio via `x509_proxy`. The server holds no Rucio
+credential of its own, and the redeemed proxy file is deleted as soon as the
+per-call client has authenticated:
+
+```bash
+rucio-mcp serve \
+  --transport http \
+  --site atlas \
+  --broker-url https://mcp.af.example.edu \
+  --broker-audience rucio-mcp-atlas \
+  --host 0.0.0.0 \
+  --port 9000
+```
+
+Requires the `broker` extra (`pip install 'rucio-mcp[broker]'`). Like
+shared-secret mode, broker mode serves a single `--site` and has no OAuth
+bridge. See
+[docs/configuration.md](docs/configuration.md#per-user-x509-over-http-af-credential-broker)
+for details and the platform-side configuration.
+
 <!-- --8<-- [end:http-mode] -->
 
 <!-- --8<-- [start:read-only] -->

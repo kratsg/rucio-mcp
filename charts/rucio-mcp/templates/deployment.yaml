@@ -97,6 +97,9 @@ spec:
             - name: X509_CERT_DIR
               value: {{ $ss.x509CertDir | quote }}
             {{- end }}
+            {{- else if eq .Values.auth.mode "broker" }}
+            - name: RUCIO_MCP_BROKER_URL
+              value: {{ .Values.auth.broker.brokerUrl | quote }}
             {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}

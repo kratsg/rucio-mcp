@@ -1,5 +1,5 @@
 # Default values for rucio-mcp.
-# This chart deploys rucio-mcp over HTTP transport in one of two auth models,
+# This chart deploys rucio-mcp over HTTP transport in one of three auth models,
 # selected by auth.mode (see the "auth" block below).
 
 # -- Container image. There is no published rucio-mcp image; the chart runs the
@@ -51,10 +51,14 @@ server:
 auth:
   # "oidc": multi-user OAuth 2.1 bridge (each user logs in via OIDC).
   # "sharedSecret": single env-built client gated by a static bearer token.
+  # "broker": AF credential broker — verifies broker-issued JWTs and redeems a
+  #   per-user VOMS proxy per tool call. The server holds no Rucio credential
+  #   itself. The chart adds the required af-credentials package to the
+  #   rendered pixi.toml automatically in this mode.
   mode: oidc
 
-  # Site preset(s) to serve. oidc mode allows several; sharedSecret mode
-  # requires exactly one (one env config = one pre-authenticated client).
+  # Site preset(s) to serve. oidc mode allows several; sharedSecret and broker
+  # modes require exactly one.
   sites:
     - atlas
     - cms
@@ -88,6 +92,18 @@ auth:
     # Optional override for X509_CERT_DIR (the CA trust dir). Usually unset —
     # rucio-mcp's bundled ca-policy-lcg sets it automatically.
     x509CertDir: ""
+
+  # Settings used only when mode == "broker".
+  broker:
+    # AF credential broker base URL (required; env RUCIO_MCP_BROKER_URL).
+    brokerUrl: ""
+    # JWKS URL for verifying broker-issued JWTs. Empty = derived by the server
+    # as <brokerUrl>/.well-known/jwks.json.
+    jwksUrl: ""
+    # Expected iss claim of broker-issued JWTs. Empty = brokerUrl.
+    issuer: ""
+    # Expected aud claim of broker-issued JWTs.
+    audience: "rucio"
 
 # -- Extra environment variables for the main container (free-form list of
 # corev1.EnvVar). Use for auth models the chart does not template (e.g. userpass
