@@ -126,10 +126,16 @@ class BrokerProxyClientFactory(RucioClientFactory):
     success or failure. The client then carries a per-call rucio token in
     memory; nothing is cached server-side.
 
-    The rucio account is always left unset: the Rucio server resolves it
-    from the proxy DN's default-account mapping. AF unixnames do not match
-    CERN/Rucio account names, so no identity-JWT claim may be forwarded as
-    the account.
+    The rucio account is derived from the caller's VOMS nickname carried on
+    the redeemed proxy handle (``handle.nickname``, af-mcp-platform#191):
+    IAM stamps the caller's CERN username into every proxy's VOMS
+    attributes, and it happens to match their Rucio account name in this
+    deployment. If the handle carries no nickname (older broker, or an
+    af-credentials release that predates the attribute), account falls back
+    to unset and the Rucio server resolves it from the proxy DN's
+    default-account mapping instead. Identity-JWT claims (e.g. the AF
+    unixname) are never forwarded as the account: AF unixnames do not match
+    CERN/Rucio account names.
     """
 
     def __init__(self, proxy_client: Any, *, cfg: RucioCfg) -> None:
@@ -148,11 +154,6 @@ class BrokerProxyClientFactory(RucioClientFactory):
     def get_client(self, ctx: Any) -> Any:
         """Return a per-call rucio client authenticated by the caller's proxy."""
         bearer = extract_bearer(ctx)
-        # The Rucio server maps the proxy DN to the caller's default account.
-        # Once the broker's redeem response carries an explicit account
-        # (af-mcp-platform issue #191, af-credentials >=0.2.0), it slots in
-        # here as ``account=<redeem-provided> or None``.
-        account = None
         try:
             handle = self._executor.submit(
                 asyncio.run, self._proxy_client.proxy_file(bearer)
@@ -164,6 +165,13 @@ class BrokerProxyClientFactory(RucioClientFactory):
         # The handle deletes the proxy file on exit — even if authentication
         # (performed inside ProxyAuthClient.__init__) fails.
         with handle:
+            # The caller's VOMS nickname (their CERN/Rucio account name)
+            # rides on the redeemed proxy handle once the broker and
+            # af-credentials attach it (af-mcp-platform#191). getattr keeps
+            # this skew-safe against an older af-credentials release whose
+            # ProxyHandle predates the attribute entirely, and against a
+            # broker that didn't supply a VOMS nickname for this proxy.
+            account = getattr(handle, "nickname", None)
             return ProxyAuthClient(
                 rucio_host=self._cfg.rucio_host,
                 auth_host=self._cfg.auth_host,

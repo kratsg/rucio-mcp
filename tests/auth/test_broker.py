@@ -8,6 +8,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import mkstemp
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -27,6 +28,9 @@ from rucio_mcp.auth.broker import (
     extract_bearer,
 )
 from rucio_mcp.auth.rucio_cfg import RucioCfg
+
+if TYPE_CHECKING:
+    from typing_extensions import Self
 
 
 def _make_ctx(headers: dict[str, str]) -> MagicMock:
@@ -87,6 +91,47 @@ class _UnavailableProxyClient:
 class _FailingProxyClient:
     async def proxy_file(self, _bearer: str) -> ProxyHandle:
         raise ProxyRedeemError(503, "broker melted")
+
+
+class _FakeHandleWithNickname:
+    """Local double standing in for a ``ProxyHandle`` that carries a VOMS nickname.
+
+    ``af_credentials.proxy.ProxyHandle`` does not yet ship the ``nickname``
+    field this exercises (af-mcp-platform#191, af-credentials >=0.2.0) — at
+    the time of writing, ``ProxyHandle.__dataclass_fields__`` only has
+    ``path``, ``dn``, ``expires_at``. This double implements the same
+    context-manager protocol as the real ``ProxyHandle`` (``close()`` on
+    exit) so it exercises the exact ``getattr(handle, "nickname", None)``
+    access path in ``BrokerProxyClientFactory.get_client`` ahead of that
+    release. Re-verify against the real ``ProxyHandle`` once af-credentials
+    ships the field.
+    """
+
+    def __init__(self, path: Path, nickname: str | None) -> None:
+        self.path = path
+        self.nickname = nickname
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.path.unlink(missing_ok=True)
+
+
+class _NicknameProxyClient:
+    """Duck-typed stand-in for ``ProxyClient`` whose handle carries a VOMS nickname."""
+
+    def __init__(self, nickname: str | None) -> None:
+        self._nickname = nickname
+        self.created_paths: list[Path] = []
+
+    async def proxy_file(self, _bearer: str) -> _FakeHandleWithNickname:
+        fd, raw_path = mkstemp(prefix="test-proxy-", suffix=".pem")
+        os.close(fd)
+        path = Path(raw_path)
+        path.write_text("FAKE PEM")
+        self.created_paths.append(path)
+        return _FakeHandleWithNickname(path=path, nickname=self._nickname)
 
 
 class TestExtractBearer:
@@ -206,4 +251,33 @@ class TestBrokerProxyClientFactory:
     def test_close_is_safe_to_call_twice(self) -> None:
         factory = BrokerProxyClientFactory(_FakeProxyClient(), cfg=_make_cfg())
         factory.close()
+        factory.close()
+
+    def test_account_set_from_handle_nickname(self) -> None:
+        # Once the broker/af-credentials attach a VOMS nickname to the
+        # redeemed handle (af-mcp-platform#191), it becomes the rucio
+        # account — it matches the caller's CERN/Rucio account name, unlike
+        # the AF unixname carried in JWT claims.
+        proxy_client = _NicknameProxyClient(nickname="jdoe")
+        factory = BrokerProxyClientFactory(proxy_client, cfg=_make_cfg())
+        ctx = _make_ctx({"authorization": "Bearer tok"})
+
+        with patch("rucio_mcp.auth.broker.ProxyAuthClient") as client_cls:
+            factory.get_client(ctx)
+            _, kwargs = client_cls.call_args
+            assert kwargs["account"] == "jdoe"
+        factory.close()
+
+    def test_account_none_when_handle_has_no_nickname(self) -> None:
+        # Skew-safe fallback: an older broker or af-credentials release
+        # whose handle carries no VOMS nickname leaves account unset, same
+        # as before this feature landed.
+        proxy_client = _NicknameProxyClient(nickname=None)
+        factory = BrokerProxyClientFactory(proxy_client, cfg=_make_cfg())
+        ctx = _make_ctx({"authorization": "Bearer tok"})
+
+        with patch("rucio_mcp.auth.broker.ProxyAuthClient") as client_cls:
+            factory.get_client(ctx)
+            _, kwargs = client_cls.call_args
+            assert kwargs["account"] is None
         factory.close()
