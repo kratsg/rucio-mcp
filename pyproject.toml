@@ -71,6 +71,9 @@ docs = [
 ]
 
 
+[tool.uv]
+exclude-newer = "7 days"
+
 [tool.hatch]
 version.source = "vcs"
 build.hooks.vcs.version-file = "src/rucio_mcp/_version.py"
