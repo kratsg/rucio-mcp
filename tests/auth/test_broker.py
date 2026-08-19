@@ -1,4 +1,4 @@
-"""Tests for broker mode: bearer extraction, claims, and the proxy-backed factory."""
+"""Tests for broker mode: bearer extraction and the proxy-backed factory."""
 
 from __future__ import annotations
 
@@ -25,7 +25,6 @@ from rucio_mcp.auth.broker import (
     BrokerProxyClientFactory,
     ProxyAuthClient,
     extract_bearer,
-    extract_unixname,
 )
 from rucio_mcp.auth.rucio_cfg import RucioCfg
 
@@ -110,23 +109,6 @@ class TestExtractBearer:
             extract_bearer(ctx)
 
 
-class TestExtractUnixname:
-    def test_returns_unixname_claim(self) -> None:
-        token = _make_jwt({"sub": "gstark", "unixname": "gstark"})
-        assert extract_unixname(token) == "gstark"
-
-    def test_missing_claim_returns_none(self) -> None:
-        token = _make_jwt({"sub": "gstark"})
-        assert extract_unixname(token) is None
-
-    def test_malformed_token_returns_none(self) -> None:
-        assert extract_unixname("not-a-jwt") is None
-
-    def test_non_string_claim_returns_none(self) -> None:
-        token = _make_jwt({"unixname": 42})
-        assert extract_unixname(token) is None
-
-
 class TestProxyAuthClient:
     def test_disk_token_cache_read_is_disabled(self) -> None:
         client = ProxyAuthClient.__new__(ProxyAuthClient)
@@ -142,9 +124,7 @@ class TestBrokerProxyClientFactory:
     def test_client_built_from_redeemed_proxy_file(self) -> None:
         proxy_client = _FakeProxyClient()
         factory = BrokerProxyClientFactory(proxy_client, cfg=_make_cfg())
-        ctx = _make_ctx(
-            {"authorization": f"Bearer {_make_jwt({'unixname': 'gstark'})}"}
-        )
+        ctx = _make_ctx({"authorization": "Bearer tok"})
 
         with patch("rucio_mcp.auth.broker.ProxyAuthClient") as client_cls:
             # The proxy file must still exist while the client authenticates.
@@ -157,19 +137,22 @@ class TestBrokerProxyClientFactory:
             assert kwargs["rucio_host"] == "https://rucio.atlas.cern.ch"
             assert kwargs["auth_host"] == "https://atlas-rucio-auth.cern.ch"
             assert kwargs["auth_type"] == "x509_proxy"
-            assert kwargs["account"] == "gstark"
+            assert kwargs["account"] is None
 
         # The never-persist rule: the proxy file is gone after get_client.
         assert not proxy_client.created_paths[0].exists()
-        assert proxy_client.seen_bearers == [
-            ctx.request_context.request.headers["authorization"][7:]
-        ]
+        assert proxy_client.seen_bearers == ["tok"]
         factory.close()
 
-    def test_account_none_without_unixname_claim(self) -> None:
+    def test_account_stays_none_regardless_of_jwt_claims(self) -> None:
+        # AF unixnames do not match CERN/Rucio account names, so no JWT claim
+        # may ever be forwarded as the account: the Rucio server resolves it
+        # from the proxy DN's default-account mapping instead.
         proxy_client = _FakeProxyClient()
         factory = BrokerProxyClientFactory(proxy_client, cfg=_make_cfg())
-        ctx = _make_ctx({"authorization": f"Bearer {_make_jwt({'sub': 'gstark'})}"})
+        ctx = _make_ctx(
+            {"authorization": f"Bearer {_make_jwt({'unixname': 'afuser'})}"}
+        )
 
         with patch("rucio_mcp.auth.broker.ProxyAuthClient") as client_cls:
             factory.get_client(ctx)
@@ -180,7 +163,7 @@ class TestBrokerProxyClientFactory:
     def test_proxy_file_deleted_when_construction_fails(self) -> None:
         proxy_client = _FakeProxyClient()
         factory = BrokerProxyClientFactory(proxy_client, cfg=_make_cfg())
-        ctx = _make_ctx({"authorization": f"Bearer {_make_jwt({})}"})
+        ctx = _make_ctx({"authorization": "Bearer tok"})
 
         with (
             patch(
@@ -196,7 +179,7 @@ class TestBrokerProxyClientFactory:
 
     def test_proxy_not_available_becomes_actionable_tool_error(self) -> None:
         factory = BrokerProxyClientFactory(_UnavailableProxyClient(), cfg=_make_cfg())
-        ctx = _make_ctx({"authorization": f"Bearer {_make_jwt({})}"})
+        ctx = _make_ctx({"authorization": "Bearer tok"})
 
         with pytest.raises(ToolError, match="portal"):
             factory.get_client(ctx)
@@ -204,7 +187,7 @@ class TestBrokerProxyClientFactory:
 
     def test_redeem_failure_becomes_tool_error(self) -> None:
         factory = BrokerProxyClientFactory(_FailingProxyClient(), cfg=_make_cfg())
-        ctx = _make_ctx({"authorization": f"Bearer {_make_jwt({})}"})
+        ctx = _make_ctx({"authorization": "Bearer tok"})
 
         with pytest.raises(ToolError, match="broker"):
             factory.get_client(ctx)

@@ -13,9 +13,6 @@ Requires the ``broker`` extra: ``pip install rucio-mcp[broker]``.
 from __future__ import annotations
 
 import asyncio
-import base64
-import binascii
-import json
 from concurrent.futures import ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
@@ -83,27 +80,6 @@ def extract_bearer(ctx: Any) -> str:
     return auth[7:].strip()
 
 
-def extract_unixname(bearer: str) -> str | None:
-    """Return the ``unixname`` claim of a broker-issued identity JWT, if any.
-
-    The signature is NOT checked here — the server's TokenVerifier has
-    already verified the token against the broker's JWKS before any tool
-    runs; this merely re-reads a claim from the trusted payload. Returns
-    ``None`` when the claim is absent (the platform's backends config did
-    not set ``include_posix`` for this target) or the token is not a JWT.
-    """
-    parts = bearer.split(".")
-    if len(parts) != 3:
-        return None
-    padded = parts[1] + "=" * (-len(parts[1]) % 4)
-    try:
-        claims = json.loads(base64.urlsafe_b64decode(padded))
-    except (binascii.Error, ValueError):
-        return None
-    unixname = claims.get("unixname") if isinstance(claims, dict) else None
-    return unixname if isinstance(unixname, str) else None
-
-
 def make_broker_token_verifier(
     jwks_url: str, issuer: str, audience: str
 ) -> TokenVerifier:
@@ -150,10 +126,10 @@ class BrokerProxyClientFactory(RucioClientFactory):
     success or failure. The client then carries a per-call rucio token in
     memory; nothing is cached server-side.
 
-    The rucio account is taken from the verified JWT's ``unixname`` claim
-    (present when the platform's backends config sets ``include_posix`` for
-    this target); without it the account is left unset and the Rucio server
-    resolves it from the proxy DN's default-account mapping.
+    The rucio account is always left unset: the Rucio server resolves it
+    from the proxy DN's default-account mapping. AF unixnames do not match
+    CERN/Rucio account names, so no identity-JWT claim may be forwarded as
+    the account.
     """
 
     def __init__(self, proxy_client: Any, *, cfg: RucioCfg) -> None:
@@ -172,7 +148,11 @@ class BrokerProxyClientFactory(RucioClientFactory):
     def get_client(self, ctx: Any) -> Any:
         """Return a per-call rucio client authenticated by the caller's proxy."""
         bearer = extract_bearer(ctx)
-        account = extract_unixname(bearer)
+        # The Rucio server maps the proxy DN to the caller's default account.
+        # Once the broker's redeem response carries an explicit account
+        # (af-mcp-platform issue #191, af-credentials >=0.2.0), it slots in
+        # here as ``account=<redeem-provided> or None``.
+        account = None
         try:
             handle = self._executor.submit(
                 asyncio.run, self._proxy_client.proxy_file(bearer)

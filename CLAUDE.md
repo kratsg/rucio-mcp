@@ -48,13 +48,14 @@ broker's JWKS (`auth/broker.py::make_broker_token_verifier`, backed by
 proxy from the broker **per tool call**, authenticates a fresh `ProxyAuthClient`
 (`auth_type=x509_proxy`, disk token cache disabled so one user's rucio token can
 never leak to another via the shared `/tmp` cache), and deletes the proxy file
-as soon as authentication completes. The rucio account comes from the verified
-JWT's `unixname` claim, else the Rucio server resolves it from the proxy DN.
-Single site only; mutually exclusive with `--shared-secret`; no OAuth bridge,
-CIMD, or `/register`. Built by `_make_broker_mcp` / `_make_broker_app` in
-`server.py` (the single-site app shell is shared with shared-secret mode via
-`_wrap_single_site_app`). Requires the `broker` extra
-(`pip install rucio-mcp[broker]`).
+as soon as authentication completes. The rucio account is left unset — the Rucio
+server resolves it from the proxy DN's default-account mapping (AF unixnames do
+not match CERN/Rucio account names; an explicit account via the broker redeem
+response is tracked in af-mcp-platform#191). Single site only; mutually
+exclusive with `--shared-secret`; no OAuth bridge, CIMD, or `/register`. Built
+by `_make_broker_mcp` / `_make_broker_app` in `server.py` (the single-site app
+shell is shared with shared-secret mode via `_wrap_single_site_app`). Requires
+the `broker` extra (`pip install rucio-mcp[broker]`).
 
 Clients are identified by **CIMD** (Client ID Metadata Documents,
 `draft-ietf-oauth-client-id-metadata-document`): the `client_id` is an https URL
@@ -167,8 +168,8 @@ src/rucio_mcp/
 ├── auth/
 │   ├── factory.py            # RucioClientFactory ABC, EnvBasedClientFactory,
 │   │                         # BearerTokenClientFactory, _extract_request_auth
-│   ├── broker.py             # broker mode: extract_bearer/extract_unixname,
-│   │                         # ProxyAuthClient, BrokerProxyClientFactory
+│   ├── broker.py             # broker mode: extract_bearer, ProxyAuthClient,
+│   │                         # BrokerProxyClientFactory
 │   ├── token_client.py       # TokenInjectedClient (bearer injection, no auth-server)
 │   ├── session_cache.py      # SessionCache (thread-safe, fixed-TTL)
 │   ├── rucio_cfg.py          # RucioCfg dataclass — reads [client] from rucio.cfg (incl. auth_type)
@@ -227,7 +228,7 @@ tests/
 ├── test_tools_proxy.py
 ├── auth/
 │   ├── test_factory.py          # EnvBasedClientFactory, BearerTokenClientFactory, _extract_request_auth
-│   ├── test_broker.py           # bearer/unixname extraction, BrokerProxyClientFactory (mocked ProxyClient)
+│   ├── test_broker.py           # bearer extraction, BrokerProxyClientFactory (mocked ProxyClient)
 │   ├── test_rucio_cfg.py        # RucioCfg.from_path()
 │   ├── test_rucio_oidc_poller.py # RucioOidcPoller (httpx mocks, no network)
 │   ├── test_bridge_state.py     # BridgeStateStore TTL + state transitions

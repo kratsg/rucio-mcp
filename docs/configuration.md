@@ -290,10 +290,11 @@ bearer:
    is never cached, copied, or persisted. The Rucio disk token cache is disabled
    so one caller's Rucio token can never be reused by another.
 
-The Rucio account is taken from the JWT's `unixname` claim when present
-(requires `include_posix` in the platform's backends config for this target);
-otherwise the account is left unset and the Rucio server resolves it from the
-proxy DN's default-account mapping.
+The Rucio account is left unset: the Rucio server resolves it from the proxy
+DN's default-account mapping (AF unixnames do not match CERN/Rucio account
+names, so no identity-JWT claim is ever forwarded as the account). An explicit
+per-user account, delivered in the broker's redeem response, is tracked in
+[af-mcp-platform#191](https://github.com/maniaclab/af-mcp-platform/issues/191).
 
 ```bash
 rucio-mcp serve --transport http --site atlas \
@@ -319,9 +320,8 @@ Everything below lives in the platform's flux configuration (owner-side), not in
 this repository:
 
 1. **backends config**: give the `rucio-mcp-atlas` target `auth_type: x509`
-   (broker-issued JWT + proxy redeem) instead of `auth_type: bearer`, and set
-   `include_posix: true` so the JWT carries `unixname` for deterministic account
-   selection.
+   (broker-issued JWT + proxy redeem) instead of `auth_type: bearer`. The
+   identity JWT stays sub/aud-only for this backend.
 2. **identity providers**: add `rucio-mcp-atlas` to the x509 `identityProviders`
    entry's `targets` so users can link certificates for this backend.
 3. **helm values**: deploy the chart with `auth.mode=broker`, a single
