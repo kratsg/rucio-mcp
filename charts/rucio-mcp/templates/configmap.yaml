@@ -15,7 +15,7 @@ data:
     [dependencies]
     rucio-mcp = "=={{ .Values.rucioMcp.version }}"
     {{- if eq .Values.auth.mode "broker" }}
-    af-credentials = ">=0.1.1"
+    af-credentials = ">=0.1.0"
     {{- end }}
     {{- range $name, $spec := .Values.rucioMcp.extraPixiDependencies }}
     {{ $name }} = "{{ $spec }}"

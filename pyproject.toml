@@ -42,7 +42,7 @@ dependencies = [
 [project.optional-dependencies]
 # Per-user x509 auth behind the AF MCP credential broker (af-mcp-platform).
 broker = [
-  "af-credentials[mcp]>=0.1.1",
+  "af-credentials[mcp]>=0.1.0",
 ]
 
 [project.scripts]
