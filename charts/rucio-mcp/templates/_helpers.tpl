@@ -94,8 +94,15 @@ rather than producing a manifest the server would reject at startup.
       {{- fail "auth.sharedSecret.authType x509/x509_proxy requires auth.sharedSecret.x509.existingSecret" -}}
     {{- end -}}
   {{- end -}}
+{{- else if eq .Values.auth.mode "broker" -}}
+  {{- if ne (len .Values.auth.sites) 1 -}}
+    {{- fail "auth.mode=broker serves exactly one site: set auth.sites to a single entry" -}}
+  {{- end -}}
+  {{- if not .Values.auth.broker.brokerUrl -}}
+    {{- fail "auth.mode=broker requires auth.broker.brokerUrl" -}}
+  {{- end -}}
 {{- else -}}
-  {{- fail (printf "auth.mode must be 'oidc' or 'sharedSecret', got %q" .Values.auth.mode) -}}
+  {{- fail (printf "auth.mode must be 'oidc', 'sharedSecret' or 'broker', got %q" .Values.auth.mode) -}}
 {{- end -}}
 {{- end }}
 
@@ -115,7 +122,7 @@ Public resource URL for oidc mode: explicit value, else derived from ingress hos
 {{/*
 Build the `rucio-mcp serve` argument string from values. The shared bearer is
 passed via the RUCIO_MCP_SHARED_SECRET env var (not a flag) to keep it out of
-the process table.
+the process table; likewise the broker URL rides RUCIO_MCP_BROKER_URL.
 */}}
 {{- define "rucio-mcp.serveArgs" -}}
 {{- include "rucio-mcp.validate" . -}}
@@ -135,6 +142,21 @@ the process table.
 {{- if eq .Values.auth.mode "oidc" -}}
 {{- $args = append $args "--resource-url" -}}
 {{- $args = append $args (include "rucio-mcp.resourceUrl" .) -}}
+{{- else if eq .Values.auth.mode "broker" -}}
+{{- with .Values.auth.broker.jwksUrl -}}
+{{- $args = append $args "--broker-jwks-url" -}}
+{{- $args = append $args . -}}
+{{- end -}}
+{{- with .Values.auth.broker.issuer -}}
+{{- $args = append $args "--broker-issuer" -}}
+{{- $args = append $args . -}}
+{{- end -}}
+{{- $args = append $args "--broker-audience" -}}
+{{- $args = append $args .Values.auth.broker.audience -}}
+{{- if .Values.server.resourceUrl -}}
+{{- $args = append $args "--resource-url" -}}
+{{- $args = append $args .Values.server.resourceUrl -}}
+{{- end -}}
 {{- else -}}
 {{- $args = append $args "--auth-type" -}}
 {{- $args = append $args .Values.auth.sharedSecret.authType -}}

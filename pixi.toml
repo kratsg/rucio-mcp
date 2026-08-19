@@ -80,7 +80,10 @@ check-docstrings = { cmd = "pydocstyle src/rucio_mcp/", description = "Check doc
 kubernetes-helm = "*"
 
 [feature.helm.tasks]
-helm-lint = { cmd = "helm lint charts/rucio-mcp --set ingress.host=rucio-mcp.example.com", description = "Lint the rucio-mcp Helm chart" }
+helm-lint = { cmd = """
+helm lint charts/rucio-mcp --set ingress.host=rucio-mcp.example.com \
+&& helm template broker charts/rucio-mcp --set ingress.host=rucio-mcp.example.com --set auth.mode=broker --set 'auth.sites={atlas}' --set auth.broker.brokerUrl=https://broker.example.com > /dev/null
+""", description = "Lint the rucio-mcp Helm chart and smoke-render broker mode" }
 helm-template = { cmd = "helm template r charts/rucio-mcp --set ingress.host=rucio-mcp.example.com", description = "Render the chart with default (OIDC) values" }
 
 [feature.dev.dependencies]
