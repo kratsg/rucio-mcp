@@ -178,9 +178,7 @@ class BrokerProxyClientFactory(RucioClientFactory):
                 asyncio.run, self._proxy_client.proxy_file(bearer)
             ).result()
         except ProxyNotAvailableError as exc:
-            raise ToolError(
-                _PROXY_NOT_AVAILABLE_MSG.format(detail=exc.detail)
-            ) from exc
+            raise ToolError(_PROXY_NOT_AVAILABLE_MSG.format(detail=exc.detail)) from exc
         except ProxyRedeemError as exc:
             raise ToolError(_PROXY_REDEEM_FAILED_MSG.format(detail=exc.detail)) from exc
         # The handle deletes the proxy file on exit — even if authentication

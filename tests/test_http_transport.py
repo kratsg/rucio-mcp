@@ -838,13 +838,9 @@ class TestBrokerMode:
         assert resp.status_code == 200
         assert "serverInfo" in resp.text
 
-    def test_no_authorization_server_metadata(
-        self, broker_client: TestClient
-    ) -> None:
+    def test_no_authorization_server_metadata(self, broker_client: TestClient) -> None:
         # No OAuth AS in broker mode → AS metadata must not exist.
-        resp = broker_client.get(
-            "/site/escape/.well-known/oauth-authorization-server"
-        )
+        resp = broker_client.get("/site/escape/.well-known/oauth-authorization-server")
         assert resp.status_code == 404
 
     def test_no_bridge_route(self, broker_client: TestClient) -> None:

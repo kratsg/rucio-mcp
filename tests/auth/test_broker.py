@@ -15,19 +15,19 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 af_credentials = pytest.importorskip("af_credentials")
 
-from af_credentials.proxy import (  # noqa: E402
+from af_credentials.proxy import (
     ProxyHandle,
     ProxyNotAvailableError,
     ProxyRedeemError,
 )
 
-from rucio_mcp.auth.broker import (  # noqa: E402
+from rucio_mcp.auth.broker import (
     BrokerProxyClientFactory,
     ProxyAuthClient,
     extract_bearer,
     extract_unixname,
 )
-from rucio_mcp.auth.rucio_cfg import RucioCfg  # noqa: E402
+from rucio_mcp.auth.rucio_cfg import RucioCfg
 
 
 def _make_ctx(headers: dict[str, str]) -> MagicMock:
@@ -134,14 +134,17 @@ class TestProxyAuthClient:
 
     def test_disk_token_cache_write_is_disabled(self) -> None:
         client = ProxyAuthClient.__new__(ProxyAuthClient)
-        assert client._BaseClient__write_token() is None
+        # Must be a no-op: no token_path/token_file attributes are ever touched.
+        client._BaseClient__write_token()
 
 
 class TestBrokerProxyClientFactory:
     def test_client_built_from_redeemed_proxy_file(self) -> None:
         proxy_client = _FakeProxyClient()
         factory = BrokerProxyClientFactory(proxy_client, cfg=_make_cfg())
-        ctx = _make_ctx({"authorization": f"Bearer {_make_jwt({'unixname': 'gstark'})}"})
+        ctx = _make_ctx(
+            {"authorization": f"Bearer {_make_jwt({'unixname': 'gstark'})}"}
+        )
 
         with patch("rucio_mcp.auth.broker.ProxyAuthClient") as client_cls:
             # The proxy file must still exist while the client authenticates.
@@ -158,9 +161,9 @@ class TestBrokerProxyClientFactory:
 
         # The never-persist rule: the proxy file is gone after get_client.
         assert not proxy_client.created_paths[0].exists()
-        assert proxy_client.seen_bearers == [ctx.request_context.request.headers[
-            "authorization"
-        ][7:]]
+        assert proxy_client.seen_bearers == [
+            ctx.request_context.request.headers["authorization"][7:]
+        ]
         factory.close()
 
     def test_account_none_without_unixname_claim(self) -> None:

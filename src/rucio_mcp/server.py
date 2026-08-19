@@ -1,5 +1,10 @@
 """FastMCP server setup for rucio-mcp."""
 
+# This module hosts one app builder per auth model (stdio, OIDC bridge,
+# shared-secret, broker) plus the ASGI glue they share, which puts it past
+# pylint's default module-size budget.
+# pylint: disable=too-many-lines
+
 from __future__ import annotations
 
 import configparser

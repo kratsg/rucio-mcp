@@ -53,6 +53,7 @@ repos:
           - pytest
           - mcp==2.0.0
           - httpx2
+          - af-credentials>=0.1.1
 
   - repo: https://github.com/codespell-project/codespell
     rev: "v2.4.3"

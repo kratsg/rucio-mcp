@@ -123,7 +123,7 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # rucio.client.Client has no stubs so mypy sees it as Any; subclassing Any is valid here
-module = ["rucio_mcp.auth.token_client"]
+module = ["rucio_mcp.auth.token_client", "rucio_mcp.auth.broker"]
 disallow_subclassing_any = false
 
 [[tool.mypy.overrides]]
