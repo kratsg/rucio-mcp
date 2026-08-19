@@ -270,6 +270,65 @@ Notes:
   clients are configured with the bearer out-of-band rather than via OAuth
   discovery.
 
-To run either HTTP mode on Kubernetes, see [Deploying with Helm](helm.md).
+## Per-user x509 over HTTP (AF credential broker)
+
+Analysis Facilities running
+[af-mcp-platform](https://github.com/kratsg/af-mcp-platform) can serve per-user
+Rucio access without the OIDC bridge and without any server-held credential. In
+**broker mode** the server sits behind the platform's aggregator, which forwards
+a broker-issued identity JWT (RS256, `aud` = this backend) as the request
+bearer:
+
+1. Every request's bearer is verified against the broker's JWKS
+   (`--broker-jwks-url`, default `<broker-url>/.well-known/jwks.json`), with the
+   expected `iss` (`--broker-issuer`, default the broker URL) and `aud`
+   (`--broker-audience`).
+2. Each tool call redeems that same bearer at the broker for the **caller's own
+   VOMS proxy**, materialized as a private 0600 temp file.
+3. A fresh Rucio client authenticates with `auth_type=x509_proxy` against the
+   proxy, and the proxy file is deleted the moment authentication completes — it
+   is never cached, copied, or persisted. The Rucio disk token cache is disabled
+   so one caller's Rucio token can never be reused by another.
+
+The Rucio account is taken from the JWT's `unixname` claim when present
+(requires `include_posix` in the platform's backends config for this target);
+otherwise the account is left unset and the Rucio server resolves it from the
+proxy DN's default-account mapping.
+
+```bash
+rucio-mcp serve --transport http --site atlas \
+  --broker-url https://mcp.af.example.edu \
+  --broker-audience rucio-mcp-atlas \
+  --host 0.0.0.0 --port 9000
+```
+
+Notes:
+
+- Requires the `broker` extra: `pip install 'rucio-mcp[broker]'` (pulls in
+  `af-credentials`).
+- Broker mode serves **one** site and is mutually exclusive with
+  `--shared-secret`.
+- All flags have `RUCIO_MCP_BROKER_URL` / `RUCIO_MCP_BROKER_JWKS_URL` /
+  `RUCIO_MCP_BROKER_ISSUER` / `RUCIO_MCP_BROKER_AUDIENCE` env equivalents.
+- A caller with no linked grid certificate gets an actionable error pointing at
+  the AF portal's x509 credential linking.
+
+### AF platform deployment notes
+
+Everything below lives in the platform's flux configuration (owner-side), not in
+this repository:
+
+1. **backends config**: give the `rucio-mcp-atlas` target `auth_type: x509`
+   (broker-issued JWT + proxy redeem) instead of `auth_type: bearer`, and set
+   `include_posix: true` so the JWT carries `unixname` for deterministic account
+   selection.
+2. **identity providers**: add `rucio-mcp-atlas` to the x509 `identityProviders`
+   entry's `targets` so users can link certificates for this backend.
+3. **helm values**: deploy the chart with `auth.mode=broker`, a single
+   `auth.sites` entry, `auth.broker.brokerUrl`, and
+   `auth.broker.audience=rucio-mcp-atlas` (see [Deploying with Helm](helm.md);
+   the chart adds the `af-credentials` dependency automatically).
+
+To run any HTTP mode on Kubernetes, see [Deploying with Helm](helm.md).
 
 --8<-- "README.md:read-only"
