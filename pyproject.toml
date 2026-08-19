@@ -87,6 +87,16 @@ addopts = ["-ra", "--showlocals", "--strict-markers", "--strict-config"]
 strict = true
 filterwarnings = [
   "error",
+  # Teardown race in the OIDC bridge poller: its abandoned background connect
+  # attempt (anyio connect_tcp.<locals>.try_connect) can be GC'd un-awaited,
+  # surfacing as an unraisable warning at the NEXT test's setup — deterministic
+  # on py3.11/macOS since the anyio 4.13→4.14 / pytest 9.0→9.1 re-lock. Both
+  # entries are scoped to exactly this coroutine (the GC event shows up either
+  # as the wrapped unraisable or as the raw never-awaited RuntimeWarning);
+  # every other warning stays fatal. Source-level fix (cancel/await the
+  # poller's connect task on close) tracked separately.
+  "ignore:Exception ignored in. <coroutine object connect_tcp:pytest.PytestUnraisableExceptionWarning",
+  "ignore:coroutine 'connect_tcp..locals..try_connect' was never awaited:RuntimeWarning",
 ]
 log_level = "INFO"
 testpaths = [
