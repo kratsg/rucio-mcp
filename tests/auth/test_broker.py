@@ -8,7 +8,6 @@ import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import mkstemp
-from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -28,9 +27,6 @@ from rucio_mcp.auth.broker import (
     extract_bearer,
 )
 from rucio_mcp.auth.rucio_cfg import RucioCfg
-
-if TYPE_CHECKING:
-    from typing_extensions import Self
 
 
 def _make_ctx(headers: dict[str, str]) -> MagicMock:
@@ -79,7 +75,9 @@ class _FakeProxyClient:
         path = Path(raw_path)
         path.write_text("FAKE PEM")
         self.created_paths.append(path)
-        return ProxyHandle(path=path, dn="/CN=test", expires_at=_utc_soon())
+        return ProxyHandle(
+            path=path, dn="/CN=test", expires_at=_utc_soon(), nickname=None
+        )
 
 
 class _UnavailableProxyClient:
@@ -93,31 +91,6 @@ class _FailingProxyClient:
         raise ProxyRedeemError(503, "broker melted")
 
 
-class _FakeHandleWithNickname:
-    """Local double standing in for a ``ProxyHandle`` that carries a VOMS nickname.
-
-    ``af_credentials.proxy.ProxyHandle`` does not yet ship the ``nickname``
-    field this exercises (af-mcp-platform#191, af-credentials >=0.2.0) — at
-    the time of writing, ``ProxyHandle.__dataclass_fields__`` only has
-    ``path``, ``dn``, ``expires_at``. This double implements the same
-    context-manager protocol as the real ``ProxyHandle`` (``close()`` on
-    exit) so it exercises the exact ``getattr(handle, "nickname", None)``
-    access path in ``BrokerProxyClientFactory.get_client`` ahead of that
-    release. Re-verify against the real ``ProxyHandle`` once af-credentials
-    ships the field.
-    """
-
-    def __init__(self, path: Path, nickname: str | None) -> None:
-        self.path = path
-        self.nickname = nickname
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(self, *exc_info: object) -> None:
-        self.path.unlink(missing_ok=True)
-
-
 class _NicknameProxyClient:
     """Duck-typed stand-in for ``ProxyClient`` whose handle carries a VOMS nickname."""
 
@@ -125,13 +98,15 @@ class _NicknameProxyClient:
         self._nickname = nickname
         self.created_paths: list[Path] = []
 
-    async def proxy_file(self, _bearer: str) -> _FakeHandleWithNickname:
+    async def proxy_file(self, _bearer: str) -> ProxyHandle:
         fd, raw_path = mkstemp(prefix="test-proxy-", suffix=".pem")
         os.close(fd)
         path = Path(raw_path)
         path.write_text("FAKE PEM")
         self.created_paths.append(path)
-        return _FakeHandleWithNickname(path=path, nickname=self._nickname)
+        return ProxyHandle(
+            path=path, dn="/CN=test", expires_at=_utc_soon(), nickname=self._nickname
+        )
 
 
 class TestExtractBearer:
