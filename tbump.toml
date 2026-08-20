@@ -35,12 +35,20 @@ search = "Bump version: {current_version} → "
 [[file]]
 src = "README.md"
 
-# Helm chart: track the rucio-mcp app version the chart deploys. The chart's own
-# `version` (chart version) is managed separately, so each entry uses a search
-# pattern to bump only the app-version line.
+# Helm chart: track the rucio-mcp app version the chart deploys, and keep the
+# chart's own `version` in lockstep too -- Flux's default ChartVersion
+# reconcile strategy only repackages the chart when Chart.yaml's `version`
+# changes, so if it's left to drift independently, template changes silently
+# stop being picked up (this is exactly what happened: `version` sat at
+# "0.1.0" untouched since the chart's first commit, well past the point it
+# grew broker/x509 support, and Flux kept serving a stale package).
 [[file]]
 src = "charts/rucio-mcp/Chart.yaml"
 search = 'appVersion: "{current_version}"'
+
+[[file]]
+src = "charts/rucio-mcp/Chart.yaml"
+search = 'version: {current_version}'
 
 [[file]]
 src = "charts/rucio-mcp/values.yaml"
