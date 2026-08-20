@@ -75,7 +75,9 @@ class _FakeProxyClient:
         path = Path(raw_path)
         path.write_text("FAKE PEM")
         self.created_paths.append(path)
-        return ProxyHandle(path=path, dn="/CN=test", expires_at=_utc_soon())
+        return ProxyHandle(
+            path=path, dn="/CN=test", expires_at=_utc_soon(), nickname=None
+        )
 
 
 class _UnavailableProxyClient:
@@ -87,6 +89,24 @@ class _UnavailableProxyClient:
 class _FailingProxyClient:
     async def proxy_file(self, _bearer: str) -> ProxyHandle:
         raise ProxyRedeemError(503, "broker melted")
+
+
+class _NicknameProxyClient:
+    """Duck-typed stand-in for ``ProxyClient`` whose handle carries a VOMS nickname."""
+
+    def __init__(self, nickname: str | None) -> None:
+        self._nickname = nickname
+        self.created_paths: list[Path] = []
+
+    async def proxy_file(self, _bearer: str) -> ProxyHandle:
+        fd, raw_path = mkstemp(prefix="test-proxy-", suffix=".pem")
+        os.close(fd)
+        path = Path(raw_path)
+        path.write_text("FAKE PEM")
+        self.created_paths.append(path)
+        return ProxyHandle(
+            path=path, dn="/CN=test", expires_at=_utc_soon(), nickname=self._nickname
+        )
 
 
 class TestExtractBearer:
@@ -206,4 +226,33 @@ class TestBrokerProxyClientFactory:
     def test_close_is_safe_to_call_twice(self) -> None:
         factory = BrokerProxyClientFactory(_FakeProxyClient(), cfg=_make_cfg())
         factory.close()
+        factory.close()
+
+    def test_account_set_from_handle_nickname(self) -> None:
+        # Once the broker/af-credentials attach a VOMS nickname to the
+        # redeemed handle (af-mcp-platform#191), it becomes the rucio
+        # account — it matches the caller's CERN/Rucio account name, unlike
+        # the AF unixname carried in JWT claims.
+        proxy_client = _NicknameProxyClient(nickname="jdoe")
+        factory = BrokerProxyClientFactory(proxy_client, cfg=_make_cfg())
+        ctx = _make_ctx({"authorization": "Bearer tok"})
+
+        with patch("rucio_mcp.auth.broker.ProxyAuthClient") as client_cls:
+            factory.get_client(ctx)
+            _, kwargs = client_cls.call_args
+            assert kwargs["account"] == "jdoe"
+        factory.close()
+
+    def test_account_none_when_handle_has_no_nickname(self) -> None:
+        # Skew-safe fallback: an older broker or af-credentials release
+        # whose handle carries no VOMS nickname leaves account unset, same
+        # as before this feature landed.
+        proxy_client = _NicknameProxyClient(nickname=None)
+        factory = BrokerProxyClientFactory(proxy_client, cfg=_make_cfg())
+        ctx = _make_ctx({"authorization": "Bearer tok"})
+
+        with patch("rucio_mcp.auth.broker.ProxyAuthClient") as client_cls:
+            factory.get_client(ctx)
+            _, kwargs = client_cls.call_args
+            assert kwargs["account"] is None
         factory.close()
