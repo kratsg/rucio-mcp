@@ -6,11 +6,11 @@ description: |
   x509 + shared-secret (single pre-authenticated client) auth models.
 type: application
 # Chart version, kept in lockstep with appVersion by tbump.toml.
-version: 0.9.1
+version: 0.9.2
 icon: https://raw.githubusercontent.com/kratsg/rucio-mcp/main/src/rucio_mcp/data/media/images/rucio_icon.svg
 # rucio-mcp release the chart deploys by default (pinned into the rendered
 # pixi.toml). Override with rucioMcp.version in values.
-appVersion: "0.9.1"
+appVersion: "0.9.2"
 keywords:
   - rucio
   - mcp
