@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import textwrap
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -57,6 +58,24 @@ def http_app(oidc_rucio_cfg: Path):
 @pytest.fixture
 def http_client(http_app):
     return TestClient(http_app, raise_server_exceptions=True)
+
+
+class TestHttpAppSetsRucioConfigEnv:
+    def test_make_http_app_sets_rucio_config_env(self, oidc_rucio_cfg: Path) -> None:
+        """_make_http_app must set RUCIO_CONFIG so BaseClient.__init__'s unguarded
+
+        `config_get('client', 'account')` fallback finds a real config file
+        instead of raising ConfigNotFound.
+        """
+        with patch.dict("os.environ", {}, clear=True):
+            _make_http_app(
+                sites=["escape"],
+                resource_url="http://localhost:8000",
+                read_only=False,
+                host="127.0.0.1",
+                rucio_cfg_overrides={"escape": oidc_rucio_cfg},
+            )
+            assert os.environ["RUCIO_CONFIG"] == str(oidc_rucio_cfg)
 
 
 class TestOAuthMetadataEndpoints:
@@ -896,6 +915,89 @@ class TestServeBrokerValidation:
         assert kwargs["issuer"] == "http://broker.invalid"
         assert kwargs["audience"] == "rucio"
         assert mock_run.called
+
+    def test_broker_mode_sets_rucio_config_env(self, oidc_rucio_cfg: Path) -> None:
+        """Broker mode must set RUCIO_CONFIG so BaseClient.__init__'s unguarded
+
+        `config_get('client', 'account')` fallback (hit whenever the caller's
+        proxy carries no VOMS nickname) finds a real config file instead of
+        raising ConfigNotFound.
+        """
+        with (
+            patch("rucio_mcp.server._make_broker_app"),
+            patch("rucio_mcp.server.start_metrics_server"),
+            patch("rucio_mcp.server.uvicorn.run"),
+            patch.dict("os.environ", {}, clear=True),
+        ):
+            serve(
+                transport="http",
+                sites=["escape"],
+                broker_url="http://broker.invalid",
+                rucio_cfg=oidc_rucio_cfg,
+            )
+            assert os.environ["RUCIO_CONFIG"] == str(oidc_rucio_cfg)
+
+    def test_broker_mode_does_not_override_existing_rucio_config(
+        self, oidc_rucio_cfg: Path
+    ) -> None:
+        """An operator-supplied RUCIO_CONFIG (e.g. a CVMFS-hosted rucio.cfg set
+
+        via the chart's extraEnv) must win over the bundled preset path.
+        """
+        with (
+            patch("rucio_mcp.server._make_broker_app"),
+            patch("rucio_mcp.server.start_metrics_server"),
+            patch("rucio_mcp.server.uvicorn.run"),
+            patch.dict(
+                "os.environ", {"RUCIO_CONFIG": "/cvmfs/my/rucio.cfg"}, clear=True
+            ),
+        ):
+            serve(
+                transport="http",
+                sites=["escape"],
+                broker_url="http://broker.invalid",
+                rucio_cfg=oidc_rucio_cfg,
+            )
+            assert os.environ["RUCIO_CONFIG"] == "/cvmfs/my/rucio.cfg"
+
+    def test_broker_mode_sets_rucio_auth_type_to_x509_proxy(
+        self, oidc_rucio_cfg: Path
+    ) -> None:
+        """Broker mode always authenticates Rucio via x509_proxy (docstring in
+
+        auth/broker.py); RUCIO_AUTH_TYPE should reflect that by default.
+        """
+        with (
+            patch("rucio_mcp.server._make_broker_app"),
+            patch("rucio_mcp.server.start_metrics_server"),
+            patch("rucio_mcp.server.uvicorn.run"),
+            patch.dict("os.environ", {}, clear=True),
+        ):
+            serve(
+                transport="http",
+                sites=["escape"],
+                broker_url="http://broker.invalid",
+                rucio_cfg=oidc_rucio_cfg,
+            )
+            assert os.environ["RUCIO_AUTH_TYPE"] == "x509_proxy"
+
+    def test_broker_mode_does_not_override_existing_rucio_auth_type(
+        self, oidc_rucio_cfg: Path
+    ) -> None:
+        """An operator-supplied RUCIO_AUTH_TYPE must not be clobbered."""
+        with (
+            patch("rucio_mcp.server._make_broker_app"),
+            patch("rucio_mcp.server.start_metrics_server"),
+            patch("rucio_mcp.server.uvicorn.run"),
+            patch.dict("os.environ", {"RUCIO_AUTH_TYPE": "userpass"}, clear=True),
+        ):
+            serve(
+                transport="http",
+                sites=["escape"],
+                broker_url="http://broker.invalid",
+                rucio_cfg=oidc_rucio_cfg,
+            )
+            assert os.environ["RUCIO_AUTH_TYPE"] == "userpass"
 
     def test_broker_jwks_and_issuer_overrides_forwarded(
         self, oidc_rucio_cfg: Path

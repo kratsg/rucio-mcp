@@ -869,6 +869,15 @@ def _make_http_app(
                 "    Use --rucio-cfg to point at a custom config file.\n"
             )
             sys.exit(1)
+        # Each site's BearerTokenClientFactory passes rucio_host/auth_host/
+        # account explicitly, so which site's file backs RUCIO_CONFIG doesn't
+        # matter functionally; what matters is that *some* real file is set,
+        # so rucio.client.Client.__init__'s unguarded
+        # config_get('client', 'account') fallback (hit whenever a request has
+        # no X-Rucio-Account header) finds a config file instead of raising
+        # ConfigNotFound. setdefault: the first site in `sites` wins and later
+        # sites don't clobber it.
+        os.environ.setdefault("RUCIO_CONFIG", str(cfg_path))
         cfg = RucioCfg.from_path(cfg_path)
         if cfg.auth_type != "oidc":
             sys.stderr.write(
@@ -1068,7 +1077,19 @@ def serve(
             )
             sys.exit(1)
         # No credential preflight: per-user proxies arrive at runtime via the
-        # broker; the server itself holds no Rucio credential.
+        # broker; the server itself holds no Rucio credential. RUCIO_CONFIG is
+        # still set (unless an operator already supplied one, e.g. a
+        # CVMFS-hosted rucio.cfg via the chart's extraEnv) so that
+        # rucio.client.Client.__init__'s unguarded config_get('client',
+        # 'account') fallback (hit whenever a redeemed proxy carries no VOMS
+        # nickname, see BrokerProxyClientFactory) finds a real config file
+        # instead of raising ConfigNotFound. RUCIO_AUTH_TYPE is set to match:
+        # broker mode always authenticates Rucio via x509_proxy (BaseClient
+        # gets this passed explicitly per call, so it is not load-bearing for
+        # authentication itself, but keeps the env consistent with that
+        # invariant for anything else that inspects it).
+        os.environ.setdefault("RUCIO_CONFIG", str(cfg_path))
+        os.environ.setdefault("RUCIO_AUTH_TYPE", "x509_proxy")
         app = _make_broker_app(
             site_name=sites[0],
             cfg=RucioCfg.from_path(cfg_path),
