@@ -40,7 +40,7 @@ jobs:
           environments: dev helm
 
       - name: Run pre-commit
-        run: pixi run pre-commit --hook-stage manual
+        run: pixi run pre-commit --stage manual
 
       - name: Run PyLint
         run: pixi run pylint --output-format=github
