@@ -91,7 +91,7 @@ helm lint charts/rucio-mcp --set ingress.host=rucio-mcp.example.com \
 helm-template = { cmd = "helm template r charts/rucio-mcp --set ingress.host=rucio-mcp.example.com", description = "Render the chart with default (OIDC) values" }
 
 [feature.dev.dependencies]
-pre-commit = "*"
+prek = "*"
 identify = ">=1.4.20"  # ruff-check
 pylint = ">=3.2"
 tbump = ">=6.7.0"
@@ -101,10 +101,10 @@ python-build = "*"
 twine = "*"
 
 [feature.dev.tasks]
-pre-commit = { cmd = "pre-commit run --all-files", description = "Run pre-commit hooks on all files" }
+pre-commit = { cmd = "prek run --all-files", description = "Run pre-commit hooks on all files" }
 pylint = { cmd = "pylint rucio_mcp", description = "Run PyLint on rucio-mcp package" }
-pre-commit-install = { cmd = "pre-commit install", description = "Install pre-commit git hooks" }
-pre-commit-update = { cmd = "pre-commit autoupdate", description = "Update pre-commit hook versions" }
+pre-commit-install = { cmd = "prek install", description = "Install pre-commit git hooks" }
+pre-commit-update = { cmd = "prek update", description = "Update pre-commit hook versions" }
 build-clean = { cmd = "rm -rf build dist", description = "Clean build artifacts" }
 build = { cmd = "python -m build", depends-on = ["build-clean"], description = "Build SDist and wheel distributions", outputs = ["dist"] }
 build-check = { cmd = "twine check --strict ./dist/*", depends-on = ["build"], description = "Run twine to check" }
