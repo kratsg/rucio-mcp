@@ -133,3 +133,11 @@ class TestRucioCfgFromPath:
         assert cfg.auth_type == "oidc"
         assert cfg.rucio_host == "https://dune-rucio.fnal.gov"
         assert cfg.oidc_audience == "https://wlcg.cern.ch/jwt/v1/any"
+
+    def test_load_bundled_belleii_cfg(self) -> None:
+        """Bundled belleii.cfg uses the BNL SDCC Rucio instance with audience=rucio."""
+        p = Path(str(_pkg_files("rucio_mcp.data").joinpath("belleii.cfg")))
+        cfg = RucioCfg.from_path(p)
+        assert cfg.auth_type == "oidc"
+        assert cfg.rucio_host == "https://blrucio.sdcc.bnl.gov:443"
+        assert cfg.oidc_audience == "rucio"

@@ -15,8 +15,9 @@ rucio-mcp serve --site escape       # escape is the default
 ```
 
 Available presets: `escape` (OIDC, default), `atlas` (OIDC), `cms` (OIDC),
-`dune` (OIDC). All presets use OIDC by default; pass `--auth-type x509` to
-switch to x509 proxy auth at runtime without a separate preset.
+`dune` (OIDC), `belleii` (OIDC). All presets use OIDC by default; pass
+`--auth-type x509` to switch to x509 proxy auth at runtime without a separate
+preset.
 
 !!! tip "Site-managed Rucio clients (UChicago AF, CERN lxplus, CVMFS)" If your
 site already provides a Rucio client installation, point `--rucio-cfg` at the
@@ -110,12 +111,12 @@ read by both the `rucio-mcp` preflight check and the underlying Rucio client.
 
 === "OIDC"
 
-    OpenID Connect authentication. Use the `escape`, `atlas`, `cms`, or `dune`
-    presets, or point at a custom `rucio.cfg` with `auth_type = oidc`:
+    OpenID Connect authentication. Use the `escape`, `atlas`, `cms`, `dune`, or
+    `belleii` presets, or point at a custom `rucio.cfg` with `auth_type = oidc`:
 
     ```bash
     export RUCIO_ACCOUNT=<your_account>
-    rucio-mcp serve --site escape    # or --site atlas, --site cms, --site dune
+    rucio-mcp serve --site escape    # or --site atlas, --site cms, --site dune, --site belleii
     ```
 
     For OIDC with a custom cfg and an explicit auth-type override:
@@ -157,6 +158,14 @@ step is needed. Use `--site <name>` to select one.
 
     ```ini
     --8<-- "src/rucio_mcp/data/dune.cfg"
+    ```
+
+    > OIDC auth. Supports both stdio and HTTP transport modes.
+
+=== "belleii"
+
+    ```ini
+    --8<-- "src/rucio_mcp/data/belleii.cfg"
     ```
 
     > OIDC auth. Supports both stdio and HTTP transport modes.
