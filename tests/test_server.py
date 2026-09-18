@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from mcp.server.mcpserver import MCPServer
 from prometheus_client import REGISTRY
+from starlette.testclient import TestClient
 
 from rucio_mcp.auth.rucio_cfg import RucioCfg
 from rucio_mcp.presets import PRESETS
@@ -490,6 +491,155 @@ class TestInstrumentedFastMCP:
             or 0.0
         )
         assert after_count - before_count == 1.0
+
+
+_JSON_RPC_HEADERS = {
+    "Content-Type": "application/json",
+    "Accept": "application/json, text/event-stream",
+}
+
+
+def _initialize_session(client: TestClient) -> dict[str, str]:
+    """Do the MCP initialize handshake over *client* and return headers carrying the session id."""
+    init_resp = client.post(
+        "/mcp",
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "test", "version": "0"},
+            },
+        },
+        headers=_JSON_RPC_HEADERS,
+    )
+    session_id = init_resp.headers["mcp-session-id"]
+    headers = {**_JSON_RPC_HEADERS, "mcp-session-id": session_id}
+    client.post(
+        "/mcp",
+        json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+        headers=headers,
+    )
+    return headers
+
+
+class TestStdioAppOverTheWire:
+    """Wire-level assertions that bypass every unit test\'s tool.fn shortcut.
+
+    Every existing tool test calls the raw callable directly, which never
+    goes through the mcp SDK\'s serialization -- none of them would notice
+    a missing `annotations`/`outputSchema` on the wire. These do, via a
+    real JSON-RPC round trip through the built ASGI app (see A.4/A.1 of
+    the interop plan). rucio_mcp.server.Client is patched so the stdio
+    lifespan never dials a real Rucio server.
+    """
+
+    @pytest.fixture
+    def app(self):
+        with patch("rucio_mcp.server.Client") as mock_client_cls:
+            mock_client_cls.return_value.ping.return_value = {"version": "35.6.0"}
+            mcp = _make_stdio_mcp()
+            yield mcp.streamable_http_app(
+                streamable_http_path="/mcp", json_response=True
+            )
+
+    @pytest.fixture
+    def client(self, app):
+        with TestClient(app, base_url="http://127.0.0.1:8000") as test_client:
+            yield test_client
+
+    def test_tools_list_carries_annotations_and_output_schema(
+        self, client: TestClient
+    ) -> None:
+        headers = _initialize_session(client)
+        resp = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        tools = {tool["name"]: tool for tool in resp.json()["result"]["tools"]}
+        assert len(tools) == 44
+        for tool in tools.values():
+            assert tool["annotations"]["readOnlyHint"] is not None
+            assert tool["outputSchema"] is not None
+        assert tools["rucio_ping"]["annotations"]["readOnlyHint"] is True
+        assert tools["rucio_ping"]["annotations"]["openWorldHint"] is True
+        assert tools["rucio_add_rule"]["annotations"]["readOnlyHint"] is False
+        assert tools["rucio_delete_rule"]["annotations"]["destructiveHint"] is True
+
+    def test_tools_call_carries_text_and_structured_content(
+        self, client: TestClient
+    ) -> None:
+        headers = _initialize_session(client)
+        resp = client.post(
+            "/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": "rucio_ping", "arguments": {}},
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        result = resp.json()["result"]
+        assert result["isError"] is False
+        assert result["content"][0]["type"] == "text"
+        assert "35.6.0" in result["content"][0]["text"]
+        structured = result["structuredContent"]
+        assert structured["version"] == "35.6.0"
+
+
+class TestEveryToolDeclaresAnnotationsAndOutputSchema:
+    """Drift guard: every rucio_* tool must publish annotations and an outputSchema.
+
+    This is the one test that would catch a future tool being added (or an
+    existing one being refactored) without following the
+    Annotated[CallToolResult, Model] + ToolAnnotations pattern all 45 tools
+    use today -- see CLAUDE.md's "Tool registration pattern" section.
+    """
+
+    def test_every_tool_declares_annotations_and_output_schema(self) -> None:
+        mcp = _make_stdio_mcp()
+        for tool in mcp._tool_manager.list_tools():
+            assert tool.annotations is not None, tool.name
+            assert tool.annotations.read_only_hint is not None, tool.name
+            assert tool.output_schema is not None, tool.name
+
+    def test_registers_forty_four_tools(self) -> None:
+        """44 tools in stdio mode; rucio_token_info (HTTP-transport-only,
+        see TestRucioTokenInfo in test_tools_ping.py) brings the fleet-wide
+        total documented in the interop plan to 45."""
+        mcp = _make_stdio_mcp()
+        names = {tool.name for tool in mcp._tool_manager.list_tools()}
+        assert len(names) == 44
+
+    def test_mutating_and_destructive_tools_are_not_read_only(self) -> None:
+        """Cross-check against check_write_allowed's 7 call sites (tools/rules.py):
+        the mutating/destructive tool list must never drift from the
+        annotations declared here."""
+        mcp = _make_stdio_mcp()
+        tools = {tool.name: tool for tool in mcp._tool_manager.list_tools()}
+        mutating = {
+            "rucio_add_rule",
+            "rucio_update_rule",
+            "rucio_reduce_rule",
+            "rucio_move_rule",
+            "rucio_approve_rule",
+            "rucio_deny_rule",
+        }
+        for name in mutating:
+            annotations = tools[name].annotations
+            assert annotations is not None, name
+            assert annotations.read_only_hint is False, name
+            assert annotations.destructive_hint is not True, name
+        delete_annotations = tools["rucio_delete_rule"].annotations
+        assert delete_annotations is not None
+        assert delete_annotations.read_only_hint is False
+        assert delete_annotations.destructive_hint is True
 
 
 class TestResolveCfgPath:

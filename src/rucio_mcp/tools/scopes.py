@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import fnmatch
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server.mcpserver import Context, MCPServer  # noqa: TC002
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from pydantic import BaseModel
 
 from rucio_mcp.tools._helpers import (
     build_hints,
@@ -15,17 +17,42 @@ from rucio_mcp.tools._helpers import (
 )
 
 
+class RucioListScopesResult(BaseModel):
+    """Structured result of ``rucio_list_scopes``."""
+
+    pattern: str
+    scopes: list[str]
+    offset: int
+    limit: int
+    truncated: bool
+
+
+class RucioListScopesForAccountResult(BaseModel):
+    """Structured result of ``rucio_list_scopes_for_account``."""
+
+    account: str
+    pattern: str
+    scopes: list[str]
+    offset: int
+    limit: int
+    truncated: bool
+
+
 def register(mcp: MCPServer) -> None:
     """Register scope tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List scopes", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_list_scopes(
         pattern: str = "",
         limit: int = 100,
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListScopesResult]:
         """List all available scopes in the Rucio catalog.
 
         Scopes categorize datasets by campaign. Common ATLAS scopes include
@@ -50,16 +77,46 @@ def register(mcp: MCPServer) -> None:
             scopes = [s for s in scopes if fnmatch.fnmatch(s, pattern)]
 
         if not scopes:
-            return "No scopes found matching the pattern."
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text", text="No scopes found matching the pattern."
+                    )
+                ],
+                structured_content=RucioListScopesResult(
+                    pattern=pattern,
+                    scopes=[],
+                    offset=offset,
+                    limit=limit,
+                    truncated=False,
+                ).model_dump(mode="json"),
+            )
 
         sorted_scopes = sorted(scopes)
         page, footer = paginate_iter(iter(sorted_scopes), limit=limit, offset=offset)
         hints = build_hints(
             ["Use `rucio_list_dids <scope>:*` to search for DIDs within a scope"]
         )
-        return "\n".join(f"- {s}" for s in page) + footer + hints
+        text = "\n".join(f"- {s}" for s in page) + footer + hints
+        payload = RucioListScopesResult(
+            pattern=pattern,
+            scopes=page,
+            offset=offset,
+            limit=limit,
+            truncated=bool(footer),
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List scopes for an account",
+            read_only_hint=True,
+            open_world_hint=True,
+        )
+    )
     async def rucio_list_scopes_for_account(
         account: str = "",
         pattern: str = "",
@@ -67,7 +124,7 @@ def register(mcp: MCPServer) -> None:
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListScopesForAccountResult]:
         """List all scopes owned by a Rucio account.
 
         Returns the scopes that the given account is allowed to write DIDs into.
@@ -91,11 +148,33 @@ def register(mcp: MCPServer) -> None:
             scopes = [s for s in scopes if fnmatch.fnmatch(s, pattern)]
 
         if not scopes:
-            return "No scopes found."
+            return CallToolResult(
+                content=[TextContent(type="text", text="No scopes found.")],
+                structured_content=RucioListScopesForAccountResult(
+                    account=effective_account,
+                    pattern=pattern,
+                    scopes=[],
+                    offset=offset,
+                    limit=limit,
+                    truncated=False,
+                ).model_dump(mode="json"),
+            )
 
         sorted_scopes = sorted(scopes)
         page, footer = paginate_iter(iter(sorted_scopes), limit=limit, offset=offset)
         hints = build_hints(
             ["Use `rucio_list_dids <scope>:*` to search for DIDs within a scope"]
         )
-        return "\n".join(f"- {s}" for s in page) + footer + hints
+        text = "\n".join(f"- {s}" for s in page) + footer + hints
+        payload = RucioListScopesForAccountResult(
+            account=effective_account,
+            pattern=pattern,
+            scopes=page,
+            offset=offset,
+            limit=limit,
+            truncated=bool(footer),
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )

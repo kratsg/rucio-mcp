@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
+from mcp.types import CallToolResult, TextContent
 from prometheus_client import REGISTRY
 
 if TYPE_CHECKING:
@@ -14,11 +15,20 @@ if TYPE_CHECKING:
 from rucio_mcp.auth.factory import EnvBasedClientFactory
 from rucio_mcp.metrics import current_tool_labels
 from rucio_mcp.tools._helpers import (
+    check_write_allowed,
     classify_error,
+    error_result,
     format_dict,
     format_list,
     get_rucio_client,
 )
+
+
+def _error_text(result: CallToolResult) -> str:
+    """Extract the sole text block's content from an is_error CallToolResult."""
+    block = result.content[0]
+    assert isinstance(block, TextContent)
+    return block.text
 
 
 class TestFormatDict:
@@ -109,7 +119,9 @@ def tool_labels_ctx():
     current_tool_labels.reset(tok)
 
 
-def _counter_delta(site: str, tool: str, category: str, fn: Callable[[], str]) -> float:
+def _counter_delta(
+    site: str, tool: str, category: str, fn: Callable[[], CallToolResult]
+) -> float:
     """Return the increment to TOOL_ERRORS after calling fn()."""
     before = (
         REGISTRY.get_sample_value(
@@ -153,8 +165,35 @@ class _AccessDenied(Exception):
     pass
 
 
+class TestErrorResult:
+    def test_returns_an_is_error_call_tool_result(self) -> None:
+        result = error_result("Error: something bad")
+        assert isinstance(result, CallToolResult)
+        assert result.is_error is True
+        assert result.structured_content is None
+        assert _error_text(result) == "Error: something bad"
+
+
+class TestCheckWriteAllowed:
+    def test_returns_none_when_writes_allowed(self) -> None:
+        assert check_write_allowed({"read_only": False}) is None
+
+    def test_returns_is_error_result_when_read_only(self) -> None:
+        result = check_write_allowed({"read_only": True})
+        assert result is not None
+        assert isinstance(result, CallToolResult)
+        assert result.is_error is True
+        assert "read-only mode" in _error_text(result)
+
+
 @pytest.mark.usefixtures("tool_labels_ctx")
 class TestClassifyErrorCounter:
+    def test_returns_an_is_error_call_tool_result(self) -> None:
+        result = classify_error(ValueError("bad"))
+        assert isinstance(result, CallToolResult)
+        assert result.is_error is True
+        assert result.structured_content is None
+
     def test_did_not_found_category(self) -> None:
         exc = _DataIdentifierNotFound("no such DID")
         delta = _counter_delta(

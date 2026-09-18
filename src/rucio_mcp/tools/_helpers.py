@@ -5,6 +5,7 @@ from __future__ import annotations
 import itertools
 from typing import Any
 
+from mcp.types import CallToolResult, TextContent
 from rucio.common.exception import RucioException
 from rucio.common.utils import extract_scope
 
@@ -113,17 +114,34 @@ def build_hints(hints: list[str]) -> str:
     return f"\n\n**Next steps:**\n{lines}"
 
 
-def classify_error(exc: Exception) -> str:
-    """Return an actionable error message with recovery guidance.
+def error_result(message: str) -> CallToolResult:
+    """Wrap a pre-formatted message as an ``is_error`` ``CallToolResult``.
+
+    For error paths that build their own message directly (e.g. a
+    ``parse_did`` ``ValueError``, or a handful of ad hoc validation
+    messages) rather than classifying a caught exception -- see
+    :func:`classify_error` for that case. No ``structured_content`` is
+    set: an error result carries no structured payload (mcp SDK's
+    ``convert_result`` only validates ``structured_content`` against the
+    tool's output model when ``is_error`` is false).
+    """
+    return CallToolResult(
+        content=[TextContent(type="text", text=message)], is_error=True
+    )
+
+
+def classify_error(exc: Exception) -> CallToolResult:
+    """Return an actionable ``is_error`` result with recovery guidance.
 
     Pattern-matches on exception type name and message text to provide
-    specific recovery steps rather than a bare traceback string.
+    specific recovery steps rather than a bare traceback string. No
+    ``structured_content`` is set -- see :func:`error_result`.
 
     Args:
         exc: The caught exception.
 
     Returns:
-        A formatted error string with recovery guidance.
+        An ``is_error`` ``CallToolResult`` with recovery guidance.
     """
     exc_type = type(exc).__name__
     exc_msg = str(exc)
@@ -205,11 +223,11 @@ def classify_error(exc: Exception) -> str:
     else:
         site, tool = current_tool_labels.get()
         TOOL_ERRORS.labels(site=site, tool=tool, category="other").inc()
-        return f"Error: {exc_msg}"
+        return error_result(f"Error: {exc_msg}")
 
     site, tool = current_tool_labels.get()
     TOOL_ERRORS.labels(site=site, tool=tool, category=category).inc()
-    return f"Error: {exc_msg}\n\n**Recovery:** {guidance}"
+    return error_result(f"Error: {exc_msg}\n\n**Recovery:** {guidance}")
 
 
 _READ_ONLY_ERROR = (
@@ -218,10 +236,10 @@ _READ_ONLY_ERROR = (
 )
 
 
-def check_write_allowed(lifespan_context: dict[str, Any]) -> str | None:
-    """Return an error string if write operations are disabled, else None."""
+def check_write_allowed(lifespan_context: dict[str, Any]) -> CallToolResult | None:
+    """Return an ``is_error`` result if write operations are disabled, else None."""
     if lifespan_context.get("read_only"):
-        return _READ_ONLY_ERROR
+        return error_result(_READ_ONLY_ERROR)
     return None
 
 

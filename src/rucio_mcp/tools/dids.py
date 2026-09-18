@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server.mcpserver import Context, MCPServer  # noqa: TC002
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from pydantic import BaseModel
 
 from rucio_mcp.tools._helpers import (
     build_hints,
     classify_error,
+    error_result,
     format_dict,
     format_list,
     get_rucio_client,
@@ -32,10 +35,79 @@ _STAT_KEYS = [
 _CONTENT_KEYS = ["scope", "name", "type", "bytes", "length"]
 
 
+class RucioListDidsResult(BaseModel):
+    """Structured result of ``rucio_list_dids``."""
+
+    did_pattern: str
+    did_type: str
+    dids: list[str]
+    offset: int
+    limit: int
+    truncated: bool
+
+
+class RucioGetDidResult(BaseModel):
+    """Structured result of ``rucio_get_did``."""
+
+    scope: str | None = None
+    name: str | None = None
+    type: str | None = None
+    bytes: int | None = None
+    length: int | None = None
+    account: str | None = None
+    open: bool | None = None
+    monotonic: bool | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class RucioListContentResult(BaseModel):
+    """Structured result of ``rucio_list_content``."""
+
+    did: str
+    content: list[dict[str, Any]]
+    offset: int
+    limit: int
+    truncated: bool
+
+
+class RucioListFilesResult(BaseModel):
+    """Structured result of ``rucio_list_files``."""
+
+    did: str
+    long: bool
+    files: list[dict[str, Any]]
+    offset: int
+    limit: int
+    truncated: bool
+
+
+class RucioGetMetadataResult(BaseModel):
+    """Structured result of ``rucio_get_metadata``."""
+
+    did: str
+    plugin: str
+    metadata: dict[str, Any]
+
+
+class RucioListParentDidsResult(BaseModel):
+    """Structured result of ``rucio_list_parent_dids``."""
+
+    did: str
+    parents: list[dict[str, Any]]
+    offset: int
+    limit: int
+    truncated: bool
+
+
 def register(mcp: MCPServer) -> None:
     """Register DID tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Search DIDs", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_list_dids(
         did_pattern: str,
         did_type: str = "collection",
@@ -44,7 +116,7 @@ def register(mcp: MCPServer) -> None:
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListDidsResult]:
         """Search for ATLAS datasets and containers matching a wildcard pattern.
 
         Returns a list of matching DIDs in ``scope:name`` format. For physics
@@ -67,7 +139,7 @@ def register(mcp: MCPServer) -> None:
         try:
             scope, name = parse_did(did_pattern)
         except ValueError as exc:
-            return str(exc)
+            return error_result(str(exc))
 
         client = get_rucio_client(ctx)
         try:
@@ -82,12 +154,25 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not results:
-            return "No DIDs found matching the pattern."
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text="No DIDs found matching the pattern.")
+                ],
+                structured_content=RucioListDidsResult(
+                    did_pattern=did_pattern,
+                    did_type=did_type,
+                    dids=[],
+                    offset=offset,
+                    limit=limit,
+                    truncated=False,
+                ).model_dump(mode="json"),
+            )
 
-        lines = "\n".join(
-            f"- `{scope}:{r['name']}`" if isinstance(r, dict) else f"- `{scope}:{r}`"
+        did_names = [
+            f"{scope}:{r['name']}" if isinstance(r, dict) else f"{scope}:{r}"
             for r in results
-        )
+        ]
+        lines = "\n".join(f"- `{d}`" for d in did_names)
         hints = build_hints(
             [
                 "Use `rucio_get_did <scope:name>` to inspect a specific DID",
@@ -95,14 +180,29 @@ def register(mcp: MCPServer) -> None:
                 "Use `rucio_list_did_rules <scope:name>` to see replication rules",
             ]
         )
-        return lines + footer + hints
+        payload = RucioListDidsResult(
+            did_pattern=did_pattern,
+            did_type=did_type,
+            dids=did_names,
+            offset=offset,
+            limit=limit,
+            truncated=bool(footer),
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=lines + footer + hints)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Get DID details", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_get_did(
         did: str,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioGetDidResult]:
         """Return attributes and status for a DID.
 
         Shows type, bytes, length (number of files), account, open/closed
@@ -114,7 +214,7 @@ def register(mcp: MCPServer) -> None:
         try:
             scope, name = parse_did(did)
         except ValueError as exc:
-            return str(exc)
+            return error_result(str(exc))
 
         client = get_rucio_client(ctx)
         try:
@@ -146,16 +246,29 @@ def register(mcp: MCPServer) -> None:
                 ]
             )
 
-        return format_dict(result, include_keys=_STAT_KEYS) + hints
+        payload = RucioGetDidResult(**{k: result.get(k) for k in _STAT_KEYS})
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text",
+                    text=format_dict(result, include_keys=_STAT_KEYS) + hints,
+                )
+            ],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List DID contents", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_list_content(
         did: str,
         limit: int = 50,
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListContentResult]:
         """List the immediate contents of a container or dataset.
 
         For a container, returns its child datasets. For a dataset, returns
@@ -169,7 +282,7 @@ def register(mcp: MCPServer) -> None:
         try:
             scope, name = parse_did(did)
         except ValueError as exc:
-            return str(exc)
+            return error_result(str(exc))
 
         client = get_rucio_client(ctx)
         try:
@@ -179,14 +292,30 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not page:
-            return "No contents found."
+            return CallToolResult(
+                content=[TextContent(type="text", text="No contents found.")],
+                structured_content=RucioListContentResult(
+                    did=did, content=[], offset=offset, limit=limit, truncated=False
+                ).model_dump(mode="json"),
+            )
 
         hints = build_hints(
             ["Use `rucio_get_did <scope:name>` to inspect any child DID"]
         )
-        return format_list(page, include_keys=_CONTENT_KEYS) + footer + hints
+        text = format_list(page, include_keys=_CONTENT_KEYS) + footer + hints
+        payload = RucioListContentResult(
+            did=did, content=page, offset=offset, limit=limit, truncated=bool(footer)
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List files in a DID", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_list_files(
         did: str,
         long: bool = False,
@@ -194,7 +323,7 @@ def register(mcp: MCPServer) -> None:
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListFilesResult]:
         """List all files contained within a DID.
 
         Args:
@@ -206,7 +335,7 @@ def register(mcp: MCPServer) -> None:
         try:
             scope, name = parse_did(did)
         except ValueError as exc:
-            return str(exc)
+            return error_result(str(exc))
 
         client = get_rucio_client(ctx)
         try:
@@ -216,28 +345,55 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not page:
-            return "No files found."
+            return CallToolResult(
+                content=[TextContent(type="text", text="No files found.")],
+                structured_content=RucioListFilesResult(
+                    did=did,
+                    long=long,
+                    files=[],
+                    offset=offset,
+                    limit=limit,
+                    truncated=False,
+                ).model_dump(mode="json"),
+            )
 
         hints = build_hints(
             [f"Use `rucio_list_replicas {did}` to find where files are stored"]
         )
         if long:
-            return format_list(page) + footer + hints
-        return (
-            "\n".join(
-                f"- `{r['scope']}:{r['name']}`" for r in page if isinstance(r, dict)
+            text = format_list(page) + footer + hints
+        else:
+            text = (
+                "\n".join(
+                    f"- `{r['scope']}:{r['name']}`" for r in page if isinstance(r, dict)
+                )
+                + footer
+                + hints
             )
-            + footer
-            + hints
+        payload = RucioListFilesResult(
+            did=did,
+            long=long,
+            files=page,
+            offset=offset,
+            limit=limit,
+            truncated=bool(footer),
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
         )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Get DID metadata", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_get_metadata(
         did: str,
         plugin: str = "DID_COLUMN",
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioGetMetadataResult]:
         """Retrieve metadata key-value pairs for a DID.
 
         Args:
@@ -248,7 +404,7 @@ def register(mcp: MCPServer) -> None:
         try:
             scope, name = parse_did(did)
         except ValueError as exc:
-            return str(exc)
+            return error_result(str(exc))
 
         client = get_rucio_client(ctx)
         try:
@@ -259,16 +415,24 @@ def register(mcp: MCPServer) -> None:
         hints = build_hints(
             [f"Use `rucio_get_did {did}` for structure and size information"]
         )
-        return format_dict(result) + hints
+        payload = RucioGetMetadataResult(did=did, plugin=plugin, metadata=result)
+        return CallToolResult(
+            content=[TextContent(type="text", text=format_dict(result) + hints)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List parent DIDs", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_list_parent_dids(
         did: str,
         limit: int = 50,
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListParentDidsResult]:
         """List all parent DIDs (containers) that contain the given DID.
 
         Useful for navigating the DID hierarchy upward from a file or dataset.
@@ -281,7 +445,7 @@ def register(mcp: MCPServer) -> None:
         try:
             scope, name = parse_did(did)
         except ValueError as exc:
-            return str(exc)
+            return error_result(str(exc))
 
         client = get_rucio_client(ctx)
         try:
@@ -291,9 +455,21 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not page:
-            return "No parent DIDs found."
+            return CallToolResult(
+                content=[TextContent(type="text", text="No parent DIDs found.")],
+                structured_content=RucioListParentDidsResult(
+                    did=did, parents=[], offset=offset, limit=limit, truncated=False
+                ).model_dump(mode="json"),
+            )
 
         hints = build_hints(
             ["Use `rucio_get_did <scope:name>` to inspect any parent DID"]
         )
-        return format_list(page) + footer + hints
+        text = format_list(page) + footer + hints
+        payload = RucioListParentDidsResult(
+            did=did, parents=page, offset=offset, limit=limit, truncated=bool(footer)
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )

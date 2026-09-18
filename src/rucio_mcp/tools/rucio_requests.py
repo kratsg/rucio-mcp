@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server.mcpserver import Context, MCPServer  # noqa: TC002
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from pydantic import BaseModel
 
 from rucio_mcp.tools._helpers import (
     build_hints,
     classify_error,
+    error_result,
     format_list,
     get_rucio_client,
     paginate_iter,
@@ -55,10 +58,36 @@ def _parse_states(request_states: str) -> str:
     return ",".join(codes)
 
 
+class RucioListRequestsResult(BaseModel):
+    """Structured result of ``rucio_list_requests``."""
+
+    src_rse: str
+    dst_rse: str
+    requests: list[dict[str, Any]]
+    offset: int
+    limit: int
+    truncated: bool
+
+
+class RucioListRequestsHistoryResult(BaseModel):
+    """Structured result of ``rucio_list_requests_history``."""
+
+    src_rse: str
+    dst_rse: str
+    requests: list[dict[str, Any]]
+    offset: int
+    limit: int
+    truncated: bool
+
+
 def register(mcp: MCPServer) -> None:
     """Register transfer request tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List transfer requests", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_list_requests(
         src_rse: str,
         dst_rse: str,
@@ -67,7 +96,7 @@ def register(mcp: MCPServer) -> None:
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListRequestsResult]:
         """List current transfer requests between two RSEs.
 
         Returns in-flight transfer requests filtered by source RSE, destination
@@ -85,7 +114,7 @@ def register(mcp: MCPServer) -> None:
         try:
             states = _parse_states(request_states)
         except ValueError as exc:
-            return str(exc)
+            return error_result(str(exc))
         try:
             it = client.list_requests(src_rse, dst_rse, states)
             results, footer = paginate_iter(it, limit=limit, offset=offset)
@@ -93,16 +122,44 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not results:
-            return "No requests found."
+            return CallToolResult(
+                content=[TextContent(type="text", text="No requests found.")],
+                structured_content=RucioListRequestsResult(
+                    src_rse=src_rse,
+                    dst_rse=dst_rse,
+                    requests=[],
+                    offset=offset,
+                    limit=limit,
+                    truncated=False,
+                ).model_dump(mode="json"),
+            )
 
         hints = build_hints(
             [
                 f"Use `rucio_list_requests_history {src_rse} {dst_rse} DONE` to see completed transfers"
             ]
         )
-        return format_list(results) + footer + hints
+        text = format_list(results) + footer + hints
+        payload = RucioListRequestsResult(
+            src_rse=src_rse,
+            dst_rse=dst_rse,
+            requests=results,
+            offset=offset,
+            limit=limit,
+            truncated=bool(footer),
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List historical transfer requests",
+            read_only_hint=True,
+            open_world_hint=True,
+        )
+    )
     async def rucio_list_requests_history(
         src_rse: str,
         dst_rse: str,
@@ -111,7 +168,7 @@ def register(mcp: MCPServer) -> None:
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListRequestsHistoryResult]:
         """List historical transfer requests between two RSEs.
 
         Returns past transfer requests. The rucio server handles offset/limit
@@ -129,7 +186,7 @@ def register(mcp: MCPServer) -> None:
         try:
             states = _parse_states(request_states)
         except ValueError as exc:
-            return str(exc)
+            return error_result(str(exc))
         try:
             it = client.list_requests_history(
                 src_rse, dst_rse, states, offset=offset, limit=limit
@@ -139,7 +196,17 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not results:
-            return "No request history found."
+            return CallToolResult(
+                content=[TextContent(type="text", text="No request history found.")],
+                structured_content=RucioListRequestsHistoryResult(
+                    src_rse=src_rse,
+                    dst_rse=dst_rse,
+                    requests=[],
+                    offset=offset,
+                    limit=limit,
+                    truncated=False,
+                ).model_dump(mode="json"),
+            )
 
         # Build a pagination footer if we received a full page (may be more)
         footer = ""
@@ -154,4 +221,16 @@ def register(mcp: MCPServer) -> None:
                 f"Use `rucio_list_requests {src_rse} {dst_rse} SUBMITTED` to see current transfers"
             ]
         )
-        return format_list(results) + footer + hints
+        text = format_list(results) + footer + hints
+        payload = RucioListRequestsHistoryResult(
+            src_rse=src_rse,
+            dst_rse=dst_rse,
+            requests=results,
+            offset=offset,
+            limit=limit,
+            truncated=bool(footer),
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
