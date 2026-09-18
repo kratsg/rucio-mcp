@@ -81,7 +81,9 @@ def register(mcp: MCPServer, *, transport: str = "stdio") -> None:
 
     @mcp.tool(
         annotations=ToolAnnotations(
-            title="Show authenticated account", read_only_hint=True, open_world_hint=True
+            title="Show authenticated account",
+            read_only_hint=True,
+            open_world_hint=True,
         )
     )
     async def rucio_whoami(
@@ -120,7 +122,9 @@ def register(mcp: MCPServer, *, transport: str = "stdio") -> None:
 
         @mcp.tool(
             annotations=ToolAnnotations(
-                title="Show session token info", read_only_hint=True, open_world_hint=True
+                title="Show session token info",
+                read_only_hint=True,
+                open_world_hint=True,
             )
         )
         async def rucio_token_info(
@@ -178,7 +182,9 @@ def register(mcp: MCPServer, *, transport: str = "stdio") -> None:
                 if secs > 0:
                     mins, s = divmod(secs, 60)
                     expired = False
-                    lines.append(f"- **expires_at:** {expires_at} (in {mins}m {s:02d}s)")
+                    lines.append(
+                        f"- **expires_at:** {expires_at} (in {mins}m {s:02d}s)"
+                    )
                 else:
                     expired = True
                     lines.append(f"- **expires_at:** {expires_at} **(EXPIRED)**")

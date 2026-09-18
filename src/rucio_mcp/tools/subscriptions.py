@@ -158,10 +158,16 @@ def register(mcp: MCPServer) -> None:
         if not results:
             return CallToolResult(
                 content=[
-                    TextContent(type="text", text="No rules found for this subscription.")
+                    TextContent(
+                        type="text", text="No rules found for this subscription."
+                    )
                 ],
                 structured_content=RucioListSubscriptionRulesResult(
-                    account=account, name=name, rules=[], offset=offset, limit=limit,
+                    account=account,
+                    name=name,
+                    rules=[],
+                    offset=offset,
+                    limit=limit,
                     truncated=False,
                 ).model_dump(mode="json"),
             )

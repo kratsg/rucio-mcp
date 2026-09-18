@@ -31,14 +31,19 @@ def registered_tools(
 
 
 class TestRequestToolsRegistration:
-    def test_declares_read_only_annotations(self, request_tools: dict[str, Any]) -> None:
+    def test_declares_read_only_annotations(
+        self, request_tools: dict[str, Any]
+    ) -> None:
         for tool in request_tools.values():
             assert tool.annotations is not None, tool.name
             assert tool.annotations.read_only_hint is True, tool.name
             assert tool.annotations.open_world_hint is True, tool.name
 
     def test_publishes_output_schemas(self, request_tools: dict[str, Any]) -> None:
-        assert "requests" in request_tools["rucio_list_requests"].output_schema["properties"]
+        assert (
+            "requests"
+            in request_tools["rucio_list_requests"].output_schema["properties"]
+        )
         assert (
             "requests"
             in request_tools["rucio_list_requests_history"].output_schema["properties"]

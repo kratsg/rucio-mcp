@@ -22,12 +22,16 @@ def proxy_tool() -> Any:
     mcp = MCPServer("test")
     register(mcp)
     return next(
-        tool for tool in mcp._tool_manager.list_tools() if tool.name == "rucio_voms_proxy_info"
+        tool
+        for tool in mcp._tool_manager.list_tools()
+        if tool.name == "rucio_voms_proxy_info"
     )
 
 
 @pytest.fixture
-def registered_tools(proxy_tool: Any) -> dict[str, Callable[..., Awaitable[CallToolResult]]]:
+def registered_tools(
+    proxy_tool: Any,
+) -> dict[str, Callable[..., Awaitable[CallToolResult]]]:
     return {proxy_tool.name: proxy_tool.fn}
 
 

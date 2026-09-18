@@ -79,10 +79,16 @@ def register(mcp: MCPServer) -> None:
         if not scopes:
             return CallToolResult(
                 content=[
-                    TextContent(type="text", text="No scopes found matching the pattern.")
+                    TextContent(
+                        type="text", text="No scopes found matching the pattern."
+                    )
                 ],
                 structured_content=RucioListScopesResult(
-                    pattern=pattern, scopes=[], offset=offset, limit=limit, truncated=False
+                    pattern=pattern,
+                    scopes=[],
+                    offset=offset,
+                    limit=limit,
+                    truncated=False,
                 ).model_dump(mode="json"),
             )
 
@@ -93,7 +99,11 @@ def register(mcp: MCPServer) -> None:
         )
         text = "\n".join(f"- {s}" for s in page) + footer + hints
         payload = RucioListScopesResult(
-            pattern=pattern, scopes=page, offset=offset, limit=limit, truncated=bool(footer)
+            pattern=pattern,
+            scopes=page,
+            offset=offset,
+            limit=limit,
+            truncated=bool(footer),
         )
         return CallToolResult(
             content=[TextContent(type="text", text=text)],
@@ -102,7 +112,9 @@ def register(mcp: MCPServer) -> None:
 
     @mcp.tool(
         annotations=ToolAnnotations(
-            title="List scopes for an account", read_only_hint=True, open_world_hint=True
+            title="List scopes for an account",
+            read_only_hint=True,
+            open_world_hint=True,
         )
     )
     async def rucio_list_scopes_for_account(

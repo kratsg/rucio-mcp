@@ -155,7 +155,9 @@ def register(mcp: MCPServer) -> None:
 
     @mcp.tool(
         annotations=ToolAnnotations(
-            title="List historical transfer requests", read_only_hint=True, open_world_hint=True
+            title="List historical transfer requests",
+            read_only_hint=True,
+            open_world_hint=True,
         )
     )
     async def rucio_list_requests_history(

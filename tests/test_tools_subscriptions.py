@@ -42,11 +42,15 @@ class TestSubscriptionToolsRegistration:
     def test_publishes_output_schemas(self, subscription_tools: dict[str, Any]) -> None:
         assert (
             "subscriptions"
-            in subscription_tools["rucio_list_subscriptions"].output_schema["properties"]
+            in subscription_tools["rucio_list_subscriptions"].output_schema[
+                "properties"
+            ]
         )
         assert (
             "rules"
-            in subscription_tools["rucio_list_subscription_rules"].output_schema["properties"]
+            in subscription_tools["rucio_list_subscription_rules"].output_schema[
+                "properties"
+            ]
         )
 
 

@@ -125,7 +125,9 @@ def error_result(message: str) -> CallToolResult:
     ``convert_result`` only validates ``structured_content`` against the
     tool's output model when ``is_error`` is false).
     """
-    return CallToolResult(content=[TextContent(type="text", text=message)], is_error=True)
+    return CallToolResult(
+        content=[TextContent(type="text", text=message)], is_error=True
+    )
 
 
 def classify_error(exc: Exception) -> CallToolResult:

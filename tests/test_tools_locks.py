@@ -38,9 +38,12 @@ class TestLockToolsRegistration:
             assert tool.annotations.open_world_hint is True, tool.name
 
     def test_publishes_output_schemas(self, lock_tools: dict[str, Any]) -> None:
-        assert "locks" in lock_tools["rucio_get_dataset_locks"].output_schema["properties"]
         assert (
-            "locks" in lock_tools["rucio_get_dataset_locks_by_rse"].output_schema["properties"]
+            "locks" in lock_tools["rucio_get_dataset_locks"].output_schema["properties"]
+        )
+        assert (
+            "locks"
+            in lock_tools["rucio_get_dataset_locks_by_rse"].output_schema["properties"]
         )
 
 

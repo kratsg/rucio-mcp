@@ -40,7 +40,8 @@ class TestScopeToolsRegistration:
     def test_publishes_output_schemas(self, scope_tools: dict[str, Any]) -> None:
         assert "scopes" in scope_tools["rucio_list_scopes"].output_schema["properties"]
         assert (
-            "scopes" in scope_tools["rucio_list_scopes_for_account"].output_schema["properties"]
+            "scopes"
+            in scope_tools["rucio_list_scopes_for_account"].output_schema["properties"]
         )
 
 
@@ -59,7 +60,10 @@ class TestRucioListScopes:
         assert "mc20_13TeV" in output
         assert "data18_13TeV" in output
         assert result.structured_content is not None
-        assert set(result.structured_content["scopes"]) == {"mc20_13TeV", "data18_13TeV"}
+        assert set(result.structured_content["scopes"]) == {
+            "mc20_13TeV",
+            "data18_13TeV",
+        }
 
     async def test_returns_markdown_bullet_list(
         self,

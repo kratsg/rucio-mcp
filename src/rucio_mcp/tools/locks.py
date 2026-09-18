@@ -91,7 +91,9 @@ def register(mcp: MCPServer) -> None:
 
         if not results:
             return CallToolResult(
-                content=[TextContent(type="text", text="No locks found for this dataset.")],
+                content=[
+                    TextContent(type="text", text="No locks found for this dataset.")
+                ],
                 structured_content=RucioGetDatasetLocksResult(
                     did=did, locks=[], offset=offset, limit=limit, truncated=False
                 ).model_dump(mode="json"),
@@ -118,7 +120,9 @@ def register(mcp: MCPServer) -> None:
 
     @mcp.tool(
         annotations=ToolAnnotations(
-            title="List dataset locks at an RSE", read_only_hint=True, open_world_hint=True
+            title="List dataset locks at an RSE",
+            read_only_hint=True,
+            open_world_hint=True,
         )
     )
     async def rucio_get_dataset_locks_by_rse(
