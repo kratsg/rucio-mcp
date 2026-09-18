@@ -247,19 +247,50 @@ Each tool module exports a `register(mcp: MCPServer) -> None` function.
 `server.py` imports the modules and calls `module.register(mcp)` for each. Tools
 are defined as closures inside `register()` using the `@mcp.tool()` decorator.
 
+Every tool returns markdown _and_ structured content:
+`CallToolResult(content=[...], structured_content=...)`, with the return
+annotation spelled `Annotated[CallToolResult, ResultModel]`. This is the escape
+hatch the mcp SDK's `func_metadata()` provides specifically for this case (see
+`mcp/server/mcpserver/utilities/func_metadata.py`): annotating a tool
+`-> ResultModel` directly gets you `outputSchema` + `structuredContent`, but the
+SDK then renders the text block as `pydantic_core.to_json(result, indent=2)`,
+destroying the curated markdown. `Annotated[CallToolResult, ResultModel]`
+publishes `outputSchema` from `ResultModel`, validates `structured_content`
+against it at runtime, and returns the `CallToolResult` — markdown text block
+and all — unchanged.
+
 ```python
 # tools/mymodule.py
-from mcp.server.mcpserver import Context, MCPServer
-from typing import Any
+from typing import Annotated, Any
+
+from mcp.server.mcpserver import (
+    Context,
+    MCPServer,
+)  # noqa: TC002 (needed at runtime for eval_str signature introspection)
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from pydantic import BaseModel
 
 from rucio_mcp.tools._helpers import build_hints, classify_error, get_rucio_client
 
 
+class RucioMyToolResult(BaseModel):
+    """Structured result of rucio_my_tool."""
+
+    param: str
+    # ... the rest of the fields the underlying client call returns
+
+
 def register(mcp: MCPServer) -> None:
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="My tool",
+            read_only_hint=True,
+            open_world_hint=True,
+        )
+    )
     async def rucio_my_tool(
         param: str, limit: int = 50, offset: int = 0, *, ctx: Context[Any, Any]
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioMyToolResult]:
         """Tool description — shown to the LLM as the tool's purpose."""
         client = get_rucio_client(ctx)  # works in both stdio and http transport
         try:
@@ -267,7 +298,12 @@ def register(mcp: MCPServer) -> None:
         except Exception as exc:  # noqa: BLE001
             return classify_error(exc)
         hints = build_hints(["Use `rucio_other_tool` to do the next thing"])
-        return str(result) + hints
+        text = str(result) + hints
+        payload = RucioMyToolResult(param=param, **result)
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 ```
 
 Key conventions:
@@ -275,18 +311,39 @@ Key conventions:
 - Tool names are prefixed with `rucio_` to avoid collisions
 - `ctx` is keyword-only (after `*`) so optional parameters can have defaults
   before it
-- Errors are returned via `classify_error(exc)` from `_helpers.py` — never
-  raised as exceptions, never bare `f"Error: {exc}"`
+- `Context`/`MCPServer`/`CallToolResult`/`TextContent`/`ToolAnnotations` and
+  every result model used in a return annotation must be imported as **real,
+  non-`TYPE_CHECKING`** imports (with a `# noqa: TC002` on the
+  `mcp.server.mcpserver` import to satisfy ruff's type-checking-import lint) —
+  the mcp SDK's `func_metadata()` calls
+  `inspect.signature(func, eval_str=True)`, which needs every name in the
+  signature to actually resolve in the function's module globals at _runtime_,
+  not just for static type checking. Getting this wrong raises
+  `InvalidSignature: Unable to evaluate type annotations` the moment the tool is
+  registered.
+- Every tool declares `ToolAnnotations`: read-only tools get
+  `read_only_hint=True, open_world_hint=True` (nearly everything here talks to
+  the external Rucio server); mutating, non-destructive tools get
+  `read_only_hint=False` (`destructive_hint` left unset); a tool that
+  irreversibly destroys state gets `read_only_hint=False, destructive_hint=True`
+  in addition. See `tools/rules.py` for the full read/mutating/destructive
+  split.
+- Errors are returned via `classify_error(exc)` from `_helpers.py`, which itself
+  returns a `CallToolResult(is_error=True)` — never raised, never a bare
+  `f"Error: {exc}"` string. An ad hoc pre-formatted error message (e.g. a
+  `parse_did` `ValueError`) is wrapped the same way via `error_result(message)`
+  from `_helpers.py`, never returned as a plain string by hand.
 - `except Exception as exc:` lines carry `# noqa: BLE001` inline;
   `broad-exception-caught` is disabled globally in pylint (`pyproject.toml`)
 - List tools accept `limit: int` and `offset: int` for pagination; use
   `paginate_iter(iterator, limit, offset)` from `_helpers.py`
 - All tools append `build_hints([...])` from `_helpers.py` to guide the LLM on
-  what to do next
+  what to do next, on the markdown text going into the `TextContent` block --
+  never on `structured_content`
 - Byte values in output are humanized via `human_bytes()` from `_helpers.py`;
   pass `byte_keys=frozenset({...})` to `format_dict`/`format_list` to enable
 - Write tools call `check_write_allowed(ctx.request_context.lifespan_context)`
-  from `_helpers.py` and return its error string if non-None
+  from `_helpers.py` and return its `CallToolResult(is_error=True)` if non-None
 
 Then wire it in `server.py`:
 
@@ -319,7 +376,10 @@ pixi run pre-commit-install  # install git hooks
 1. Decide which module it belongs to (or create a new one).
 2. Add a new `@mcp.tool()` function inside the module's `register()`.
 3. If creating a new module, add it to the loop in `server.py`.
-4. Write unit tests using `mock_rucio_client` and `mock_ctx` from conftest.
+4. Write unit tests using `mock_rucio_client` and `mock_ctx` from conftest; use
+   the `tool_text` fixture to unwrap a `CallToolResult`'s markdown text block
+   for substring assertions, and assert on `result.structured_content` and
+   `result.is_error` directly.
 5. Run `pixi run test` to verify.
 
 ## Rucio Python client reference

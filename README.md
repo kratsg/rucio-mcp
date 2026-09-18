@@ -379,30 +379,30 @@ accidentally create rules or modify existing ones.
 
 ### Connectivity
 
-| Tool                    | Description                                   |
-| ----------------------- | --------------------------------------------- |
-| `rucio_ping`            | Check server connectivity and version         |
-| `rucio_whoami`          | Show authenticated account info               |
-| `rucio_voms_proxy_info` | Show VOMS proxy certificate status and expiry |
+| Tool                    | Write? | Description                                   |
+| ----------------------- | ------ | --------------------------------------------- |
+| `rucio_ping`            | —      | Check server connectivity and version         |
+| `rucio_whoami`          | —      | Show authenticated account info               |
+| `rucio_voms_proxy_info` | —      | Show VOMS proxy certificate status and expiry |
 
 ### DID discovery
 
-| Tool                     | Description                                        |
-| ------------------------ | -------------------------------------------------- |
-| `rucio_list_dids`        | Search for datasets/containers by wildcard pattern |
-| `rucio_get_did`          | Get type, size, and timestamps for a DID           |
-| `rucio_list_content`     | List immediate contents of a container or dataset  |
-| `rucio_list_files`       | List all files within a DID                        |
-| `rucio_get_metadata`     | Retrieve metadata key-value pairs for a DID        |
-| `rucio_list_parent_dids` | Find containers that hold a given DID              |
+| Tool                     | Write? | Description                                        |
+| ------------------------ | ------ | -------------------------------------------------- |
+| `rucio_list_dids`        | —      | Search for datasets/containers by wildcard pattern |
+| `rucio_get_did`          | —      | Get type, size, and timestamps for a DID           |
+| `rucio_list_content`     | —      | List immediate contents of a container or dataset  |
+| `rucio_list_files`       | —      | List all files within a DID                        |
+| `rucio_get_metadata`     | —      | Retrieve metadata key-value pairs for a DID        |
+| `rucio_list_parent_dids` | —      | Find containers that hold a given DID              |
 
 ### Replicas
 
-| Tool                            | Description                                           |
-| ------------------------------- | ----------------------------------------------------- |
-| `rucio_list_replicas`           | Physical replica locations (PFNs) for files           |
-| `rucio_list_dataset_replicas`   | Dataset availability summary across RSEs              |
-| `rucio_list_container_replicas` | Dataset replica summary aggregated across a container |
+| Tool                            | Write? | Description                                           |
+| ------------------------------- | ------ | ----------------------------------------------------- |
+| `rucio_list_replicas`           | —      | Physical replica locations (PFNs) for files           |
+| `rucio_list_dataset_replicas`   | —      | Dataset availability summary across RSEs              |
+| `rucio_list_container_replicas` | —      | Dataset replica summary aggregated across a container |
 
 ### Replication rules
 
@@ -422,54 +422,54 @@ accidentally create rules or modify existing ones.
 
 ### RSEs and storage
 
-| Tool                         | Description                                    |
-| ---------------------------- | ---------------------------------------------- |
-| `rucio_list_rses`            | List RSEs matching an expression               |
-| `rucio_get_rse`              | Detailed configuration info for an RSE         |
-| `rucio_list_rse_attributes`  | Key-value attributes for an RSE                |
-| `rucio_get_rse_usage`        | Total, used, and free storage at an RSE        |
-| `rucio_get_rse_limits`       | Configured space limits for an RSE             |
-| `rucio_get_rse_protocols`    | Transfer protocols supported by an RSE         |
-| `rucio_get_distance`         | Network distance (ranking) between two RSEs    |
-| `rucio_list_transfer_limits` | Global transfer limit policies by activity/RSE |
+| Tool                         | Write? | Description                                    |
+| ---------------------------- | ------ | ---------------------------------------------- |
+| `rucio_list_rses`            | —      | List RSEs matching an expression               |
+| `rucio_get_rse`              | —      | Detailed configuration info for an RSE         |
+| `rucio_list_rse_attributes`  | —      | Key-value attributes for an RSE                |
+| `rucio_get_rse_usage`        | —      | Total, used, and free storage at an RSE        |
+| `rucio_get_rse_limits`       | —      | Configured space limits for an RSE             |
+| `rucio_get_rse_protocols`    | —      | Transfer protocols supported by an RSE         |
+| `rucio_get_distance`         | —      | Network distance (ranking) between two RSEs    |
+| `rucio_list_transfer_limits` | —      | Global transfer limit policies by activity/RSE |
 
 ### Requests and transfers
 
-| Tool                          | Description                                   |
-| ----------------------------- | --------------------------------------------- |
-| `rucio_list_requests`         | Current transfer requests between two RSEs    |
-| `rucio_list_requests_history` | Historical transfer requests between two RSEs |
+| Tool                          | Write? | Description                                   |
+| ----------------------------- | ------ | --------------------------------------------- |
+| `rucio_list_requests`         | —      | Current transfer requests between two RSEs    |
+| `rucio_list_requests_history` | —      | Historical transfer requests between two RSEs |
 
 ### Accounts and quotas
 
-| Tool                             | Description                            |
-| -------------------------------- | -------------------------------------- |
-| `rucio_list_accounts`            | List accounts, optionally filtered     |
-| `rucio_get_account`              | Detailed info for a specific account   |
-| `rucio_get_local_account_usage`  | Storage used per RSE for an account    |
-| `rucio_get_local_account_limits` | Storage quota limits for an account    |
-| `rucio_list_account_rules`       | All replication rules owned by account |
+| Tool                             | Write? | Description                            |
+| -------------------------------- | ------ | -------------------------------------- |
+| `rucio_list_accounts`            | —      | List accounts, optionally filtered     |
+| `rucio_get_account`              | —      | Detailed info for a specific account   |
+| `rucio_get_local_account_usage`  | —      | Storage used per RSE for an account    |
+| `rucio_get_local_account_limits` | —      | Storage quota limits for an account    |
+| `rucio_list_account_rules`       | —      | All replication rules owned by account |
 
 ### Subscriptions
 
-| Tool                            | Description                                |
-| ------------------------------- | ------------------------------------------ |
-| `rucio_list_subscriptions`      | List subscriptions, optionally filtered    |
-| `rucio_list_subscription_rules` | Rules generated by a specific subscription |
+| Tool                            | Write? | Description                                |
+| ------------------------------- | ------ | ------------------------------------------ |
+| `rucio_list_subscriptions`      | —      | List subscriptions, optionally filtered    |
+| `rucio_list_subscription_rules` | —      | Rules generated by a specific subscription |
 
 ### Locks
 
-| Tool                             | Description                         |
-| -------------------------------- | ----------------------------------- |
-| `rucio_get_dataset_locks`        | Locks on a specific dataset DID     |
-| `rucio_get_dataset_locks_by_rse` | All dataset locks at a specific RSE |
+| Tool                             | Write? | Description                         |
+| -------------------------------- | ------ | ----------------------------------- |
+| `rucio_get_dataset_locks`        | —      | Locks on a specific dataset DID     |
+| `rucio_get_dataset_locks_by_rse` | —      | All dataset locks at a specific RSE |
 
 ### Scopes
 
-| Tool                            | Description                        |
-| ------------------------------- | ---------------------------------- |
-| `rucio_list_scopes`             | List all available scopes          |
-| `rucio_list_scopes_for_account` | Scopes owned by a specific account |
+| Tool                            | Write? | Description                        |
+| ------------------------------- | ------ | ---------------------------------- |
+| `rucio_list_scopes`             | —      | List all available scopes          |
+| `rucio_list_scopes_for_account` | —      | Scopes owned by a specific account |
 
 <!-- --8<-- [end:tools] -->
 
