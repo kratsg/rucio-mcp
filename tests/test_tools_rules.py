@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from mcp.server.mcpserver import MCPServer
@@ -13,20 +13,78 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterator
     from unittest.mock import MagicMock
 
+    from mcp.types import CallToolResult
+
 
 @pytest.fixture
-def registered_tools() -> dict[str, Callable[..., Awaitable[str]]]:
+def rule_tools() -> dict[str, Any]:
     mcp = MCPServer("test")
     register(mcp)
-    return {tool.name: tool.fn for tool in mcp._tool_manager.list_tools()}
+    return {tool.name: tool for tool in mcp._tool_manager.list_tools()}
+
+
+@pytest.fixture
+def registered_tools(
+    rule_tools: dict[str, Any],
+) -> dict[str, Callable[..., Awaitable[CallToolResult]]]:
+    return {name: tool.fn for name, tool in rule_tools.items()}
+
+
+class TestRuleToolsRegistration:
+    def test_read_only_tools_declare_read_only_annotations(
+        self, rule_tools: dict[str, Any]
+    ) -> None:
+        read_only = {
+            "rucio_list_did_rules",
+            "rucio_get_replication_rule",
+            "rucio_list_rule_history",
+            "rucio_list_replication_rules",
+        }
+        for name in read_only:
+            tool = rule_tools[name]
+            assert tool.annotations is not None, name
+            assert tool.annotations.read_only_hint is True, name
+            assert tool.annotations.open_world_hint is True, name
+
+    def test_mutating_tools_declare_non_destructive_annotations(
+        self, rule_tools: dict[str, Any]
+    ) -> None:
+        mutating = {
+            "rucio_add_rule",
+            "rucio_update_rule",
+            "rucio_reduce_rule",
+            "rucio_move_rule",
+            "rucio_approve_rule",
+            "rucio_deny_rule",
+        }
+        for name in mutating:
+            tool = rule_tools[name]
+            assert tool.annotations is not None, name
+            assert tool.annotations.read_only_hint is False, name
+            assert tool.annotations.destructive_hint is not True, name
+
+    def test_delete_rule_declares_destructive_annotation(
+        self, rule_tools: dict[str, Any]
+    ) -> None:
+        tool = rule_tools["rucio_delete_rule"]
+        assert tool.annotations is not None
+        assert tool.annotations.read_only_hint is False
+        assert tool.annotations.destructive_hint is True
+
+    def test_every_tool_publishes_an_output_schema(
+        self, rule_tools: dict[str, Any]
+    ) -> None:
+        for name, tool in rule_tools.items():
+            assert tool.output_schema is not None, name
 
 
 class TestRucioListDidRules:
     async def test_returns_rules(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_did_rules.return_value = iter(
             [
@@ -41,12 +99,12 @@ class TestRucioListDidRules:
         )
         fn = registered_tools["rucio_list_did_rules"]
         result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
-        assert "abc123" in result
-        assert "CERN-PROD_DATADISK" in result
+        assert "abc123" in tool_text(result)
+        assert "CERN-PROD_DATADISK" in tool_text(result)
 
     async def test_passes_scope_and_name(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -59,54 +117,59 @@ class TestRucioListDidRules:
 
     async def test_no_rules(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_did_rules.return_value = iter([])
         fn = registered_tools["rucio_list_did_rules"]
         result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
-        assert "No replication rules" in result
+        assert "No replication rules" in tool_text(result)
 
     async def test_invalid_did(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_list_did_rules"]
         result = await fn("a:b:c", ctx=mock_ctx)
-        assert "Cannot extract scope" in result
+        assert "Cannot extract scope" in tool_text(result)
 
     async def test_client_error(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_did_rules.side_effect = RuntimeError("server error")
         fn = registered_tools["rucio_list_did_rules"]
         result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
-        assert "Error" in result
+        assert "Error" in tool_text(result)
+        assert result.is_error is True
 
     async def test_pagination_footer_on_overflow(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_did_rules.return_value = iter(
             [{"id": f"rule{i}", "state": "OK"} for i in range(3)]
         )
         fn = registered_tools["rucio_list_did_rules"]
         result = await fn("mc16_13TeV:some.dataset", limit=2, ctx=mock_ctx)
-        assert "rule0" in result
-        assert "rule1" in result
-        assert "rule2" not in result
-        assert "offset=2" in result
+        assert "rule0" in tool_text(result)
+        assert "rule1" in tool_text(result)
+        assert "rule2" not in tool_text(result)
+        assert "offset=2" in tool_text(result)
 
     async def test_does_not_materialize_full_iterator(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -129,9 +192,10 @@ class TestRucioListDidRules:
 class TestRucioGetReplicationRule:
     async def test_returns_rule_info(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.get_replication_rule.return_value = {
             "id": "abc123",
@@ -142,27 +206,30 @@ class TestRucioGetReplicationRule:
         }
         fn = registered_tools["rucio_get_replication_rule"]
         result = await fn("abc123", ctx=mock_ctx)
-        assert "REPLICATING" in result
-        assert "BNL-OSG2_DATADISK" in result
+        assert "REPLICATING" in tool_text(result)
+        assert "BNL-OSG2_DATADISK" in tool_text(result)
 
     async def test_client_error(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.get_replication_rule.side_effect = RuntimeError("not found")
         fn = registered_tools["rucio_get_replication_rule"]
         result = await fn("bad-uuid", ctx=mock_ctx)
-        assert "Error" in result
+        assert "Error" in tool_text(result)
+        assert result.is_error is True
 
 
 class TestRucioListRuleHistory:
     async def test_returns_history(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_replication_rule_full_history.return_value = iter(
             [
@@ -176,44 +243,47 @@ class TestRucioListRuleHistory:
         )
         fn = registered_tools["rucio_list_rule_history"]
         result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
-        assert "REPLICATING" in result
+        assert "REPLICATING" in tool_text(result)
 
     async def test_invalid_did(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_list_rule_history"]
         result = await fn("a:b:c", ctx=mock_ctx)
-        assert "Cannot extract scope" in result
+        assert "Cannot extract scope" in tool_text(result)
 
     async def test_no_history(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_replication_rule_full_history.return_value = iter([])
         fn = registered_tools["rucio_list_rule_history"]
         result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
-        assert "No rule history" in result
+        assert "No rule history" in tool_text(result)
 
     async def test_includes_hints(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_replication_rule_full_history.return_value = iter(
             [{"id": "abc123", "state": "OK", "rse_expression": "CERN-PROD_DATADISK"}]
         )
         fn = registered_tools["rucio_list_rule_history"]
         result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
-        assert "rucio_list_did_rules" in result
+        assert "rucio_list_did_rules" in tool_text(result)
 
     async def test_does_not_materialize_full_iterator(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -238,9 +308,10 @@ class TestRucioListRuleHistory:
 class TestRucioAddRule:
     async def test_creates_rule(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.add_replication_rule.return_value = ["rule-id-xyz"]
         fn = registered_tools["rucio_add_rule"]
@@ -250,13 +321,14 @@ class TestRucioAddRule:
             rse_expression="CERN-PROD_DATADISK",
             ctx=mock_ctx,
         )
-        assert "rule-id-xyz" in result
+        assert "rule-id-xyz" in tool_text(result)
 
     async def test_returns_markdown_rule_ids(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.add_replication_rule.return_value = ["rule-id-xyz"]
         fn = registered_tools["rucio_add_rule"]
@@ -266,12 +338,12 @@ class TestRucioAddRule:
             rse_expression="CERN-PROD_DATADISK",
             ctx=mock_ctx,
         )
-        assert "**Created rule(s):**" in result
-        assert "- `rule-id-xyz`" in result
+        assert "**Created rule(s):**" in tool_text(result)
+        assert "- `rule-id-xyz`" in tool_text(result)
 
     async def test_passes_correct_args(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -294,8 +366,9 @@ class TestRucioAddRule:
 
     async def test_blocked_in_read_only_mode(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx_readonly: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_add_rule"]
         result = await fn(
@@ -304,22 +377,24 @@ class TestRucioAddRule:
             rse_expression="CERN-PROD_DATADISK",
             ctx=mock_ctx_readonly,
         )
-        assert "read-only" in result.lower()
+        assert "read-only" in tool_text(result).lower()
 
     async def test_invalid_did(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_add_rule"]
         result = await fn("a:b:c", copies=1, rse_expression="X", ctx=mock_ctx)
-        assert "Cannot extract scope" in result
+        assert "Cannot extract scope" in tool_text(result)
 
     async def test_client_error(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.add_replication_rule.side_effect = RuntimeError(
             "quota exceeded"
@@ -328,26 +403,28 @@ class TestRucioAddRule:
         result = await fn(
             "mc16_13TeV:some.dataset", copies=1, rse_expression="X", ctx=mock_ctx
         )
-        assert "Error" in result
+        assert "Error" in tool_text(result)
+        assert result.is_error is True
 
 
 class TestRucioDeleteRule:
     async def test_deletes_rule(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_delete_rule"]
         result = await fn("abc123", ctx=mock_ctx)
         mock_rucio_client.delete_replication_rule.assert_called_once_with(
             "abc123", purge_replicas=False
         )
-        assert "deleted" in result.lower()
+        assert "deleted" in tool_text(result).lower()
 
     async def test_purge_replicas(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -359,53 +436,59 @@ class TestRucioDeleteRule:
 
     async def test_blocked_in_read_only_mode(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx_readonly: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_delete_rule"]
         result = await fn("abc123", ctx=mock_ctx_readonly)
-        assert "read-only" in result.lower()
+        assert "read-only" in tool_text(result).lower()
+        assert result.is_error is True
 
     async def test_client_error(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.delete_replication_rule.side_effect = RuntimeError(
             "not found"
         )
         fn = registered_tools["rucio_delete_rule"]
         result = await fn("bad-uuid", ctx=mock_ctx)
-        assert "Error" in result
+        assert "Error" in tool_text(result)
+        assert result.is_error is True
 
     async def test_includes_hints(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_delete_rule"]
         result = await fn("abc123", ctx=mock_ctx)
-        assert "rucio_list_did_rules" in result
+        assert "rucio_list_did_rules" in tool_text(result)
 
 
 class TestRucioUpdateRule:
     async def test_updates_lifetime(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_update_rule"]
         result = await fn("abc123", lifetime=3600, ctx=mock_ctx)
         mock_rucio_client.update_replication_rule.assert_called_once_with(
             "abc123", {"lifetime": 3600}
         )
-        assert "updated" in result.lower()
+        assert "updated" in tool_text(result).lower()
 
     async def test_updates_multiple_fields(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -418,7 +501,7 @@ class TestRucioUpdateRule:
 
     async def test_unlock_sends_false(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -430,44 +513,49 @@ class TestRucioUpdateRule:
 
     async def test_no_options_returns_error(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_update_rule"]
         result = await fn("abc123", ctx=mock_ctx)
-        assert result.startswith("Error:")
+        assert tool_text(result).startswith("Error:")
         mock_rucio_client.update_replication_rule.assert_not_called()
 
     async def test_blocked_in_read_only_mode(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx_readonly: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_update_rule"]
         result = await fn("abc123", lifetime=3600, ctx=mock_ctx_readonly)
-        assert "read-only" in result.lower()
+        assert "read-only" in tool_text(result).lower()
 
     async def test_client_error(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.update_replication_rule.side_effect = RuntimeError(
             "not found"
         )
         fn = registered_tools["rucio_update_rule"]
         result = await fn("bad-uuid", lifetime=3600, ctx=mock_ctx)
-        assert "Error" in result
+        assert "Error" in tool_text(result)
+        assert result.is_error is True
 
 
 class TestRucioReduceRule:
     async def test_reduces_copies(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.reduce_replication_rule.return_value = "new-rule-id"
         fn = registered_tools["rucio_reduce_rule"]
@@ -475,24 +563,27 @@ class TestRucioReduceRule:
         mock_rucio_client.reduce_replication_rule.assert_called_once_with(
             "abc123", 1, exclude_expression=None
         )
-        assert "new-rule-id" in result
+        assert "new-rule-id" in tool_text(result)
 
     async def test_blocked_in_read_only_mode(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx_readonly: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_reduce_rule"]
         result = await fn("abc123", copies=1, ctx=mock_ctx_readonly)
-        assert "read-only" in result.lower()
+        assert "read-only" in tool_text(result).lower()
+        assert result.is_error is True
 
 
 class TestRucioMoveRule:
     async def test_moves_rule(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.move_replication_rule.return_value = "new-rule-id"
         fn = registered_tools["rucio_move_rule"]
@@ -500,48 +591,54 @@ class TestRucioMoveRule:
         mock_rucio_client.move_replication_rule.assert_called_once_with(
             "abc123", "BNL-OSG2_DATADISK", override={}
         )
-        assert "new-rule-id" in result
+        assert "new-rule-id" in tool_text(result)
 
     async def test_blocked_in_read_only_mode(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx_readonly: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_move_rule"]
         result = await fn(
             "abc123", rse_expression="BNL-OSG2_DATADISK", ctx=mock_ctx_readonly
         )
-        assert "read-only" in result.lower()
+        assert "read-only" in tool_text(result).lower()
+        assert result.is_error is True
 
 
 class TestRucioApproveRule:
     async def test_approves_rule(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_approve_rule"]
         result = await fn("abc123", ctx=mock_ctx)
         mock_rucio_client.approve_replication_rule.assert_called_once_with("abc123")
-        assert "approved" in result.lower()
+        assert "approved" in tool_text(result).lower()
 
     async def test_blocked_in_read_only_mode(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx_readonly: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_approve_rule"]
         result = await fn("abc123", ctx=mock_ctx_readonly)
-        assert "read-only" in result.lower()
+        assert "read-only" in tool_text(result).lower()
+        assert result.is_error is True
 
 
 class TestRucioListReplicationRules:
     async def test_returns_rules(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_replication_rules.return_value = iter(
             [
@@ -557,12 +654,12 @@ class TestRucioListReplicationRules:
         )
         fn = registered_tools["rucio_list_replication_rules"]
         result = await fn(ctx=mock_ctx)
-        assert "abc123" in result
-        assert "CERN-PROD_DATADISK" in result
+        assert "abc123" in tool_text(result)
+        assert "CERN-PROD_DATADISK" in tool_text(result)
 
     async def test_passes_scope_filter(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -574,7 +671,7 @@ class TestRucioListReplicationRules:
 
     async def test_passes_account_filter(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -586,7 +683,7 @@ class TestRucioListReplicationRules:
 
     async def test_empty_filters_when_no_params(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -597,46 +694,50 @@ class TestRucioListReplicationRules:
 
     async def test_no_rules(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_replication_rules.return_value = iter([])
         fn = registered_tools["rucio_list_replication_rules"]
         result = await fn(ctx=mock_ctx)
-        assert "No replication rules" in result
+        assert "No replication rules" in tool_text(result)
 
     async def test_client_error(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_replication_rules.side_effect = RuntimeError(
             "server error"
         )
         fn = registered_tools["rucio_list_replication_rules"]
         result = await fn(ctx=mock_ctx)
-        assert "Error" in result
+        assert "Error" in tool_text(result)
+        assert result.is_error is True
 
 
 class TestRucioDenyRule:
     async def test_denies_rule(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_deny_rule"]
         result = await fn("abc123", ctx=mock_ctx)
         mock_rucio_client.deny_replication_rule.assert_called_once_with(
             "abc123", reason=None
         )
-        assert "denied" in result.lower()
+        assert "denied" in tool_text(result).lower()
 
     async def test_deny_with_reason(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -648,9 +749,10 @@ class TestRucioDenyRule:
 
     async def test_blocked_in_read_only_mode(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx_readonly: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_deny_rule"]
         result = await fn("abc123", ctx=mock_ctx_readonly)
-        assert "read-only" in result.lower()
+        assert "read-only" in tool_text(result).lower()

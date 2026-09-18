@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server.mcpserver import Context, MCPServer  # noqa: TC002
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from pydantic import BaseModel
 
 from rucio_mcp.tools._helpers import (
     RULE_LIST_KEYS,
     build_hints,
     check_write_allowed,
     classify_error,
+    error_result,
     format_dict,
     format_list,
     get_rucio_client,
@@ -39,17 +42,130 @@ _RULE_INFO_KEYS = [
 _RULE_BYTE_KEYS = frozenset({"bytes"})
 
 
+class RucioListDidRulesResult(BaseModel):
+    """Structured result of ``rucio_list_did_rules``."""
+
+    did: str
+    rules: list[dict[str, Any]]
+    offset: int
+    limit: int
+    truncated: bool
+
+
+class RucioGetReplicationRuleResult(BaseModel):
+    """Structured result of ``rucio_get_replication_rule``."""
+
+    id: str | None = None
+    state: str | None = None
+    rse_expression: str | None = None
+    account: str | None = None
+    scope: str | None = None
+    name: str | None = None
+    copies: int | None = None
+    bytes: int | None = None
+    locks_ok_cnt: int | None = None
+    locks_replicating_cnt: int | None = None
+    locks_stuck_cnt: int | None = None
+    error: str | None = None
+    expires_at: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class RucioListRuleHistoryResult(BaseModel):
+    """Structured result of ``rucio_list_rule_history``."""
+
+    did: str
+    history: list[dict[str, Any]]
+    offset: int
+    limit: int
+    truncated: bool
+
+
+class RucioListReplicationRulesResult(BaseModel):
+    """Structured result of ``rucio_list_replication_rules``."""
+
+    scope: str
+    account: str
+    rules: list[dict[str, Any]]
+    offset: int
+    limit: int
+    truncated: bool
+
+
+class RucioAddRuleResult(BaseModel):
+    """Structured result of ``rucio_add_rule``."""
+
+    dids: list[str]
+    copies: int
+    rse_expression: str
+    rule_ids: list[str]
+
+
+class RucioDeleteRuleResult(BaseModel):
+    """Structured result of ``rucio_delete_rule``."""
+
+    rule_id: str
+    purge_replicas: bool
+    deleted: bool
+
+
+class RucioUpdateRuleResult(BaseModel):
+    """Structured result of ``rucio_update_rule``."""
+
+    rule_id: str
+    updated_fields: dict[str, Any]
+    updated: bool
+
+
+class RucioReduceRuleResult(BaseModel):
+    """Structured result of ``rucio_reduce_rule``."""
+
+    rule_id: str
+    copies: int
+    new_rule_id: str
+
+
+class RucioMoveRuleResult(BaseModel):
+    """Structured result of ``rucio_move_rule``."""
+
+    rule_id: str
+    rse_expression: str
+    new_rule_id: str
+
+
+class RucioApproveRuleResult(BaseModel):
+    """Structured result of ``rucio_approve_rule``."""
+
+    rule_id: str
+    approved: bool
+
+
+class RucioDenyRuleResult(BaseModel):
+    """Structured result of ``rucio_deny_rule``."""
+
+    rule_id: str
+    reason: str
+    denied: bool
+
+
 def register(mcp: MCPServer) -> None:
     """Register replication rule tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List DID replication rules",
+            read_only_hint=True,
+            open_world_hint=True,
+        )
+    )
     async def rucio_list_did_rules(
         did: str,
         limit: int = 100,
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListDidRulesResult]:
         """List all replication rules for a DID.
 
         Shows each rule's ID, state, RSE expression, account, copies requested,
@@ -64,7 +180,7 @@ def register(mcp: MCPServer) -> None:
         try:
             scope, name = parse_did(did)
         except ValueError as exc:
-            return str(exc)
+            return error_result(str(exc))
 
         client = get_rucio_client(ctx)
         try:
@@ -74,25 +190,43 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not results:
-            return "No replication rules found."
+            return CallToolResult(
+                content=[TextContent(type="text", text="No replication rules found.")],
+                structured_content=RucioListDidRulesResult(
+                    did=did, rules=[], offset=offset, limit=limit, truncated=False
+                ).model_dump(mode="json"),
+            )
 
         hints = build_hints(
             [
                 "Use `rucio_get_replication_rule <rule_id>` to see full details of a specific rule"
             ]
         )
-        return (
+        text = (
             format_list(results, include_keys=RULE_LIST_KEYS, byte_keys=_RULE_BYTE_KEYS)
             + footer
             + hints
         )
+        payload = RucioListDidRulesResult(
+            did=did, rules=results, offset=offset, limit=limit, truncated=bool(footer)
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Show replication rule details",
+            read_only_hint=True,
+            open_world_hint=True,
+        )
+    )
     async def rucio_get_replication_rule(
         rule_id: str,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioGetReplicationRuleResult]:
         """Show detailed information about a specific replication rule.
 
         Returns the full rule record including state, RSE expression, account,
@@ -138,19 +272,32 @@ def register(mcp: MCPServer) -> None:
                 [f"Use `rucio_list_did_rules {did}` to see all rules for this DID"]
             )
 
-        return (
+        text = (
             format_dict(result, include_keys=_RULE_INFO_KEYS, byte_keys=_RULE_BYTE_KEYS)
             + hints
         )
+        payload = RucioGetReplicationRuleResult(
+            **{k: result.get(k) for k in _RULE_INFO_KEYS}
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Show replication rule history",
+            read_only_hint=True,
+            open_world_hint=True,
+        )
+    )
     async def rucio_list_rule_history(
         did: str,
         limit: int = 50,
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListRuleHistoryResult]:
         """Show the full state history of all replication rules for a DID.
 
         Returns a chronological list of rule state transitions (OK, REPLICATING,
@@ -165,7 +312,7 @@ def register(mcp: MCPServer) -> None:
         try:
             scope, name = parse_did(did)
         except ValueError as exc:
-            return str(exc)
+            return error_result(str(exc))
 
         client = get_rucio_client(ctx)
         try:
@@ -175,16 +322,32 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not page:
-            return "No rule history found."
+            return CallToolResult(
+                content=[TextContent(type="text", text="No rule history found.")],
+                structured_content=RucioListRuleHistoryResult(
+                    did=did, history=[], offset=offset, limit=limit, truncated=False
+                ).model_dump(mode="json"),
+            )
 
         hints = build_hints(
             [
                 f"Use `rucio_list_did_rules {did}` to see the current active rules for this DID"
             ]
         )
-        return format_list(page) + footer + hints
+        text = format_list(page) + footer + hints
+        payload = RucioListRuleHistoryResult(
+            did=did, history=page, offset=offset, limit=limit, truncated=bool(footer)
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List replication rules", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_list_replication_rules(
         scope: str = "",
         account: str = "",
@@ -192,7 +355,7 @@ def register(mcp: MCPServer) -> None:
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListReplicationRulesResult]:
         """List replication rules across all DIDs, optionally filtered.
 
         Unlike ``rucio_list_did_rules`` (which lists rules for a specific DID),
@@ -222,20 +385,47 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not results:
-            return "No replication rules found."
+            return CallToolResult(
+                content=[TextContent(type="text", text="No replication rules found.")],
+                structured_content=RucioListReplicationRulesResult(
+                    scope=scope,
+                    account=account,
+                    rules=[],
+                    offset=offset,
+                    limit=limit,
+                    truncated=False,
+                ).model_dump(mode="json"),
+            )
 
         hints = build_hints(
             [
                 "Use `rucio_get_replication_rule <rule_id>` to see full details of a specific rule"
             ]
         )
-        return (
+        text = (
             format_list(results, include_keys=RULE_LIST_KEYS, byte_keys=_RULE_BYTE_KEYS)
             + footer
             + hints
         )
+        payload = RucioListReplicationRulesResult(
+            scope=scope,
+            account=account,
+            rules=results,
+            offset=offset,
+            limit=limit,
+            truncated=bool(footer),
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Create replication rule",
+            read_only_hint=False,
+        )
+    )
     async def rucio_add_rule(
         dids: str,
         copies: int,
@@ -254,7 +444,7 @@ def register(mcp: MCPServer) -> None:
         weight: str = "",
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioAddRuleResult]:
         """Create a new replication rule to copy data to an RSE.
 
         Submits a replication rule that instructs Rucio to ensure ``copies``
@@ -295,7 +485,7 @@ def register(mcp: MCPServer) -> None:
             try:
                 scope, name = parse_did(did)
             except ValueError as exc:
-                return str(exc)
+                return error_result(str(exc))
             parsed.append({"scope": scope, "name": name})
 
         kwargs: dict[str, Any] = {"grouping": grouping, "notify": notify}
@@ -336,15 +526,31 @@ def register(mcp: MCPServer) -> None:
                 else "Use `rucio_list_replication_rules` to find your rules"
             ]
         )
-        return "**Created rule(s):**\n" + rule_list + hints
+        text = "**Created rule(s):**\n" + rule_list + hints
+        payload = RucioAddRuleResult(
+            dids=did_list,
+            copies=copies,
+            rse_expression=rse_expression,
+            rule_ids=list(rule_ids),
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Delete replication rule",
+            read_only_hint=False,
+            destructive_hint=True,
+        )
+    )
     async def rucio_delete_rule(
         rule_id: str,
         purge_replicas: bool = False,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioDeleteRuleResult]:
         """Delete a replication rule.
 
         Removing a rule may cause replicas to be garbage-collected if no other
@@ -367,9 +573,20 @@ def register(mcp: MCPServer) -> None:
         hints = build_hints(
             ["Use `rucio_list_did_rules <scope:name>` to verify the rule is gone"]
         )
-        return f"Rule {rule_id} deleted." + hints
+        payload = RucioDeleteRuleResult(
+            rule_id=rule_id, purge_replicas=purge_replicas, deleted=True
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=f"Rule {rule_id} deleted." + hints)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Update replication rule",
+            read_only_hint=False,
+        )
+    )
     async def rucio_update_rule(
         rule_id: str,
         lifetime: int = 0,
@@ -378,7 +595,7 @@ def register(mcp: MCPServer) -> None:
         activity: str | None = None,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioUpdateRuleResult]:
         """Update mutable fields on an existing replication rule.
 
         Only the fields you provide are changed; omitted fields are left as-is.
@@ -407,7 +624,7 @@ def register(mcp: MCPServer) -> None:
             options["activity"] = activity
 
         if not options:
-            return (
+            return error_result(
                 "Error: no fields to update. Provide at least one of "
                 "lifetime, locked, comment, or activity."
             )
@@ -421,16 +638,27 @@ def register(mcp: MCPServer) -> None:
         hints = build_hints(
             [f"Use `rucio_get_replication_rule {rule_id}` to verify the change"]
         )
-        return f"Rule {rule_id} updated." + hints
+        payload = RucioUpdateRuleResult(
+            rule_id=rule_id, updated_fields=options, updated=True
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=f"Rule {rule_id} updated." + hints)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Reduce replication rule copies",
+            read_only_hint=False,
+        )
+    )
     async def rucio_reduce_rule(
         rule_id: str,
         copies: int,
         exclude_expression: str = "",
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioReduceRuleResult]:
         """Reduce the number of copies in a replication rule.
 
         Rucio will remove replicas from RSEs to reach the new copy count,
@@ -459,15 +687,31 @@ def register(mcp: MCPServer) -> None:
                 f"Use `rucio_get_replication_rule {new_rule_id}` to check the new rule status"
             ]
         )
-        return f"Rule reduced. New rule ID: {new_rule_id}" + hints
+        payload = RucioReduceRuleResult(
+            rule_id=rule_id, copies=copies, new_rule_id=new_rule_id
+        )
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text",
+                    text=f"Rule reduced. New rule ID: {new_rule_id}" + hints,
+                )
+            ],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Move replication rule",
+            read_only_hint=False,
+        )
+    )
     async def rucio_move_rule(
         rule_id: str,
         rse_expression: str,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioMoveRuleResult]:
         """Move a replication rule to a different RSE expression.
 
         Creates a new rule at the target RSE expression and removes the
@@ -493,14 +737,29 @@ def register(mcp: MCPServer) -> None:
                 f"Use `rucio_get_replication_rule {new_rule_id}` to check the new rule status"
             ]
         )
-        return f"Rule moved. New rule ID: {new_rule_id}" + hints
+        payload = RucioMoveRuleResult(
+            rule_id=rule_id, rse_expression=rse_expression, new_rule_id=new_rule_id
+        )
+        return CallToolResult(
+            content=[
+                TextContent(
+                    type="text", text=f"Rule moved. New rule ID: {new_rule_id}" + hints
+                )
+            ],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Approve replication rule",
+            read_only_hint=False,
+        )
+    )
     async def rucio_approve_rule(
         rule_id: str,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioApproveRuleResult]:
         """Approve a replication rule that is waiting for approval.
 
         Only account managers and admins can approve rules. The rule must be
@@ -521,15 +780,26 @@ def register(mcp: MCPServer) -> None:
         hints = build_hints(
             [f"Use `rucio_get_replication_rule {rule_id}` to see updated rule status"]
         )
-        return f"Rule {rule_id} approved." + hints
+        payload = RucioApproveRuleResult(rule_id=rule_id, approved=True)
+        return CallToolResult(
+            content=[
+                TextContent(type="text", text=f"Rule {rule_id} approved." + hints)
+            ],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Deny replication rule",
+            read_only_hint=False,
+        )
+    )
     async def rucio_deny_rule(
         rule_id: str,
         reason: str = "",
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioDenyRuleResult]:
         """Deny a replication rule that is waiting for approval.
 
         Args:
@@ -548,4 +818,8 @@ def register(mcp: MCPServer) -> None:
         hints = build_hints(
             [f"Use `rucio_get_replication_rule {rule_id}` to see updated rule status"]
         )
-        return f"Rule {rule_id} denied." + hints
+        payload = RucioDenyRuleResult(rule_id=rule_id, reason=reason, denied=True)
+        return CallToolResult(
+            content=[TextContent(type="text", text=f"Rule {rule_id} denied." + hints)],
+            structured_content=payload.model_dump(mode="json"),
+        )
