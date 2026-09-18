@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server.mcpserver import Context, MCPServer  # noqa: TC002
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from pydantic import BaseModel
 
 from rucio_mcp.tools._helpers import (
     build_hints,
@@ -19,17 +21,83 @@ _RSE_USAGE_KEYS = ["source", "used", "free", "total", "files"]
 _RSE_USAGE_BYTE_KEYS = frozenset({"used", "free", "total"})
 
 
+class RucioListRsesResult(BaseModel):
+    """Structured result of ``rucio_list_rses``."""
+
+    rse_expression: str
+    rses: list[str]
+    offset: int
+    limit: int
+    truncated: bool
+
+
+class RucioListRseAttributesResult(BaseModel):
+    """Structured result of ``rucio_list_rse_attributes``."""
+
+    rse: str
+    attributes: dict[str, Any]
+
+
+class RucioGetRseUsageResult(BaseModel):
+    """Structured result of ``rucio_get_rse_usage``."""
+
+    rse: str
+    usage: list[dict[str, Any]]
+
+
+class RucioGetRseResult(BaseModel):
+    """Structured result of ``rucio_get_rse``."""
+
+    rse: str
+    details: dict[str, Any]
+
+
+class RucioGetRseLimitsResult(BaseModel):
+    """Structured result of ``rucio_get_rse_limits``."""
+
+    rse: str
+    limits: dict[str, Any]
+
+
+class RucioGetRseProtocolsResult(BaseModel):
+    """Structured result of ``rucio_get_rse_protocols``."""
+
+    rse: str
+    protocols: list[dict[str, Any]]
+
+
+class RucioGetDistanceResult(BaseModel):
+    """Structured result of ``rucio_get_distance``."""
+
+    source: str
+    destination: str
+    distances: list[dict[str, Any]]
+
+
+class RucioListTransferLimitsResult(BaseModel):
+    """Structured result of ``rucio_list_transfer_limits``."""
+
+    limits: list[dict[str, Any]]
+    offset: int
+    limit: int
+    truncated: bool
+
+
 def register(mcp: MCPServer) -> None:
     """Register RSE tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List RSEs", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_list_rses(
         rse_expression: str = "",
         limit: int = 100,
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListRsesResult]:
         """List Rucio Storage Elements (RSEs) matching an expression.
 
         RSEs are the storage sites where data physically resides. Without a
@@ -54,23 +122,47 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not results:
-            return "No RSEs found."
+            return CallToolResult(
+                content=[TextContent(type="text", text="No RSEs found.")],
+                structured_content=RucioListRsesResult(
+                    rse_expression=rse_expression,
+                    rses=[],
+                    offset=offset,
+                    limit=limit,
+                    truncated=False,
+                ).model_dump(mode="json"),
+            )
 
-        lines = "\n".join(f"- `{r['rse']}`" for r in results if isinstance(r, dict))
+        rse_names = [r["rse"] for r in results if isinstance(r, dict)]
+        lines = "\n".join(f"- `{name}`" for name in rse_names)
         hints = build_hints(
             [
                 "Use `rucio_list_rse_attributes <rse>` to see RSE properties (type, tier, country)",
                 "Use `rucio_get_rse_usage <rse>` to check storage capacity",
             ]
         )
-        return lines + footer + hints
+        payload = RucioListRsesResult(
+            rse_expression=rse_expression,
+            rses=rse_names,
+            offset=offset,
+            limit=limit,
+            truncated=bool(footer),
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=lines + footer + hints)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List RSE attributes", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_list_rse_attributes(
         rse: str,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListRseAttributesResult]:
         """List the attributes (key-value pairs) of a specific RSE.
 
         RSE attributes describe properties like type (DISK/TAPE), tier,
@@ -88,14 +180,22 @@ def register(mcp: MCPServer) -> None:
         hints = build_hints(
             [f"Use `rucio_get_rse_usage {rse}` to check storage capacity"]
         )
-        return format_dict(result) + hints
+        payload = RucioListRseAttributesResult(rse=rse, attributes=result)
+        return CallToolResult(
+            content=[TextContent(type="text", text=format_dict(result) + hints)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Show RSE storage usage", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_get_rse_usage(
         rse: str,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioGetRseUsageResult]:
         """Show total, used, and free storage space for an RSE.
 
         Args:
@@ -112,19 +212,28 @@ def register(mcp: MCPServer) -> None:
                 f"Use `rucio_list_rse_attributes {rse}` to see RSE properties (type, tier, country)"
             ]
         )
-        return (
+        text = (
             format_list(
                 results, include_keys=_RSE_USAGE_KEYS, byte_keys=_RSE_USAGE_BYTE_KEYS
             )
             + hints
         )
+        payload = RucioGetRseUsageResult(rse=rse, usage=results)
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Show RSE details", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_get_rse(
         rse: str,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioGetRseResult]:
         """Show detailed information about a specific RSE.
 
         Returns RSE type, deterministic flag, volatile flag, and other
@@ -145,14 +254,22 @@ def register(mcp: MCPServer) -> None:
                 f"Use `rucio_get_rse_usage {rse}` to check storage capacity",
             ]
         )
-        return format_dict(result) + hints
+        payload = RucioGetRseResult(rse=rse, details=result)
+        return CallToolResult(
+            content=[TextContent(type="text", text=format_dict(result) + hints)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Show RSE space limits", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_get_rse_limits(
         rse: str,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioGetRseLimitsResult]:
         """Show the configured space limits for an RSE.
 
         Returns limit entries such as ``MaxBeingDeletedFiles`` and
@@ -170,19 +287,36 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not result:
-            return "No limits configured for this RSE."
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text="No limits configured for this RSE.")
+                ],
+                structured_content=RucioGetRseLimitsResult(
+                    rse=rse, limits={}
+                ).model_dump(mode="json"),
+            )
 
         hints = build_hints(
             [f"Use `rucio_get_rse_usage {rse}` to check current space consumption"]
         )
-        return format_dict(result) + hints
+        payload = RucioGetRseLimitsResult(rse=rse, limits=result)
+        return CallToolResult(
+            content=[TextContent(type="text", text=format_dict(result) + hints)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List RSE transfer protocols",
+            read_only_hint=True,
+            open_world_hint=True,
+        )
+    )
     async def rucio_get_rse_protocols(
         rse: str,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioGetRseProtocolsResult]:
         """List the transfer protocols supported by an RSE.
 
         Returns protocol details including scheme (root, https, srm), hostname,
@@ -200,19 +334,37 @@ def register(mcp: MCPServer) -> None:
         hints = build_hints(
             [f"Use `rucio_list_rse_attributes {rse}` to see RSE properties"]
         )
+        # Different rucio-clients versions return either a dict wrapping a
+        # "protocols" list, or a bare list of protocol dicts -- normalize
+        # both shapes into a flat list for structured_content.
         if isinstance(result, dict):
-            return format_dict(result) + hints
-        if isinstance(result, list):
-            return format_list(result) + hints
-        return str(result) + hints
+            text = format_dict(result) + hints
+            protocols = result.get("protocols", [])
+        elif isinstance(result, list):
+            text = format_list(result) + hints
+            protocols = result
+        else:
+            text = str(result) + hints
+            protocols = []
+        payload = RucioGetRseProtocolsResult(rse=rse, protocols=protocols)
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Show distance between RSEs",
+            read_only_hint=True,
+            open_world_hint=True,
+        )
+    )
     async def rucio_get_distance(
         source: str,
         destination: str,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioGetDistanceResult]:
         """Show the network distance (ranking) between two RSEs.
 
         The distance ranking is used by Rucio's transfer scheduler to prefer
@@ -229,18 +381,40 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not results:
-            return f"No distance information found between {source} and {destination}."
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text=f"No distance information found between {source} and {destination}.",
+                    )
+                ],
+                structured_content=RucioGetDistanceResult(
+                    source=source, destination=destination, distances=[]
+                ).model_dump(mode="json"),
+            )
 
         hints = build_hints(["Use `rucio_list_rses` to find valid RSE names"])
-        return format_list(results) + hints
+        payload = RucioGetDistanceResult(
+            source=source, destination=destination, distances=results
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=format_list(results) + hints)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List transfer limit policies",
+            read_only_hint=True,
+            open_world_hint=True,
+        )
+    )
     async def rucio_list_transfer_limits(
         limit: int = 100,
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListTransferLimitsResult]:
         """List global transfer limit policies.
 
         Returns the transfer limit entries that constrain concurrent transfers
@@ -258,7 +432,21 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not results:
-            return "No transfer limits configured."
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text="No transfer limits configured.")
+                ],
+                structured_content=RucioListTransferLimitsResult(
+                    limits=[], offset=offset, limit=limit, truncated=False
+                ).model_dump(mode="json"),
+            )
 
         hints = build_hints(["Use `rucio_list_rses` to look up RSE details"])
-        return format_list(results) + footer + hints
+        text = format_list(results) + footer + hints
+        payload = RucioListTransferLimitsResult(
+            limits=results, offset=offset, limit=limit, truncated=bool(footer)
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
