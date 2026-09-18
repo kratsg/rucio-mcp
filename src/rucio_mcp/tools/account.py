@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from mcp.server.mcpserver import Context, MCPServer  # noqa: TC002
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from pydantic import BaseModel
 
 from rucio_mcp.tools._helpers import (
     build_hints,
@@ -20,10 +22,67 @@ _USAGE_KEYS = ["rse", "bytes", "bytes_limit", "bytes_remaining", "files"]
 _USAGE_BYTE_KEYS = frozenset({"bytes", "bytes_limit", "bytes_remaining"})
 
 
+class RucioGetLocalAccountUsageResult(BaseModel):
+    """Structured result of ``rucio_get_local_account_usage``."""
+
+    account: str
+    rse: str
+    hide_zero: bool
+    usage: list[dict[str, Any]]
+    offset: int
+    limit: int
+    truncated: bool
+
+
+class RucioGetLocalAccountLimitsResult(BaseModel):
+    """Structured result of ``rucio_get_local_account_limits``."""
+
+    account: str
+    rse_expression: str
+    limits: dict[str, Any]
+
+
+class RucioListAccountsResult(BaseModel):
+    """Structured result of ``rucio_list_accounts``."""
+
+    account_type: str
+    identity: str
+    accounts: list[dict[str, Any]]
+    offset: int
+    limit: int
+    truncated: bool
+
+
+class RucioGetAccountResult(BaseModel):
+    """Structured result of ``rucio_get_account``."""
+
+    account: str | None = None
+    type: str | None = None
+    status: str | None = None
+    email: str | None = None
+    created_at: str | None = None
+
+
+class RucioListAccountRulesResult(BaseModel):
+    """Structured result of ``rucio_list_account_rules``."""
+
+    account: str
+    rules: list[dict[str, Any]]
+    offset: int
+    limit: int
+    truncated: bool
+
+
 def register(mcp: MCPServer) -> None:
     """Register account tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Show account storage usage",
+            read_only_hint=True,
+            open_world_hint=True,
+        )
+    )
     async def rucio_get_local_account_usage(
         account: str = "",
         rse: str = "",
@@ -32,7 +91,7 @@ def register(mcp: MCPServer) -> None:
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioGetLocalAccountUsageResult]:
         """Show how much storage an account is using at each RSE.
 
         Returns bytes used, bytes limit, and number of files per RSE.
@@ -67,25 +126,53 @@ def register(mcp: MCPServer) -> None:
             ]
 
         if not results:
-            return "No account usage found."
+            return CallToolResult(
+                content=[TextContent(type="text", text="No account usage found.")],
+                structured_content=RucioGetLocalAccountUsageResult(
+                    account=effective_account,
+                    rse=rse,
+                    hide_zero=hide_zero,
+                    usage=[],
+                    offset=offset,
+                    limit=limit,
+                    truncated=False,
+                ).model_dump(mode="json"),
+            )
 
         page, footer = paginate_iter(iter(results), limit=limit, offset=offset)
         hints = build_hints(
             ["Use `rucio_get_local_account_limits` to see your full quota allocations"]
         )
-        return (
+        text = (
             format_list(page, include_keys=_USAGE_KEYS, byte_keys=_USAGE_BYTE_KEYS)
             + footer
             + hints
         )
+        payload = RucioGetLocalAccountUsageResult(
+            account=effective_account,
+            rse=rse,
+            hide_zero=hide_zero,
+            usage=page,
+            offset=offset,
+            limit=limit,
+            truncated=bool(footer),
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Show account quota limits", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_get_local_account_limits(
         account: str = "",
         rse_expression: str = "",
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioGetLocalAccountLimitsResult]:
         """Show the storage quota limits for an account.
 
         Returns the byte limit set for the account at each RSE or group of RSEs
@@ -123,9 +210,20 @@ def register(mcp: MCPServer) -> None:
         hints = build_hints(
             ["Use `rucio_get_local_account_usage` to see actual storage consumption"]
         )
-        return format_dict(rendered, byte_keys=frozenset()) + hints
+        text = format_dict(rendered, byte_keys=frozenset()) + hints
+        payload = RucioGetLocalAccountLimitsResult(
+            account=effective_account, rse_expression=rse_expression, limits=result
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List accounts", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_list_accounts(
         account_type: str = "",
         identity: str = "",
@@ -133,7 +231,7 @@ def register(mcp: MCPServer) -> None:
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListAccountsResult]:
         """List Rucio accounts, optionally filtered by type or identity.
 
         Args:
@@ -154,19 +252,45 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not results:
-            return "No accounts found."
+            return CallToolResult(
+                content=[TextContent(type="text", text="No accounts found.")],
+                structured_content=RucioListAccountsResult(
+                    account_type=account_type,
+                    identity=identity,
+                    accounts=[],
+                    offset=offset,
+                    limit=limit,
+                    truncated=False,
+                ).model_dump(mode="json"),
+            )
 
         hints = build_hints(
             ["Use `rucio_get_account <account>` to see details for a specific account"]
         )
-        return format_list(results) + footer + hints
+        text = format_list(results) + footer + hints
+        payload = RucioListAccountsResult(
+            account_type=account_type,
+            identity=identity,
+            accounts=results,
+            offset=offset,
+            limit=limit,
+            truncated=bool(footer),
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Show account details", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_get_account(
         account: str = "",
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioGetAccountResult]:
         """Show detailed information about a Rucio account.
 
         Returns account type, status, email, and creation date.
@@ -187,16 +311,32 @@ def register(mcp: MCPServer) -> None:
                 f"Use `rucio_list_account_rules {effective_account}` to see replication rules",
             ]
         )
-        return format_dict(result) + hints
+        payload = RucioGetAccountResult(
+            account=result.get("account"),
+            type=result.get("type"),
+            status=result.get("status"),
+            email=result.get("email"),
+            created_at=result.get("created_at"),
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=format_dict(result) + hints)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List account replication rules",
+            read_only_hint=True,
+            open_world_hint=True,
+        )
+    )
     async def rucio_list_account_rules(
         account: str = "",
         limit: int = 50,
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListAccountRulesResult]:
         """List all replication rules owned by an account.
 
         Returns rules across all DIDs for the given account. Defaults to the
@@ -216,11 +356,31 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not results:
-            return "No replication rules found."
+            return CallToolResult(
+                content=[TextContent(type="text", text="No replication rules found.")],
+                structured_content=RucioListAccountRulesResult(
+                    account=effective_account,
+                    rules=[],
+                    offset=offset,
+                    limit=limit,
+                    truncated=False,
+                ).model_dump(mode="json"),
+            )
 
         hints = build_hints(
             [
                 "Use `rucio_get_replication_rule <rule_id>` to see full details of a specific rule"
             ]
         )
-        return format_list(results) + footer + hints
+        text = format_list(results) + footer + hints
+        payload = RucioListAccountRulesResult(
+            account=effective_account,
+            rules=results,
+            offset=offset,
+            limit=limit,
+            truncated=bool(footer),
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
