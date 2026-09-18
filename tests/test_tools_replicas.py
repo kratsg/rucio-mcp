@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from mcp.server.mcpserver import MCPServer
@@ -13,20 +13,56 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Iterator
     from unittest.mock import MagicMock
 
+    from mcp.types import CallToolResult
+
 
 @pytest.fixture
-def registered_tools() -> dict[str, Callable[..., Awaitable[str]]]:
+def replica_tools() -> dict[str, Any]:
     mcp = MCPServer("test")
     register(mcp)
-    return {tool.name: tool.fn for tool in mcp._tool_manager.list_tools()}
+    return {tool.name: tool for tool in mcp._tool_manager.list_tools()}
+
+
+@pytest.fixture
+def registered_tools(
+    replica_tools: dict[str, Any],
+) -> dict[str, Callable[..., Awaitable[CallToolResult]]]:
+    return {name: tool.fn for name, tool in replica_tools.items()}
+
+
+class TestReplicaToolsRegistration:
+    def test_declares_read_only_annotations(
+        self, replica_tools: dict[str, Any]
+    ) -> None:
+        for tool in replica_tools.values():
+            assert tool.annotations is not None, tool.name
+            assert tool.annotations.read_only_hint is True, tool.name
+            assert tool.annotations.open_world_hint is True, tool.name
+
+    def test_publishes_output_schemas(self, replica_tools: dict[str, Any]) -> None:
+        assert (
+            "replicas"
+            in replica_tools["rucio_list_replicas"].output_schema["properties"]
+        )
+        assert (
+            "replicas"
+            in replica_tools["rucio_list_container_replicas"].output_schema[
+                "properties"
+            ]
+        )
+        assert (
+            "replicas"
+            in replica_tools["rucio_list_dataset_replicas"].output_schema["properties"]
+        )
 
 
 class TestRucioListReplicas:
     async def test_returns_replicas(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_replicas.return_value = iter(
             [
@@ -44,12 +80,12 @@ class TestRucioListReplicas:
         )
         fn = registered_tools["rucio_list_replicas"]
         result = await fn("mc16_13TeV:file1.pool.root", ctx=mock_ctx)
-        assert "CERN-PROD_DATADISK" in result
-        assert "eosatlas.cern.ch" in result
+        assert "CERN-PROD_DATADISK" in tool_text(result)
+        assert "eosatlas.cern.ch" in tool_text(result)
 
     async def test_passes_multiple_dids(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -62,7 +98,7 @@ class TestRucioListReplicas:
 
     async def test_protocol_filter(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -74,7 +110,7 @@ class TestRucioListReplicas:
 
     async def test_all_states_maps_to_all_states_kwarg(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -89,7 +125,7 @@ class TestRucioListReplicas:
 
     async def test_all_states_default_false(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -102,29 +138,32 @@ class TestRucioListReplicas:
 
     async def test_invalid_did(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_list_replicas"]
         result = await fn("a:b:c", ctx=mock_ctx)
-        assert "Cannot extract scope" in result
+        assert "Cannot extract scope" in tool_text(result)
 
     async def test_no_replicas(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_replicas.return_value = iter([])
         fn = registered_tools["rucio_list_replicas"]
         result = await fn("mc16_13TeV:file1", ctx=mock_ctx)
-        assert "No replicas" in result
+        assert "No replicas" in tool_text(result)
 
     async def test_returns_markdown_format(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_replicas.return_value = iter(
             [
@@ -142,16 +181,17 @@ class TestRucioListReplicas:
         )
         fn = registered_tools["rucio_list_replicas"]
         result = await fn("mc16_13TeV:file1.pool.root", ctx=mock_ctx)
-        assert "### `mc16_13TeV:file1.pool.root`" in result
-        assert "- **CERN-PROD_DATADISK:**" in result
+        assert "### `mc16_13TeV:file1.pool.root`" in tool_text(result)
+        assert "- **CERN-PROD_DATADISK:**" in tool_text(result)
 
 
 class TestRucioListDatasetReplicas:
     async def test_returns_replicas(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_dataset_replicas.return_value = iter(
             [
@@ -165,22 +205,23 @@ class TestRucioListDatasetReplicas:
         )
         fn = registered_tools["rucio_list_dataset_replicas"]
         result = await fn("mc16_13TeV:some.dataset", ctx=mock_ctx)
-        assert "CERN-PROD_DATADISK" in result
+        assert "CERN-PROD_DATADISK" in tool_text(result)
 
     async def test_no_replicas(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_dataset_replicas.return_value = iter([])
         fn = registered_tools["rucio_list_dataset_replicas"]
         result = await fn("mc16_13TeV:nonexistent", ctx=mock_ctx)
-        assert "No dataset replicas" in result
+        assert "No dataset replicas" in tool_text(result)
 
     async def test_does_not_walk_container_children(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -193,7 +234,7 @@ class TestRucioListDatasetReplicas:
 
     async def test_does_not_materialize_full_iterator(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:
@@ -216,9 +257,10 @@ class TestRucioListDatasetReplicas:
 class TestRucioListContainerReplicas:
     async def test_walks_children_and_aggregates_replicas(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         """Container DID is walked via list_content; child dataset replicas are aggregated."""
         child_name = (
@@ -242,25 +284,27 @@ class TestRucioListContainerReplicas:
             "mc16_13TeV:mc16_13TeV.538179.MGPy8EG.deriv.DAOD_SUSY5.e8545_p4172",
             ctx=mock_ctx,
         )
-        assert "IN2P3-LAPP-DCACHE_DATADISK" in result
-        assert "AVAILABLE" in result
+        assert "IN2P3-LAPP-DCACHE_DATADISK" in tool_text(result)
+        assert "AVAILABLE" in tool_text(result)
 
     async def test_no_children(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_content.return_value = iter([])
         fn = registered_tools["rucio_list_container_replicas"]
         result = await fn("mc16_13TeV:some.container", ctx=mock_ctx)
-        assert "No" in result
+        assert "No" in tool_text(result)
 
     async def test_children_with_no_replicas(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_content.return_value = iter(
             [{"scope": "mc16_13TeV", "name": "child_ds", "type": "DATASET"}]
@@ -268,33 +312,36 @@ class TestRucioListContainerReplicas:
         mock_rucio_client.list_dataset_replicas.return_value = iter([])
         fn = registered_tools["rucio_list_container_replicas"]
         result = await fn("mc16_13TeV:some.container", ctx=mock_ctx)
-        assert "No" in result
+        assert "No" in tool_text(result)
 
     async def test_invalid_did(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         fn = registered_tools["rucio_list_container_replicas"]
         result = await fn("a:b:c", ctx=mock_ctx)
-        assert "Cannot extract scope" in result
+        assert "Cannot extract scope" in tool_text(result)
 
     async def test_client_error(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_content.side_effect = RuntimeError("server error")
         fn = registered_tools["rucio_list_container_replicas"]
         result = await fn("mc16_13TeV:some.container", ctx=mock_ctx)
-        assert "Error" in result
+        assert "Error" in tool_text(result)
 
     async def test_includes_hints(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
+        tool_text: Callable[[CallToolResult], str],
     ) -> None:
         mock_rucio_client.list_content.return_value = iter(
             [{"scope": "mc16_13TeV", "name": "child_ds", "type": "DATASET"}]
@@ -311,11 +358,11 @@ class TestRucioListContainerReplicas:
         )
         fn = registered_tools["rucio_list_container_replicas"]
         result = await fn("mc16_13TeV:some.container", ctx=mock_ctx)
-        assert "rucio_list_did_rules" in result
+        assert "rucio_list_did_rules" in tool_text(result)
 
     async def test_stops_early_once_page_is_filled(
         self,
-        registered_tools: dict[str, Callable[..., Awaitable[str]]],
+        registered_tools: dict[str, Callable[..., Awaitable[CallToolResult]]],
         mock_ctx: MagicMock,
         mock_rucio_client: MagicMock,
     ) -> None:

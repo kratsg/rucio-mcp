@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any
 
 from mcp.server.mcpserver import Context, MCPServer  # noqa: TC002
+from mcp.types import CallToolResult, TextContent, ToolAnnotations
+from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -12,6 +14,7 @@ if TYPE_CHECKING:
 from rucio_mcp.tools._helpers import (
     build_hints,
     classify_error,
+    error_result,
     format_list,
     get_rucio_client,
     paginate_iter,
@@ -20,6 +23,36 @@ from rucio_mcp.tools._helpers import (
 
 _DATASET_REPLICA_KEYS = ["rse", "available_bytes", "available_length", "state"]
 _DATASET_REPLICA_BYTE_KEYS = frozenset({"available_bytes"})
+
+
+class RucioListReplicasResult(BaseModel):
+    """Structured result of ``rucio_list_replicas``."""
+
+    dids: list[str]
+    replicas: list[dict[str, Any]]
+    offset: int
+    limit: int
+    truncated: bool
+
+
+class RucioListContainerReplicasResult(BaseModel):
+    """Structured result of ``rucio_list_container_replicas``."""
+
+    did: str
+    replicas: list[dict[str, Any]]
+    offset: int
+    limit: int
+    truncated: bool
+
+
+class RucioListDatasetReplicasResult(BaseModel):
+    """Structured result of ``rucio_list_dataset_replicas``."""
+
+    did: str
+    replicas: list[dict[str, Any]]
+    offset: int
+    limit: int
+    truncated: bool
 
 
 def _format_file_replicas(replicas: list[dict[str, Any]]) -> str:
@@ -49,7 +82,11 @@ def _format_file_replicas(replicas: list[dict[str, Any]]) -> str:
 def register(mcp: MCPServer) -> None:
     """Register replica tools with the MCP server."""
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List file replicas", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_list_replicas(
         dids: str,
         protocols: str = "",
@@ -60,7 +97,7 @@ def register(mcp: MCPServer) -> None:
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListReplicasResult]:
         """List physical replica locations (PFNs) for files in a DID.
 
         Returns the physical file names (PFNs) for each file, grouped by RSE.
@@ -88,7 +125,7 @@ def register(mcp: MCPServer) -> None:
             try:
                 scope, name = parse_did(did)
             except ValueError as exc:
-                return str(exc)
+                return error_result(str(exc))
             parsed.append({"scope": scope, "name": name})
 
         kwargs: dict[str, Any] = {"all_states": all_states}
@@ -107,14 +144,38 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not results:
-            return "No replicas found."
+            return CallToolResult(
+                content=[TextContent(type="text", text="No replicas found.")],
+                structured_content=RucioListReplicasResult(
+                    dids=did_list,
+                    replicas=[],
+                    offset=offset,
+                    limit=limit,
+                    truncated=False,
+                ).model_dump(mode="json"),
+            )
 
         hints = build_hints(
             ["Use `rucio_list_dataset_replicas <did>` for a summary view per RSE"]
         )
-        return _format_file_replicas(results) + footer + hints
+        text = _format_file_replicas(results) + footer + hints
+        payload = RucioListReplicasResult(
+            dids=did_list,
+            replicas=results,
+            offset=offset,
+            limit=limit,
+            truncated=bool(footer),
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List container replicas", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_list_container_replicas(
         did: str,
         deep: bool = False,
@@ -122,7 +183,7 @@ def register(mcp: MCPServer) -> None:
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListContainerReplicasResult]:
         """Show dataset-level replica availability for all datasets in a container.
 
         Walks the immediate children of a container DID and aggregates
@@ -140,7 +201,7 @@ def register(mcp: MCPServer) -> None:
         try:
             scope, name = parse_did(did)
         except ValueError as exc:
-            return str(exc)
+            return error_result(str(exc))
 
         client = get_rucio_client(ctx)
 
@@ -162,7 +223,17 @@ def register(mcp: MCPServer) -> None:
             return classify_error(exc)
 
         if not page:
-            return "No dataset replicas found for container children."
+            return CallToolResult(
+                content=[
+                    TextContent(
+                        type="text",
+                        text="No dataset replicas found for container children.",
+                    )
+                ],
+                structured_content=RucioListContainerReplicasResult(
+                    did=did, replicas=[], offset=offset, limit=limit, truncated=False
+                ).model_dump(mode="json"),
+            )
 
         hints = build_hints(
             [
@@ -170,7 +241,7 @@ def register(mcp: MCPServer) -> None:
                 f"Use `rucio_list_did_rules {did}` to see replication rules",
             ]
         )
-        return (
+        text = (
             format_list(
                 page,
                 include_keys=_DATASET_REPLICA_KEYS,
@@ -179,8 +250,19 @@ def register(mcp: MCPServer) -> None:
             + footer
             + hints
         )
+        payload = RucioListContainerReplicasResult(
+            did=did, replicas=page, offset=offset, limit=limit, truncated=bool(footer)
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
+        )
 
-    @mcp.tool()
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="List dataset replicas", read_only_hint=True, open_world_hint=True
+        )
+    )
     async def rucio_list_dataset_replicas(
         did: str,
         deep: bool = False,
@@ -188,7 +270,7 @@ def register(mcp: MCPServer) -> None:
         offset: int = 0,
         *,
         ctx: Context[Any, Any],
-    ) -> str:
+    ) -> Annotated[CallToolResult, RucioListDatasetReplicasResult]:
         """Show dataset-level replica availability across RSEs.
 
         Returns a summary of how much of the dataset is available at each
@@ -205,7 +287,7 @@ def register(mcp: MCPServer) -> None:
         try:
             scope, name = parse_did(did)
         except ValueError as exc:
-            return str(exc)
+            return error_result(str(exc))
 
         client = get_rucio_client(ctx)
         try:
@@ -220,7 +302,14 @@ def register(mcp: MCPServer) -> None:
                     f"If {did} is a container DID, use `rucio_list_container_replicas {did}` instead",
                 ]
             )
-            return "No dataset replicas found." + hints
+            return CallToolResult(
+                content=[
+                    TextContent(type="text", text="No dataset replicas found." + hints)
+                ],
+                structured_content=RucioListDatasetReplicasResult(
+                    did=did, replicas=[], offset=offset, limit=limit, truncated=False
+                ).model_dump(mode="json"),
+            )
 
         hints = build_hints(
             [
@@ -232,7 +321,7 @@ def register(mcp: MCPServer) -> None:
                 ),
             ]
         )
-        return (
+        text = (
             format_list(
                 page,
                 include_keys=_DATASET_REPLICA_KEYS,
@@ -240,4 +329,11 @@ def register(mcp: MCPServer) -> None:
             )
             + footer
             + hints
+        )
+        payload = RucioListDatasetReplicasResult(
+            did=did, replicas=page, offset=offset, limit=limit, truncated=bool(footer)
+        )
+        return CallToolResult(
+            content=[TextContent(type="text", text=text)],
+            structured_content=payload.model_dump(mode="json"),
         )
