@@ -59,7 +59,7 @@ def main() -> None:
         metavar="SITE",
         default=None,
         help=(
-            "Site preset to use (e.g. atlas, cms, dune, escape). "
+            "Site preset to use (e.g. atlas, cms, dune, escape, belleii). "
             "May be repeated for HTTP transport to mount multiple sites. "
             "Defaults to escape. Use --auth-type x509 for x509 proxy auth."
         ),
