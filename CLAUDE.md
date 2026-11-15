@@ -162,6 +162,7 @@ src/rucio_mcp/
 ├── metrics.py      # Prometheus metrics: HTTP counters (PrometheusMiddleware), tool-call counter +
 │                   # duration histogram (TOOL_CALLS / TOOL_CALL_DURATION), BridgeStatsCollector,
 │                   # start_metrics_server() — binds a dedicated port via prometheus_client.start_http_server
+├── observability.py # JSON logs, X-Request-ID binding + access line (RequestLogMiddleware), tool.call line (LoggingMCPServer)
 ├── nomenclature.py # load_nomenclature(resource) — loads per-site nomenclature markdown from data/
 ├── resources.py    # MCP resources; register(mcp, nomenclature_resource) wired in server.py
 ├── presets.py      # Preset dataclass (incl. nomenclature_resource); PRESETS dict (escape, atlas, cms, dune → *.cfg)
