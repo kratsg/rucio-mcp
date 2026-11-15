@@ -344,10 +344,10 @@ and `event` on every line. The verbosity is `--log-level`.
   and `duration_ms`. A successful `/healthz` probe writes none; a failing one
   does.
 - Each tool call writes one `tool.call` line with `tool`, `duration_ms` and
-  `outcome` (`ok` or `error`). In broker mode it also carries `subject`, the
-  verified token's `sub`; the OIDC bridge's bearer is an opaque Rucio session
-  token, so there is no subject. Tokens, tool arguments and tool results are
-  never logged.
+  `outcome` (`success` or `error`). In broker mode it also carries `subject`,
+  the verified token's `sub`; the OIDC bridge's bearer is an opaque Rucio
+  session token, so there is no subject. Tokens, tool arguments and tool results
+  are never logged.
 
 Stdio transport keeps stdout for the MCP protocol and writes no JSON lines.
 
