@@ -185,13 +185,13 @@ class TestLoggingMCPServer:
 
         return mcp
 
-    async def test_successful_call_is_an_ok_line(self, json_log: JsonLog) -> None:
+    async def test_successful_call_is_a_success_line(self, json_log: JsonLog) -> None:
         await self._server().call_tool("fine", {"secret": "s3cret"})
 
         (line,) = json_log.lines()
         assert line["event"] == "tool.call"
         assert line["tool"] == "fine"
-        assert line["outcome"] == "ok"
+        assert line["outcome"] == "success"
         assert line["duration_ms"] >= 0
 
     async def test_error_result_is_an_error_line(self, json_log: JsonLog) -> None:

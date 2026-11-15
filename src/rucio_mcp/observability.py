@@ -140,7 +140,7 @@ class LoggingMCPServer(MCPServer):
         started = time.perf_counter()
         try:
             result = await super().call_tool(name, arguments, context)
-            outcome = "error" if getattr(result, "is_error", False) else "ok"
+            outcome = "error" if getattr(result, "is_error", False) else "success"
         finally:
             fields: dict[str, Any] = {
                 "tool": name,
