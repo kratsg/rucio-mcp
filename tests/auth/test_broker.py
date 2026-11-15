@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from tempfile import mkstemp
 from unittest.mock import MagicMock, patch
@@ -57,8 +57,11 @@ def _make_jwt(payload: dict[str, object]) -> str:
     return f"{_b64url({'alg': 'RS256'})}.{_b64url(payload)}.sig"
 
 
+_VOMS_ATTRIBUTES = ["/atlas/Role=NULL/Capability=NULL"]
+
+
 def _utc_soon() -> datetime:
-    return datetime.now(tz=timezone.utc) + timedelta(hours=1)
+    return datetime.now(tz=UTC) + timedelta(hours=1)
 
 
 class _FakeProxyClient:
@@ -76,7 +79,11 @@ class _FakeProxyClient:
         path.write_text("FAKE PEM")
         self.created_paths.append(path)
         return ProxyHandle(
-            path=path, dn="/CN=test", expires_at=_utc_soon(), nickname=None
+            path=path,
+            dn="/CN=test",
+            expires_at=_utc_soon(),
+            nickname=None,
+            voms_attributes=_VOMS_ATTRIBUTES,
         )
 
 
@@ -105,7 +112,11 @@ class _NicknameProxyClient:
         path.write_text("FAKE PEM")
         self.created_paths.append(path)
         return ProxyHandle(
-            path=path, dn="/CN=test", expires_at=_utc_soon(), nickname=self._nickname
+            path=path,
+            dn="/CN=test",
+            expires_at=_utc_soon(),
+            nickname=self._nickname,
+            voms_attributes=_VOMS_ATTRIBUTES,
         )
 
 

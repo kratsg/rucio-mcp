@@ -385,6 +385,10 @@ def _make_site_mcp(
         auth=AuthSettings(
             issuer_url=AnyHttpUrl(resource_url),
             resource_server_url=AnyHttpUrl(resource_url),
+            # The bridge's rucio session tokens carry no RFC 8707 resource
+            # indicator, so there is nothing to compare against
+            # ``resource_server_url``; mcp >=2.3 warns unless this is explicit.
+            validate_token_resource=False,
             # DCR disabled: this server authenticates clients via CIMD (Client ID
             # Metadata Documents) only — no /register endpoint, no per-client
             # registry.  See https://github.com/kratsg/rucio-mcp/issues/33.

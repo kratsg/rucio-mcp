@@ -13,7 +13,7 @@ af-credentials = "0d"
 rucio-mcp = { path = "./" }
 # Broker-mode client library (its [mcp] extra's mcp dependency is already a
 # direct dependency of rucio-mcp itself)
-af-credentials = ">=0.2.0"
+af-credentials = ">=0.3.2"
 
 [package]
 name = "rucio-mcp"
@@ -37,9 +37,6 @@ prometheus_client = ">=0.20"
 ca-policy-lcg = "*"
 voms = "*"
 voms-lsc = "*"
-
-[feature.py310.dependencies]
-python = "<3.11,>=3.10"
 
 [feature.py311.dependencies]
 python = "<3.12,>=3.11"
@@ -113,7 +110,6 @@ build-check = { cmd = "twine check --strict ./dist/*", depends-on = ["build"], d
 docs = ["docs"]
 dev = ["dev"]
 helm = { features = ["helm"], no-default-feature = true }
-py310 = ["test", "py310"]
 py311 = ["test", "py311"]
 py312 = ["test", "py312"]
 py313 = ["test", "py313"]

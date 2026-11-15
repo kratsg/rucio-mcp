@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-import datetime
+import datetime as dt
 import json as _json
 from typing import Annotated, Any
 
@@ -167,15 +167,13 @@ def register(mcp: MCPServer, *, transport: str = "stdio") -> None:
             except Exception as exc:  # noqa: BLE001
                 return error_result(f"Error: could not decode JWT payload: {exc}")
 
-            now = datetime.datetime.now(tz=datetime.timezone.utc)
+            now = dt.datetime.now(tz=dt.UTC)
             lines: list[str] = []
             expires_at: str | None = None
             expired: bool | None = None
             issued_at: str | None = None
             if "exp" in jwt_payload:
-                exp_dt = datetime.datetime.fromtimestamp(
-                    jwt_payload["exp"], tz=datetime.timezone.utc
-                )
+                exp_dt = dt.datetime.fromtimestamp(jwt_payload["exp"], tz=dt.UTC)
                 expires_at = exp_dt.isoformat()
                 remaining = exp_dt - now
                 secs = int(remaining.total_seconds())
@@ -189,9 +187,7 @@ def register(mcp: MCPServer, *, transport: str = "stdio") -> None:
                     expired = True
                     lines.append(f"- **expires_at:** {expires_at} **(EXPIRED)**")
             if "iat" in jwt_payload:
-                iat_dt = datetime.datetime.fromtimestamp(
-                    jwt_payload["iat"], tz=datetime.timezone.utc
-                )
+                iat_dt = dt.datetime.fromtimestamp(jwt_payload["iat"], tz=dt.UTC)
                 issued_at = iat_dt.isoformat()
                 lines.append(f"- **issued_at:** {issued_at}")
             if "sub" in jwt_payload:
