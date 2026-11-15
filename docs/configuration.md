@@ -331,4 +331,24 @@ this repository:
 
 To run any HTTP mode on Kubernetes, see [Deploying with Helm](helm.md).
 
+## Logging
+
+Over HTTP transport (OIDC bridge, shared-secret and broker modes) the server
+writes one JSON object per line to stdout, with `timestamp`, `level`, `logger`
+and `event` on every line. The verbosity is `--log-level`.
+
+- Every line written while serving a request carries `request_id`, taken from
+  the `X-Request-ID` header the AF MCP broker sends (generated when absent, as
+  in the OIDC bridge mode, which is not reached through the broker).
+- Each request writes one `http.request` line with `method`, `path`, `status`
+  and `duration_ms`. A successful `/healthz` probe writes none; a failing one
+  does.
+- Each tool call writes one `tool.call` line with `tool`, `duration_ms` and
+  `outcome` (`ok` or `error`). In broker mode it also carries `subject`, the
+  verified token's `sub`; the OIDC bridge's bearer is an opaque Rucio session
+  token, so there is no subject. Tokens, tool arguments and tool results are
+  never logged.
+
+Stdio transport keeps stdout for the MCP protocol and writes no JSON lines.
+
 --8<-- "README.md:read-only"

@@ -24,11 +24,11 @@ import uvicorn
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, MutableMapping
 
+    from mcp.server.mcpserver import MCPServer
     from starlette.requests import Request
     from starlette.types import ASGIApp
 
 from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
-from mcp.server.mcpserver import MCPServer
 from pydantic import AnyHttpUrl
 from rucio.client import Client
 from starlette.applications import Starlette
@@ -55,6 +55,11 @@ from rucio_mcp.metrics import (
     PrometheusMiddleware,
     current_tool_labels,
     start_metrics_server,
+)
+from rucio_mcp.observability import (
+    LoggingMCPServer,
+    RequestLogMiddleware,
+    configure_logging,
 )
 from rucio_mcp.presets import PRESETS, Preset
 from rucio_mcp.resources import register as register_resources
@@ -119,7 +124,7 @@ def _build_instructions(preset: Preset, *, transport: str = "stdio") -> str:
     return preamble
 
 
-class _InstrumentedFastMCP(MCPServer):
+class _InstrumentedFastMCP(LoggingMCPServer):
     """FastMCP subclass that records per-tool call count and duration."""
 
     def __init__(self, *args: Any, site_name: str, **kwargs: Any) -> None:
@@ -504,6 +509,7 @@ def _make_broker_mcp(
         site_name=site_name,
         instructions=_build_instructions(preset, transport="broker"),
         lifespan=_lifespan,
+        log_subject=True,
         token_verifier=verifier,
         auth=AuthSettings(
             issuer_url=AnyHttpUrl(resource_url),
@@ -647,6 +653,7 @@ def _wrap_single_site_app(
         routes=routes,
         lifespan=_combined_lifespan,
         middleware=[
+            Middleware(RequestLogMiddleware),
             Middleware(_SitePathNormalizerMiddleware, site_prefixes=site_prefixes),
             Middleware(
                 PrometheusMiddleware,
@@ -977,6 +984,7 @@ def _make_http_app(
         routes=routes,
         lifespan=_combined_lifespan,
         middleware=[
+            Middleware(RequestLogMiddleware),
             Middleware(_SitePathNormalizerMiddleware, site_prefixes=site_prefixes),
             Middleware(
                 PrometheusMiddleware,
@@ -996,6 +1004,28 @@ def _make_http_app(
     app.state.resource_url = resource_url
     app.state.read_only = read_only
     return app
+
+
+def _run_http(
+    app: Starlette,
+    *,
+    host: str,
+    port: int,
+    forwarded_allow_ips: str,
+    log_level: str,
+) -> None:
+    """Serve *app* with every log line, uvicorn's included, written as JSON."""
+    configure_logging(log_level)
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        proxy_headers=True,
+        forwarded_allow_ips=forwarded_allow_ips,
+        log_level=log_level,
+        access_log=False,  # RequestLogMiddleware writes the access line
+        log_config=None,  # uvicorn's own lines go through configure_logging
+    )
 
 
 def serve(
@@ -1103,11 +1133,10 @@ def serve(
             host=host,
         )
         start_metrics_server(metrics_port, {})
-        uvicorn.run(
+        _run_http(
             app,
             host=host,
             port=port,
-            proxy_headers=True,
             forwarded_allow_ips=forwarded_allow_ips,
             log_level=log_level,
         )
@@ -1136,11 +1165,10 @@ def serve(
             host=host,
         )
         start_metrics_server(metrics_port, {})
-        uvicorn.run(
+        _run_http(
             app,
             host=host,
             port=port,
-            proxy_headers=True,
             forwarded_allow_ips=forwarded_allow_ips,
             log_level=log_level,
         )
@@ -1177,11 +1205,10 @@ def serve(
         poll_timeout=poll_timeout,
     )
     start_metrics_server(metrics_port, app.state.bridge_stores)
-    uvicorn.run(
+    _run_http(
         app,
         host=host,
         port=port,
-        proxy_headers=True,
         forwarded_allow_ips=forwarded_allow_ips,
         log_level=log_level,
     )

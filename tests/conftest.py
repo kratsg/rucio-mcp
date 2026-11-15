@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import io
+import json
+import logging
 import os
 from importlib.resources import files as _pkg_files
 from pathlib import Path
@@ -10,6 +13,7 @@ import pytest
 from mcp.types import TextContent
 
 from rucio_mcp.auth.factory import EnvBasedClientFactory
+from rucio_mcp.observability import configure_logging
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator
@@ -54,6 +58,39 @@ def _rucio_config_env() -> Generator[None, None, None]:
         os.environ.pop("RUCIO_CONFIG", None)
     else:
         os.environ["RUCIO_CONFIG"] = old
+
+
+class JsonLog:
+    """Everything the root logger wrote as JSON lines since the last ``clear()``."""
+
+    def __init__(self) -> None:
+        self.stream = io.StringIO()
+
+    def lines(self) -> list[dict[str, Any]]:
+        """Parse each written line; a line that is not JSON fails the test.
+
+        The test client's own request log (loggers ``httpx`` and ``httpx2``)
+        is client-side chatter, not the server's output, so it is left out.
+        """
+        parsed = [json.loads(line) for line in self.stream.getvalue().splitlines()]
+        return [line for line in parsed if not line["logger"].startswith("httpx")]
+
+    def clear(self) -> None:
+        """Forget what has been written so far."""
+        self.stream.truncate(0)
+        self.stream.seek(0)
+
+
+@pytest.fixture
+def json_log() -> Generator[JsonLog, None, None]:
+    """Route the root logger to a buffer as JSON, restoring it afterwards."""
+    root = logging.getLogger()
+    handlers, level = root.handlers[:], root.level
+    log = JsonLog()
+    configure_logging("info", stream=log.stream)
+    yield log
+    root.handlers[:] = handlers
+    root.setLevel(level)
 
 
 @pytest.fixture
