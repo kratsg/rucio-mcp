@@ -295,7 +295,7 @@ class RucioBridgeProvider:
             self.store.mark_done(session_id, rucio_token=token, auth_code=auth_code)
             BRIDGE_AUTH.labels(site=self._site_name, outcome="success").inc()
             _log.info("Bridge session %s: authentication complete", session_id[:8])
-        except asyncio.TimeoutError:
+        except TimeoutError:
             _log.error("Bridge session %s: polling timed out", session_id[:8])
             self.store.mark_error(session_id, "polling timed out")
             BRIDGE_AUTH.labels(site=self._site_name, outcome="timeout").inc()

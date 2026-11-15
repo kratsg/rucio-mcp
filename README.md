@@ -60,7 +60,7 @@ pixi add rucio-mcp
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.11+
 - A configured Rucio environment (`rucio.cfg` and valid authentication)
 - For x509 proxy auth: a valid VOMS proxy (`voms-proxy-init -voms <VO>`)
 

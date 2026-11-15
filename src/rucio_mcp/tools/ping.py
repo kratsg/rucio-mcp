@@ -167,14 +167,14 @@ def register(mcp: MCPServer, *, transport: str = "stdio") -> None:
             except Exception as exc:  # noqa: BLE001
                 return error_result(f"Error: could not decode JWT payload: {exc}")
 
-            now = datetime.datetime.now(tz=datetime.timezone.utc)
+            now = datetime.datetime.now(tz=datetime.UTC)
             lines: list[str] = []
             expires_at: str | None = None
             expired: bool | None = None
             issued_at: str | None = None
             if "exp" in jwt_payload:
                 exp_dt = datetime.datetime.fromtimestamp(
-                    jwt_payload["exp"], tz=datetime.timezone.utc
+                    jwt_payload["exp"], tz=datetime.UTC
                 )
                 expires_at = exp_dt.isoformat()
                 remaining = exp_dt - now
@@ -190,7 +190,7 @@ def register(mcp: MCPServer, *, transport: str = "stdio") -> None:
                     lines.append(f"- **expires_at:** {expires_at} **(EXPIRED)**")
             if "iat" in jwt_payload:
                 iat_dt = datetime.datetime.fromtimestamp(
-                    jwt_payload["iat"], tz=datetime.timezone.utc
+                    jwt_payload["iat"], tz=datetime.UTC
                 )
                 issued_at = iat_dt.isoformat()
                 lines.append(f"- **issued_at:** {issued_at}")

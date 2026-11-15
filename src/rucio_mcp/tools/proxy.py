@@ -61,7 +61,7 @@ def register(mcp: MCPServer) -> None:
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(), timeout=_PROXY_TIMEOUT_S
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             proc.kill()
             with contextlib.suppress(Exception):
                 await proc.wait()
